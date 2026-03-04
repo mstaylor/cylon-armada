@@ -1,3 +1,5 @@
+<img src="img.png" width="100%">
+
 # Cylon Armada
 
 **Context-Based Cost Optimization for Multi-Agent LLM Workflows**
