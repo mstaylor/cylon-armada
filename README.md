@@ -39,7 +39,7 @@ Real-world speedup is **2-4x** vs scalar (memory bandwidth and cache effects pre
 
 ## Architecture
 
-<img src="img_1.png">
+<img src="img_1.png" width="100%">
 
 ## Components
 
