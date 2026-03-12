@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+*.pyx.c
+
+# Cython build artifacts
+target/shared/scripts/simd/*.c
+target/shared/scripts/simd/*.html
+
+# Node.js
+node_modules/
+package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Experiment results (large data, not versioned)
+target/experiments/results/
+
+# AWS credentials (never commit)
+.env
+*.pem
+credentials.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Docker
+docker/*.tar
