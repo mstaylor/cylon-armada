@@ -1,3 +1,5 @@
+<img src="img.png" width="100%">
+
 # Cylon Armada
 
 **Context-Based Cost Optimization for Multi-Agent LLM Workflows**
@@ -37,35 +39,7 @@ Real-world speedup is **2-4x** vs scalar (memory bandwidth and cache effects pre
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│          Orchestration Layer (AWS Step Functions)         │
-│    Workflow Definition → Task Distribution → Aggregation │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│             Agent Processing Layer (Lambda)               │
-│  Context Manager │ Context Router │ Agent Coordinator    │
-│  Chain Executor  ← core research contribution            │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│            Data Processing Layer (Cylon)                  │
-│    SIMD Operations │ Distributed Processing │ Checkpoints│
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│                   Storage Layer                           │
-│       DynamoDB │ ElastiCache Redis │ S3                   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│                 LLM Provider Layer                        │
-│        AWS Bedrock │ Azure OpenAI │ OpenAI               │
-└─────────────────────────────────────────────────────────┘
-
-Analysis & Visualization: Jupyter Notebooks (graphs and charts only)
-```
+<img src="img_1.png" width="100%">
 
 ## Components
 
