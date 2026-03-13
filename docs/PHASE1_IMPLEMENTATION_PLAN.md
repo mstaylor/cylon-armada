@@ -106,7 +106,7 @@ The Master Architecture defines 6 layers and 4 core components. Phase 1 implemen
 | Layer / Component | Phase 1 Status | Notes |
 |-------------------|---------------|-------|
 | Layer 1: Research Environment | **Partial** | Jupyter notebooks + experiment runner. No analysis tools yet. |
-| Layer 2: Orchestration (Step Functions) | **Deferred** | Phase 1 uses direct Lambda invocation via `cylon_init.py` pattern |
+| Layer 2: Orchestration (Step Functions) | **Included** | Step Functions state machine orchestrates task distribution, parallel Lambda execution, and result aggregation |
 | Layer 3: Agent Processing | **Core focus** | Context Manager, Context Router, LangChain Executor implemented. Agent Coordinator simplified (no cognitive diversity). |
 | Layer 4: Data Processing (Cylon) | **Complete** | SIMD operations, Cylon Communicator (Redis + Direct channels), Arrow data format. See [Cylon Integration](#cylon-integration). |
 | Layer 5: Storage | **Partial** | DynamoDB + Redis. No S3 checkpointing in Phase 1. |
@@ -190,23 +190,23 @@ All three paths implement the same data flow but use different SIMD backends:
 
 | Diagram Component | Phase 1 Implementation | Path |
 |-------------------|----------------------|------|
-| Agent Coordinator Lambda | `python/coordinator/agent_coordinator.py` | A1/A2 |
-| Context Manager Lambda | `python/context/manager.py`, `node/context/manager.mjs` | All |
-| langChain Executor Lambda | `python/chain/executor.py`, `node/chain/executor.mjs` | All |
-| Context Aware Request Router Lambda | `python/context/router.py`, `node/context/router.mjs` | All |
+| Step Function Orchestrator | `target/aws/scripts/step_functions/workflow.asl.json` | All |
+| Workflow State Manager | Integrated into Step Functions state machine (Map state + result aggregation) | All |
+| Agent Coordinator Lambda | `target/shared/scripts/coordinator/agent_coordinator.py` — triggered by Step Functions | A1/A2 |
+| Context Manager Lambda | `target/shared/scripts/context/manager.py`, `node/context/manager.mjs` | All |
+| langChain Executor Lambda | `target/shared/scripts/chain/executor.py`, `node/chain/executor.mjs` | All |
+| Context Aware Request Router Lambda | `target/shared/scripts/context/router.py`, `node/context/router.mjs` | All |
 | Cache Manager Lambda | Integrated into Context Manager (Redis ops) | All |
 | Context Similarity Lambda | Integrated into Context Router (SIMD search) | All |
 | Amazon Titan | Embedding Service (`amazon.titan-embed-text-v2:0`) | All |
 | Claude | LLM invocation via langChain Executor | All |
 | Llama | **Deferred** — single LLM model for Phase 1 | — |
-| Step Function Orchestrator | **Deferred** — direct Lambda invocation | — |
-| Workflow State Manager | **Deferred** — coupled to Step Functions | — |
 | AWS EventBridge | **Deferred** — no event-driven triggers | — |
 | Performance Processor Lambda | **Deferred** — metrics captured inline | — |
-| Cost Processor Lambda | `python/cost/bedrock_pricing.py` (inline, not separate Lambda) | A1/A2 |
+| Cost Processor Lambda | `target/shared/scripts/cost/bedrock_pricing.py` (inline, not separate Lambda) | A1/A2 |
 | Redis ElastiCache | Shared storage layer | All |
 | Amazon S3 | **Deferred** — no checkpointing in Phase 1 | — |
-| Rendezvous Server | Existing FMI infrastructure | All |
+| Rendezvous Server | Existing Cylon Communicator infrastructure | All |
 
 ### Cylon Integration
 
@@ -344,8 +344,7 @@ cylon-armada/
 │   │   │   ├── batch_search.pxd                ← Cython header declarations
 │   │   │   └── setup.py                        ← Cython build configuration
 │   │   ├── coordinator/
-│   │   │   ├── agent_coordinator.py            ← Simplified Agent Coordinator
-│   │   │   └── lambda_invoker.py               ← Direct Lambda invocation (no Step Functions)
+│   │   │   └── agent_coordinator.py            ← Agent Coordinator (triggered by Step Functions)
 │   │   └── cost/
 │   │       ├── bedrock_pricing.py              ← Bedrock cost extension for CostTracker
 │   │       └── experiment_tracker.py           ← Per-experiment cost aggregation
@@ -353,7 +352,9 @@ cylon-armada/
 │   │   ├── lambda/
 │   │   │   ├── python/                         ← Path A1/A2 Lambda handlers
 │   │   │   └── node/                           ← Path B Lambda handlers + WASM context handler
-│   │   └── cloudformation/                     ← DynamoDB table, IAM role definitions
+│   │   ├── step_functions/
+│   │   │   └── workflow.asl.json               ← Step Functions state machine (ASL definition)
+│   │   └── cloudformation/                     ← DynamoDB table, IAM role, Step Functions definitions
 │   └── experiments/
 │       ├── runner.py                           ← Experiment Runner
 │       ├── scenarios/                          ← Scenario configuration files (JSON/YAML)
@@ -503,50 +504,93 @@ embedding = json.loads(response["body"].read())["embedding"]
 
 ---
 
-### Component 4: Agent Coordinator
+### Component 4: Agent Coordinator + Step Functions Orchestrator
 
-**Responsibility:** Orchestrate multi-task workflows by distributing tasks across Lambda workers. Simplified for Phase 1 — no cognitive diversity, no Step Functions. Uses the Cylon Communicator (Redis channel) for inter-Lambda coordination.
+**Responsibility:** Orchestrate multi-task workflows using AWS Step Functions for task distribution, parallel Lambda execution, and result aggregation. The Step Functions state machine handles the workflow lifecycle; individual Lambda workers handle context routing and LLM execution.
 
-**Implementation:** `python/coordinator/agent_coordinator.py` (Python only — orchestration runs locally or from a coordinator Lambda)
+**Implementations:**
+- `target/aws/scripts/step_functions/workflow.asl.json` — Step Functions state machine (ASL)
+- `target/shared/scripts/coordinator/agent_coordinator.py` — Coordinator Lambda (prepares tasks, aggregates results)
 
-**Interface:**
+**Step Functions Workflow:**
+
+```
+                    ┌─────────────────────┐
+                    │  Start Workflow      │
+                    │  (input: tasks,      │
+                    │   config, workflow_id)│
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  Prepare Tasks       │ ← Coordinator Lambda
+                    │  (embed all tasks,   │   generates payloads
+                    │   partition by rank)  │   with embeddings
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  Map State           │ ← Step Functions parallel
+                    │  (parallel workers)  │   execution (max concurrency
+                    │                      │   configurable)
+                    │  ┌────────────────┐  │
+                    │  │ Worker Lambda  │  │ ← Context Router:
+                    │  │ (per task:     │  │   embed → search → reuse
+                    │  │  route →       │  │   or LLM call via
+                    │  │  reuse/LLM)    │  │   ChainExecutor
+                    │  └────────────────┘  │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  Aggregate Results   │ ← Coordinator Lambda
+                    │  (collect costs,     │   merges per-task results,
+                    │   compute savings)   │   computes cost summary
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  End Workflow        │
+                    │  (output: results,   │
+                    │   cost_summary,      │
+                    │   reuse_stats)       │
+                    └─────────────────────┘
+```
+
+**Coordinator Lambda Interface:**
 
 ```python
 class AgentCoordinator:
-    def __init__(self, lambda_client, function_name: str,
-                 context_router: ContextRouter, cost_tracker,
-                 comm_config: dict = None):
-        """Initialize with Lambda client, routing components, and
-        Cylon Communicator configuration (channel_type, redis_host, etc.).
-        Defaults to Redis channel."""
+    def __init__(self, config: BedrockConfig = None):
+        """Initialize with Bedrock config (resolved from env/payload/file)."""
 
-    def run_workflow(self, workflow_id: str, tasks: list[str],
-                     config: dict) -> dict:
-        """Execute a full workflow:
-        1. Spawn N Lambda workers with rank/world_size via Cylon Communicator
-        2. Embed all tasks
-        3. For each task: route (reuse or new LLM call)
-        4. Collect results via Cylon Communicator (all-gather)
-        5. Aggregate cost metrics
-        Returns {results, cost_summary, reuse_stats}."""
+    def prepare_tasks(self, event: dict) -> dict:
+        """Step 1 — called by Step Functions 'Prepare Tasks' state.
+        - Receives workflow_id, tasks list, and config from Step Functions input
+        - Embeds all tasks via EmbeddingService
+        - Returns list of task payloads with embeddings for the Map state."""
 
-    def run_baseline(self, workflow_id: str, tasks: list[str],
-                     config: dict) -> dict:
-        """Execute same workflow WITHOUT context reuse (all new LLM calls).
-        Used as the cost baseline for comparison."""
+    def aggregate_results(self, event: dict) -> dict:
+        """Step 3 — called by Step Functions 'Aggregate Results' state.
+        - Receives array of per-task results from the Map state
+        - Aggregates cost metrics via BedrockCostTracker
+        - Returns {results, cost_summary, reuse_stats}."""
 ```
+
+**Worker Lambda** (invoked by Step Functions Map state):
+
+Each worker receives a single task payload and runs the Context Router pipeline:
+1. Deserialize the pre-computed embedding
+2. Run similarity search (SIMD backend depends on path: A1/A2/B)
+3. Reuse cached response or invoke ChainExecutor for new LLM call
+4. Return `{response, source, cost_usd, similarity, latency}` to Step Functions
 
 **Cylon Communicator Integration:**
 
-The Agent Coordinator spawns parallel Lambda workers using the `cylon_init.py` pattern — each worker receives a `rank` and `world_size`. Workers coordinate via the Cylon Communicator with the Redis channel:
+Step Functions handles the orchestration (task distribution, parallel execution, result collection), replacing the need for direct Cylon Communicator coordination in the workflow layer. However, the Cylon Communicator (Redis channel) remains available for:
 
-1. **Task distribution:** Coordinator partitions tasks across workers by rank
-2. **Context sharing:** Workers share discovered contexts via Cylon all-gather (Redis channel)
-3. **Result collection:** Workers report results back via Cylon gather to rank 0
-4. **Channel configuration:** Redis channel for Phase 1 PoC; Direct channel (TCPunch) available for latency-sensitive benchmarks
+1. **Context sharing between parallel workers:** Workers can share discovered contexts in real-time via Cylon all-gather, improving reuse rates for later tasks in the same Map execution
+2. **Benchmark comparison:** Direct Lambda invocation via Cylon Communicator can be benchmarked against Step Functions orchestration overhead
+3. **Channel configuration:** Workers receive `rank`/`world_size` in their Step Functions payload for Cylon Communicator initialization
 
 ```python
-# Worker Lambda receives Cylon Communicator config
+# Worker Lambda initializes Cylon Communicator from Step Functions payload
 config = FMIConfig(
     rank=event["rank"],
     world_size=event["world_size"],
@@ -1185,54 +1229,92 @@ CMD ["handlers/context_handler.handler"]
 |----------|---------|--------|---------|-------------|
 | `context-reuse-python` | Python 3.10 (Docker) | 1024 MB | 300s | Path A1/A2 worker — context routing + LLM execution |
 | `context-reuse-nodejs` | Node.js 18 (Docker) | 512 MB | 300s | Path B worker — WASM SIMD context routing |
-| `context-coordinator` | Python 3.10 (Docker) | 256 MB | 900s | Agent Coordinator — spawns workers, collects results |
+| `context-coordinator` | Python 3.10 (Docker) | 512 MB | 300s | Agent Coordinator — prepare tasks (embed), aggregate results |
 
 **Memory rationale:**
 - Python worker at 1024 MB: pycylon + embedding arrays + LangChain overhead
 - Node.js worker at 512 MB: WASM module is lightweight, smaller embedding overhead
-- Coordinator at 256 MB: no SIMD work, only Lambda invocation and result aggregation
+- Coordinator at 512 MB: embeds all tasks in prepare step (needs Bedrock client + numpy)
+
+#### Step Functions State Machine
+
+| Resource | Type | Description |
+|----------|------|-------------|
+| `context-reuse-workflow` | Express | Workflow state machine — uses Map state for parallel task execution |
+
+**Express vs. Standard:** Express workflow is chosen because:
+- Workflows complete in <5 minutes (within Express limit)
+- Lower cost ($0.000001 per state transition vs. $0.025 per transition for Standard)
+- Supports synchronous invocation from experiment runner
 
 #### IAM Role
 
-All functions share a single IAM role with these permissions:
+**Lambda execution role** — shared by all Lambda functions:
 
 ```json
 {
     "Version": "2012-10-17",
     "Statement": [
         {
+            "Sid": "BedrockAccess",
             "Effect": "Allow",
-            "Action": [
-                "bedrock:InvokeModel"
-            ],
+            "Action": ["bedrock:InvokeModel"],
             "Resource": [
                 "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0",
                 "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
             ]
         },
         {
+            "Sid": "DynamoDBAccess",
             "Effect": "Allow",
             "Action": [
-                "dynamodb:PutItem",
-                "dynamodb:GetItem",
-                "dynamodb:Query",
-                "dynamodb:UpdateItem",
-                "dynamodb:Scan"
+                "dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query",
+                "dynamodb:UpdateItem", "dynamodb:Scan", "dynamodb:DeleteItem"
             ],
             "Resource": [
                 "arn:aws:dynamodb:us-east-1:*:table/context-store",
                 "arn:aws:dynamodb:us-east-1:*:table/context-store/index/*"
             ]
-        },
+        }
+    ]
+}
+```
+
+**Step Functions execution role** — allows the state machine to invoke Lambda functions:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
         {
+            "Sid": "InvokeLambda",
             "Effect": "Allow",
-            "Action": [
-                "lambda:InvokeFunction"
-            ],
+            "Action": ["lambda:InvokeFunction"],
             "Resource": [
                 "arn:aws:lambda:us-east-1:*:function:context-reuse-*",
                 "arn:aws:lambda:us-east-1:*:function:context-coordinator"
             ]
+        }
+    ]
+}
+```
+
+**Experiment runner IAM** — for local/ECS experiment execution (starts Step Functions workflows):
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "StepFunctionsAccess",
+            "Effect": "Allow",
+            "Action": [
+                "states:StartExecution",
+                "states:StartSyncExecution",
+                "states:DescribeExecution",
+                "states:ListExecutions"
+            ],
+            "Resource": ["arn:aws:states:us-east-1:*:stateMachine:context-reuse-workflow"]
         }
     ]
 }
@@ -1297,10 +1379,11 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 | 4. Build Python Docker image | `docker build -f docker/Dockerfile.python` | Cylon base image built |
 | 5. Build Node.js Docker image | `docker build -f docker/Dockerfile.nodejs` | cylon-wasm built |
 | 6. Push images to ECR | `docker push` | Steps 4-5 |
-| 7. Create IAM role | CloudFormation or CLI | — |
+| 7. Create IAM roles | Lambda execution role + Step Functions execution role | — |
 | 8. Create Lambda functions | `aws lambda create-function --package-type Image` | Steps 6-7 |
 | 9. Configure VPC for workers | Attach subnets + security group | Step 8, VPC exists |
-| 10. Verify connectivity | Smoke test: embed → search → LLM call | All above |
+| 10. Create Step Functions state machine | `aws stepfunctions create-state-machine` from `workflow.asl.json` | Steps 7-8 |
+| 11. Verify connectivity | Smoke test: start workflow → embed → search → LLM call → aggregate | All above |
 
 ---
 
