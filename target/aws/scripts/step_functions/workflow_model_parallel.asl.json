@@ -1,0 +1,104 @@
+{
+  "Comment": "Model Parallel Inference — splits AstroMAE across Lambda functions via FMI. Stages 0 (ViT) and 1 (Inception) run in parallel, Stage 2 (Fusion) combines results.",
+  "StartAt": "ParallelStages",
+  "States": {
+    "ParallelStages": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "Stage0_ViT",
+          "States": {
+            "Stage0_ViT": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker-node",
+              "Parameters": {
+                "action": "model_parallel_stage",
+                "action_payload": {
+                  "stage_name": "stage_0_vit",
+                  "model_path.$": "$.model_config.stage_0_path",
+                  "inputs.$": "$.inference_input.image",
+                  "input_shapes.$": "$.inference_input.image_shape",
+                  "workflow_id.$": "$.workflow_id",
+                  "rank": 0,
+                  "world_size": 2,
+                  "fmi_config.$": "$.fmi_config"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2.0
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Stage1_Inception",
+          "States": {
+            "Stage1_Inception": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker-node",
+              "Parameters": {
+                "action": "model_parallel_stage",
+                "action_payload": {
+                  "stage_name": "stage_1_inception",
+                  "model_path.$": "$.model_config.stage_1_path",
+                  "inputs.$": "$.inference_input",
+                  "input_shapes.$": "$.inference_input.shapes",
+                  "workflow_id.$": "$.workflow_id",
+                  "rank": 1,
+                  "world_size": 2,
+                  "fmi_config.$": "$.fmi_config"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2.0
+                }
+              ],
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": "$.stage_outputs",
+      "Next": "Stage2_Fusion"
+    },
+    "Stage2_Fusion": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker-node",
+      "Parameters": {
+        "action": "model_parallel_stage",
+        "action_payload": {
+          "stage_name": "stage_2_fusion",
+          "model_path.$": "$.model_config.stage_2_path",
+          "inputs": {
+            "vit_features.$": "$.stage_outputs[0].outputs.vit_features",
+            "inception_features.$": "$.stage_outputs[1].outputs.inception_features"
+          },
+          "input_shapes": {
+            "vit_features.$": "$.stage_outputs[0].shapes.vit_features",
+            "inception_features.$": "$.stage_outputs[1].shapes.inception_features"
+          },
+          "workflow_id.$": "$.workflow_id"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "End": true
+    }
+  }
+}

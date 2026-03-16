@@ -5,6 +5,14 @@
  * via WASM SIMD128 instructions. Follows the same routing logic as the
  * Python handler but through the Node.js runtime.
  *
+ * Actions (matching Python run_action.py):
+ *   prepare_tasks     — embed all tasks, generate per-task payloads
+ *   route_task        — similarity search + reuse or LLM call for one task
+ *   aggregate_results — collect per-task results, compute cost summary
+ *   cosmic_ai_infer   — ONNX inference + task generation
+ *   embed_and_search  — embed text + similarity search (utility)
+ *   simd_benchmark    — pure SIMD throughput measurement
+ *
  * Based on: cylon/target/aws/scripts/lambda/wasm_handler.mjs
  *
  * Environment variables:
@@ -23,7 +31,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createClient } from 'redis';
-import { DynamoDBClient, PutItemCommand, GetItemCommand, QueryCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -86,6 +94,123 @@ function getBedrock() {
         });
     }
     return bedrockClient;
+}
+
+// ---------------------------------------------------------------------------
+// Cost tracker — mirrors Python BedrockCostTracker
+// ---------------------------------------------------------------------------
+
+// Default pricing registry — configurable via config_path or env
+const DEFAULT_LLM_PRICING = {
+    'anthropic.claude-3-haiku': { input_per_1k: 0.003, output_per_1k: 0.015 },
+    'anthropic.claude-3-5-sonnet': { input_per_1k: 0.003, output_per_1k: 0.015 },
+    'amazon.nova-lite': { input_per_1k: 0.0006, output_per_1k: 0.0024 },
+    'amazon.nova-micro': { input_per_1k: 0.00035, output_per_1k: 0.0014 },
+    'meta.llama3-8b-instruct': { input_per_1k: 0.0003, output_per_1k: 0.0006 },
+};
+
+const DEFAULT_EMBEDDING_PRICING = {
+    'amazon.titan-embed-text-v2': { per_1k: 0.00002 },
+    'amazon.titan-embed-text-v1': { per_1k: 0.0001 },
+};
+
+class CostTracker {
+    constructor(llmPricing = null, embeddingPricing = null) {
+        this.llmPricing = llmPricing || DEFAULT_LLM_PRICING;
+        this.embeddingPricing = embeddingPricing || DEFAULT_EMBEDDING_PRICING;
+        this.llmUsage = {};       // { model_id: { input_tokens, output_tokens, cost, calls } }
+        this.embeddingUsage = {};  // { model_id: { tokens, cost, calls } }
+        this.cacheHits = {};       // { model_id: { avoided_input, avoided_output, avoided_cost, hits } }
+    }
+
+    _matchPrefix(modelId, registry) {
+        let bestMatch = null;
+        let bestLen = 0;
+        for (const prefix of Object.keys(registry)) {
+            if (modelId.startsWith(prefix) && prefix.length > bestLen) {
+                bestMatch = prefix;
+                bestLen = prefix.length;
+            }
+        }
+        return bestMatch;
+    }
+
+    recordLlmCall(modelId, inputTokens, outputTokens) {
+        const prefix = this._matchPrefix(modelId, this.llmPricing);
+        const pricing = prefix ? this.llmPricing[prefix] : { input_per_1k: 0.003, output_per_1k: 0.015 };
+        const cost = (inputTokens / 1000) * pricing.input_per_1k
+                   + (outputTokens / 1000) * pricing.output_per_1k;
+
+        if (!this.llmUsage[modelId]) {
+            this.llmUsage[modelId] = { input_tokens: 0, output_tokens: 0, cost: 0, calls: 0 };
+        }
+        this.llmUsage[modelId].input_tokens += inputTokens;
+        this.llmUsage[modelId].output_tokens += outputTokens;
+        this.llmUsage[modelId].cost += cost;
+        this.llmUsage[modelId].calls += 1;
+        return cost;
+    }
+
+    recordEmbeddingCall(modelId, tokenCount) {
+        const prefix = this._matchPrefix(modelId, this.embeddingPricing);
+        const pricing = prefix ? this.embeddingPricing[prefix] : { per_1k: 0.00002 };
+        const cost = (tokenCount / 1000) * pricing.per_1k;
+
+        if (!this.embeddingUsage[modelId]) {
+            this.embeddingUsage[modelId] = { tokens: 0, cost: 0, calls: 0 };
+        }
+        this.embeddingUsage[modelId].tokens += tokenCount;
+        this.embeddingUsage[modelId].cost += cost;
+        this.embeddingUsage[modelId].calls += 1;
+        return cost;
+    }
+
+    recordCacheHit(modelId, avoidedInputTokens, avoidedOutputTokens) {
+        const prefix = this._matchPrefix(modelId, this.llmPricing);
+        const pricing = prefix ? this.llmPricing[prefix] : { input_per_1k: 0.003, output_per_1k: 0.015 };
+        const avoidedCost = (avoidedInputTokens / 1000) * pricing.input_per_1k
+                          + (avoidedOutputTokens / 1000) * pricing.output_per_1k;
+
+        if (!this.cacheHits[modelId]) {
+            this.cacheHits[modelId] = { avoided_input: 0, avoided_output: 0, avoided_cost: 0, hits: 0 };
+        }
+        this.cacheHits[modelId].avoided_input += avoidedInputTokens;
+        this.cacheHits[modelId].avoided_output += avoidedOutputTokens;
+        this.cacheHits[modelId].avoided_cost += avoidedCost;
+        this.cacheHits[modelId].hits += 1;
+        return avoidedCost;
+    }
+
+    get totalCost() {
+        const llm = Object.values(this.llmUsage).reduce((s, u) => s + u.cost, 0);
+        const emb = Object.values(this.embeddingUsage).reduce((s, u) => s + u.cost, 0);
+        return llm + emb;
+    }
+
+    get totalAvoidedCost() {
+        return Object.values(this.cacheHits).reduce((s, h) => s + h.avoided_cost, 0);
+    }
+
+    get baselineCost() {
+        return this.totalCost + this.totalAvoidedCost;
+    }
+
+    get savingsPct() {
+        const baseline = this.baselineCost;
+        return baseline > 0 ? ((this.totalAvoidedCost / baseline) * 100) : 0;
+    }
+
+    getSummary() {
+        return {
+            total_cost: this.totalCost,
+            baseline_cost: this.baselineCost,
+            total_avoided_cost: this.totalAvoidedCost,
+            savings_pct: Math.round(this.savingsPct * 100) / 100,
+            llm_usage: this.llmUsage,
+            embedding_usage: this.embeddingUsage,
+            cache_hits: this.cacheHits,
+        };
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -181,13 +306,10 @@ async function getContext(contextId) {
     const cached = await redis.get(`context:${contextId}`);
     if (cached) return JSON.parse(cached);
 
-    // Fallback to DynamoDB
     const dynamo = getDynamo();
     const result = await dynamo.send(new GetItemCommand({
         TableName: TABLE_NAME,
-        Key: {
-            context_id: { S: contextId },
-        },
+        Key: { context_id: { S: contextId } },
     }));
 
     if (!result.Item) return null;
@@ -269,10 +391,55 @@ async function invokeLLM(taskDescription, systemPrompt = null) {
 }
 
 // ---------------------------------------------------------------------------
-// Route task — core context reuse logic
+// Base64 encoding/decoding for embeddings
 // ---------------------------------------------------------------------------
 
-async function routeTask(wasm, params) {
+function ndArrayToB64(float32Array) {
+    return Buffer.from(float32Array.buffer).toString('base64');
+}
+
+function b64ToNdArray(b64String) {
+    const buf = Buffer.from(b64String, 'base64');
+    return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+}
+
+// ---------------------------------------------------------------------------
+// Action: prepare_tasks
+// ---------------------------------------------------------------------------
+
+async function actionPrepareTasks(params, costTracker) {
+    const { workflow_id: workflowId, tasks, config = {} } = params;
+    const start = performance.now();
+
+    const taskPayloads = [];
+    for (let i = 0; i < tasks.length; i++) {
+        const { embedding, metadata } = await embedText(tasks[i]);
+        costTracker.recordEmbeddingCall(metadata.model_id, metadata.token_count);
+
+        taskPayloads.push({
+            task_description: tasks[i],
+            embedding_b64: ndArrayToB64(embedding),
+            embedding_metadata: metadata,
+            workflow_id: workflowId,
+            rank: i,
+            world_size: tasks.length,
+            config,
+        });
+    }
+
+    return {
+        workflow_id: workflowId,
+        task_payloads: taskPayloads,
+        prepare_cost: costTracker.getSummary(),
+        prepare_latency_ms: Math.round((performance.now() - start) * 100) / 100,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Action: route_task
+// ---------------------------------------------------------------------------
+
+async function actionRouteTask(wasm, params, costTracker) {
     const {
         task_description: taskDescription,
         embedding_b64: embeddingB64,
@@ -284,21 +451,33 @@ async function routeTask(wasm, params) {
     const threshold = parseFloat(config.similarity_threshold || process.env.SIMILARITY_THRESHOLD || '0.85');
     const start = performance.now();
 
-    // Decode pre-computed embedding from base64
-    const embBuffer = Buffer.from(embeddingB64, 'base64');
-    const queryEmbedding = new Float32Array(embBuffer.buffer, embBuffer.byteOffset, embBuffer.byteLength / 4);
+    // Record embedding cost from prepare step
+    if (embeddingMetadata) {
+        costTracker.recordEmbeddingCall(embeddingMetadata.model_id, embeddingMetadata.token_count);
+    }
 
-    // Get stored embeddings for this workflow
+    // Decode pre-computed embedding
+    const queryEmbedding = b64ToNdArray(embeddingB64);
+
+    // Similarity search
     const storedEmbeddings = await getAllEmbeddings(workflowId);
-
-    // SIMD similarity search
     const matches = simdCosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold);
 
     if (matches.length > 0) {
-        // Cache hit — reuse existing context
+        // Cache hit
         const bestMatch = matches[0];
         const context = await getContext(bestMatch.contextId);
         await incrementReuseCount(bestMatch.contextId);
+
+        const avoidedInput = context.input_tokens || 0;
+        const avoidedOutput = context.output_tokens || 0;
+        const llmModelId = context.model_id || process.env.BEDROCK_LLM_MODEL_ID || 'unknown';
+
+        if (avoidedInput === 0 && avoidedOutput === 0) {
+            console.warn('Cache hit but no token counts on original context — avoided cost will be 0');
+        }
+
+        const avoidedCost = costTracker.recordCacheHit(llmModelId, avoidedInput, avoidedOutput);
 
         return {
             response: context.response,
@@ -306,14 +485,17 @@ async function routeTask(wasm, params) {
             similarity: bestMatch.similarity,
             context_id: bestMatch.contextId,
             cost_usd: 0,
+            avoided_cost_usd: avoidedCost,
             total_latency_ms: Math.round((performance.now() - start) * 100) / 100,
-            avoided_input_tokens: context.input_tokens || 0,
-            avoided_output_tokens: context.output_tokens || 0,
+            avoided_input_tokens: avoidedInput,
+            avoided_output_tokens: avoidedOutput,
+            cost_summary: costTracker.getSummary(),
         };
     }
 
     // Cache miss — invoke LLM
     const llmResult = await invokeLLM(taskDescription);
+    const callCost = costTracker.recordLlmCall(llmResult.model_id, llmResult.input_tokens, llmResult.output_tokens);
 
     // Store new context
     const contextId = crypto.randomUUID();
@@ -321,20 +503,103 @@ async function routeTask(wasm, params) {
         model_id: llmResult.model_id,
         input_tokens: llmResult.input_tokens,
         output_tokens: llmResult.output_tokens,
-        cost_usd: 0, // Cost computed by aggregator
+        cost_usd: callCost,
     });
 
     return {
         response: llmResult.response,
         source: 'llm',
-        similarity: matches.length > 0 ? matches[0].similarity : 0,
+        similarity: 0,
         context_id: contextId,
         input_tokens: llmResult.input_tokens,
         output_tokens: llmResult.output_tokens,
-        cost_usd: 0, // Cost computed by aggregator
+        cost_usd: callCost,
         total_latency_ms: Math.round((performance.now() - start) * 100) / 100,
         llm_latency_ms: llmResult.latency_ms,
         model_id: llmResult.model_id,
+        cost_summary: costTracker.getSummary(),
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Action: aggregate_results
+// ---------------------------------------------------------------------------
+
+function actionAggregateResults(params) {
+    const { workflow_id: workflowId, task_results: taskResults, prepare_cost: prepareCost } = params;
+
+    const aggregated = new CostTracker();
+    let cacheHits = 0;
+    let llmCalls = 0;
+
+    for (const result of taskResults) {
+        if (result.source === 'cache') {
+            cacheHits++;
+            if (result.avoided_input_tokens && result.avoided_output_tokens) {
+                const modelId = result.model_id || process.env.BEDROCK_LLM_MODEL_ID || 'unknown';
+                aggregated.recordCacheHit(modelId, result.avoided_input_tokens, result.avoided_output_tokens);
+            }
+        } else if (result.source === 'llm') {
+            llmCalls++;
+            if (result.model_id) {
+                aggregated.recordLlmCall(result.model_id, result.input_tokens || 0, result.output_tokens || 0);
+            }
+        }
+    }
+
+    // Add prepare-phase embedding costs
+    if (prepareCost?.embedding_usage) {
+        for (const [modelId, usage] of Object.entries(prepareCost.embedding_usage)) {
+            aggregated.recordEmbeddingCall(modelId, usage.tokens || 0);
+        }
+    }
+
+    return {
+        workflow_id: workflowId,
+        total_tasks: taskResults.length,
+        cache_hits: cacheHits,
+        llm_calls: llmCalls,
+        reuse_rate: taskResults.length > 0 ? Math.round((cacheHits / taskResults.length) * 10000) / 100 : 0,
+        cost_summary: aggregated.getSummary(),
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Action: cosmic_ai_infer
+// ---------------------------------------------------------------------------
+
+async function actionCosmicAiInfer(params) {
+    const { runInferenceFromFile } = await import('./inference.mjs');
+    const { generateTasks } = await import('./task_generator.mjs');
+
+    const { data_path: dataPath, model_path: modelPath, max_tasks: maxTasks, seed, config } = params;
+
+    const inferenceResult = await runInferenceFromFile(dataPath, modelPath);
+
+    // Reshape magnitudes from flat to (N, 5)
+    const nSamples = inferenceResult.predictions.length;
+    const magnitudes = [];
+    if (inferenceResult.true_redshifts) {
+        // Data file included magnitudes in a flat array
+        for (let i = 0; i < nSamples; i++) {
+            magnitudes.push(Array.from({ length: 5 }, (_, j) => 0)); // placeholder
+        }
+    }
+
+    const tasks = generateTasks({
+        predictions: inferenceResult.predictions,
+        trueRedshifts: inferenceResult.true_redshifts || inferenceResult.predictions,
+        magnitudes,
+        metrics: inferenceResult.metrics,
+        maxTasks: maxTasks || nSamples,
+        seed: seed || 42,
+        configPath: config?.cosmic_ai_config || null,
+    });
+
+    return {
+        tasks,
+        inference_metrics: inferenceResult.metrics,
+        num_predictions: nSamples,
     };
 }
 
@@ -350,22 +615,33 @@ export async function handler(event, context) {
         }
 
         const wasm = await initWasm();
+        const costTracker = new CostTracker();
+        const payload = event.action_payload || event;
 
         switch (action) {
+            case 'prepare_tasks':
+                return await actionPrepareTasks(payload, costTracker);
+
             case 'route_task':
-                return await routeTask(wasm, event.action_payload || event);
+                return await actionRouteTask(wasm, payload, costTracker);
+
+            case 'aggregate_results':
+                return actionAggregateResults(payload);
+
+            case 'cosmic_ai_infer':
+                return await actionCosmicAiInfer(payload);
 
             case 'embed_and_search': {
-                const { text, workflow_id, threshold = 0.85, top_k = 5 } = event.action_payload || event;
-                const { embedding } = await embedText(text);
+                const { text, workflow_id, threshold = 0.85, top_k = 5 } = payload;
+                const { embedding, metadata } = await embedText(text);
+                costTracker.recordEmbeddingCall(metadata.model_id, metadata.token_count);
                 const stored = await getAllEmbeddings(workflow_id);
                 const matches = simdCosineSimilaritySearch(wasm, embedding, stored, threshold, top_k);
-                return { matches, embedding_length: embedding.length };
+                return { matches, embedding_length: embedding.length, cost_summary: costTracker.getSummary() };
             }
 
             case 'simd_benchmark': {
-                // Pure SIMD benchmark — no I/O, measures WASM SIMD128 throughput
-                const { dim = 1024, n = 1000, iterations = 100 } = event.action_payload || event;
+                const { dim = 1024, n = 1000, iterations = 100 } = payload;
                 const query = new Float32Array(dim).map(() => Math.random());
                 const embeddings = Array.from({ length: n }, () => ({
                     contextId: 'bench',

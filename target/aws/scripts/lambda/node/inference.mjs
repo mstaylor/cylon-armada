@@ -133,3 +133,95 @@ export async function runInferenceFromFile(dataPath, modelPath = null) {
 
     return result;
 }
+
+// ---------------------------------------------------------------------------
+// Model parallelism — partitioned inference via FMI
+// ---------------------------------------------------------------------------
+
+// Per-stage sessions (independent of the full-model session)
+const stageSessions = {};
+
+/**
+ * Initialize a stage-specific ONNX session.
+ */
+async function initStageSession(stageName, modelPath) {
+    if (stageSessions[stageName]) return stageSessions[stageName];
+
+    let resolvedPath = modelPath;
+    if (resolvedPath && resolvedPath.startsWith('s3://')) {
+        resolvedPath = await downloadModelFromS3(resolvedPath);
+    }
+
+    stageSessions[stageName] = await InferenceSession.create(resolvedPath, {
+        executionProviders: ['CPUExecutionProvider'],
+    });
+
+    return stageSessions[stageName];
+}
+
+/**
+ * Run a single stage of partitioned inference.
+ *
+ * Each Lambda worker runs its assigned stage and exchanges intermediate
+ * tensors via FMI (Direct/Redis/S3 channel).
+ *
+ * @param {Object} params
+ * @param {string} params.stageName - Stage identifier (stage_0_vit, stage_1_inception, stage_2_fusion)
+ * @param {string} params.modelPath - Path or S3 URI to the stage's ONNX subgraph
+ * @param {Object} params.inputs - Named input tensors { name: Float32Array }
+ * @param {number[]} params.inputShapes - Shapes for each input tensor { name: [dims] }
+ * @returns {Object} { outputs: { name: Float32Array }, shapes: { name: [dims] }, metrics }
+ */
+export async function runStageInference({ stageName, modelPath, inputs, inputShapes }) {
+    const sess = await initStageSession(stageName, modelPath);
+    const start = performance.now();
+
+    const feeds = {};
+    for (const [name, data] of Object.entries(inputs)) {
+        feeds[name] = new Tensor('float32', new Float32Array(data), inputShapes[name]);
+    }
+
+    const results = await sess.run(feeds);
+    const elapsedMs = performance.now() - start;
+
+    const outputs = {};
+    const shapes = {};
+    for (const [name, tensor] of Object.entries(results)) {
+        outputs[name] = Array.from(tensor.data);
+        shapes[name] = tensor.dims;
+    }
+
+    return {
+        outputs,
+        shapes,
+        metrics: {
+            stage: stageName,
+            latency_ms: Math.round(elapsedMs * 100) / 100,
+        },
+    };
+}
+
+/**
+ * Serialize tensor data for FMI exchange.
+ * Encodes as base64 for transport over Redis/Direct channels.
+ */
+export function serializeTensor(data, shape) {
+    const float32 = new Float32Array(data);
+    const buffer = Buffer.from(float32.buffer);
+    return {
+        data_b64: buffer.toString('base64'),
+        shape,
+        dtype: 'float32',
+    };
+}
+
+/**
+ * Deserialize tensor data received from FMI exchange.
+ */
+export function deserializeTensor(serialized) {
+    const buffer = Buffer.from(serialized.data_b64, 'base64');
+    return {
+        data: new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4),
+        shape: serialized.shape,
+    };
+}

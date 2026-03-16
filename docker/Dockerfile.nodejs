@@ -5,7 +5,7 @@ FROM node:18-slim
 # ---------------------------------------------------------------------------
 
 RUN apt-get update -y && \
-    apt-get install -y ca-certificates && \
+    apt-get install -y ca-certificates python3 make g++ && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -27,6 +27,14 @@ WORKDIR /app
 
 COPY target/aws/scripts/lambda/node/package.json /app/package.json
 RUN npm install --production
+
+# ---------------------------------------------------------------------------
+# ONNX model (optional — can also be loaded from S3 at runtime)
+# ---------------------------------------------------------------------------
+
+ARG ONNX_MODEL_DIR=
+COPY ${ONNX_MODEL_DIR:-/dev/null} /app/models/
+ENV ONNX_MODEL_PATH=/app/models/astromae.onnx
 
 # ---------------------------------------------------------------------------
 # Copy application code

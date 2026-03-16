@@ -471,16 +471,21 @@ cylon-armada/
 │   │   │   │   └── handler.py                  ← S3 script runner (follows Cylon lambda_entry1.py pattern)
 │   │   │   └── node/
 │   │   │       ├── context_handler.mjs          ← Path B: WASM SIMD128 context reuse handler
-│   │   │       └── package.json                 ← Node.js dependencies
+│   │   │       ├── inference.mjs                ← ONNX inference (full model + partitioned stages)
+│   │   │       ├── task_generator.mjs           ← Generate LLM tasks from inference results
+│   │   │       └── package.json                 ← Node.js dependencies (onnxruntime-node, AWS SDK)
 │   │   ├── step_functions/
-│   │   │   └── workflow.asl.json               ← Step Functions state machine (ASL definition)
-│   │   └── cloudformation/                     ← DynamoDB table, IAM role, Step Functions definitions
+│   │   │   ├── workflow.asl.json               ← Step Functions ASL — Python (S3 script runner)
+│   │   │   ├── workflow_nodejs.asl.json        ← Step Functions ASL — Node.js (direct dispatch)
+│   │   │   └── workflow_model_parallel.asl.json ← Step Functions ASL — model parallelism
+│   │   └── terraform/                           ← Terraform modules (Phase 2 — manual deploy for Phase 1)
 │   └── experiments/
 │       ├── runner.py                           ← Experiment Runner (general + cosmic-ai)
 │       ├── cosmic_ai/                          ← Astronomical inference experiments
 │       │   ├── __init__.py
-│       │   ├── inference.py                    ← AstroMAE inference module (adapted)
+│       │   ├── inference.py                    ← AstroMAE inference module (PyTorch, adapted)
 │       │   ├── task_generator.py               ← Generate LLM tasks from SDSS data
+│       │   ├── export_onnx.py                  ← ONNX export + model parallelism partitioning
 │       │   └── blocks/                         ← Model architecture (from AI-for-Astronomy)
 │       │       ├── model_vit_inception.py      ← ViT + Inception model
 │       │       ├── photoz.py                   ← Inception block + magnitude model
