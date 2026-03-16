@@ -85,10 +85,30 @@ Amazon Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`) is chosen for b
 
 **Experiment Design Implication:** The dimension sweep (256/512/1024) combined with threshold sweep (0.70–0.95) produces a grid of experimental configurations, each measuring: reuse rate, cost savings, output quality (BLEU/ROUGE vs. baseline), and SIMD search latency.
 
+### cosmic-ai Integration (Phase 1)
+
+The context reuse architecture is validated on real scientific workloads using the **cosmic-ai** astronomical inference pipeline (arXiv:2501.06249). This demonstrates applicability beyond general-purpose NLP tasks.
+
+**Integration approach:**
+1. **AstroMAE inference** → run pre-trained model on SDSS photometric data partitions
+2. **Task generation** → dynamically generate LLM analysis tasks from real inference results (redshift predictions, magnitude profiles, error metrics)
+3. **Context reuse** → similar galaxy observations produce semantically overlapping analysis prompts, creating natural context reuse opportunities
+
+**Components (under `target/experiments/cosmic_ai/`):**
+- `blocks/` — AstroMAE model architecture (ViT + Inception, photoz, NormalCell) — from AI-for-Astronomy
+- `inference.py` — refactored inference module (callable, returns structured results)
+- `task_generator.py` — generates LLM tasks from inference output with configurable templates
+
+**cosmic-ai AWS infrastructure** (`AI-for-Astronomy/aws/`) uses the same 3-stage serverless pattern as cylon-armada: Initialize → Distributed Map → Summarize. Same S3 script runner, same Lambda containers, same Step Functions orchestration.
+
+### Swarm Orchestration (Future Phase — Custom Implementation)
+
+Multi-agent swarm patterns will be implemented as a cylon-armada native capability in a future phase, built on the Cylon Communicator and Step Functions infrastructure. This is not an integration of an external project — it will be a custom implementation drawing from cognitive diversity and topology-based coordination concepts.
+
 ### Out of Scope (Phase 1)
 
-- Multi-agent cognitive diversity patterns (Phase 3)
-- Advanced orchestration with Step Functions (Phase 2)
+- Multi-agent cognitive diversity patterns (future phase)
+- Advanced Step Functions patterns (choice states, error handling workflows) (Phase 2)
 - Hierarchical indexing / FAISS (future optimization)
 - Cross-provider experiments (OpenAI comparison)
 - Production multi-region deployment
@@ -193,9 +213,9 @@ All three paths implement the same data flow but use different SIMD backends:
 | Step Function Orchestrator | `target/aws/scripts/step_functions/workflow.asl.json` | All |
 | Workflow State Manager | Integrated into Step Functions state machine (Map state + result aggregation) | All |
 | Agent Coordinator Lambda | `target/shared/scripts/coordinator/agent_coordinator.py` — triggered by Step Functions | A1/A2 |
-| Context Manager Lambda | `target/shared/scripts/context/manager.py`, `node/context/manager.mjs` | All |
-| langChain Executor Lambda | `target/shared/scripts/chain/executor.py`, `node/chain/executor.mjs` | All |
-| Context Aware Request Router Lambda | `target/shared/scripts/context/router.py`, `node/context/router.mjs` | All |
+| Context Manager Lambda | `target/shared/scripts/context/manager.py`, `target/aws/scripts/lambda/node/context_handler.mjs` | All |
+| langChain Executor Lambda | `target/shared/scripts/chain/executor.py`, `target/aws/scripts/lambda/node/context_handler.mjs` | All |
+| Context Aware Request Router Lambda | `target/shared/scripts/context/router.py`, `target/aws/scripts/lambda/node/context_handler.mjs` | All |
 | Cache Manager Lambda | Integrated into Context Manager (Redis ops) | All |
 | Context Similarity Lambda | Integrated into Context Router (SIMD search) | All |
 | Amazon Titan | Embedding Service (`amazon.titan-embed-text-v2:0`) | All |
@@ -341,8 +361,8 @@ cylon-armada/
 │   │   │   └── executor.py                     ← LangChain Executor (Bedrock LLM chains)
 │   │   ├── simd/
 │   │   │   ├── batch_search.pyx                ← Cython: batch similarity search (Path A2)
-│   │   │   ├── batch_search.pxd                ← Cython header declarations
-│   │   │   └── setup.py                        ← Cython build configuration
+│   │   │   └── setup.py                        ← Cython build configuration (requires CYLON_PREFIX)
+│   │   ├── run_action.py                        ← Action dispatcher (downloaded from S3, executed by Lambda)
 │   │   ├── coordinator/
 │   │   │   └── agent_coordinator.py            ← Agent Coordinator (triggered by Step Functions)
 │   │   └── cost/
@@ -350,13 +370,24 @@ cylon-armada/
 │   │       └── experiment_tracker.py           ← Per-experiment cost aggregation
 │   ├── aws/scripts/
 │   │   ├── lambda/
-│   │   │   ├── python/                         ← Path A1/A2 Lambda handlers
-│   │   │   └── node/                           ← Path B Lambda handlers + WASM context handler
+│   │   │   ├── python/
+│   │   │   │   └── handler.py                  ← S3 script runner (follows Cylon lambda_entry1.py pattern)
+│   │   │   └── node/
+│   │   │       ├── context_handler.mjs          ← Path B: WASM SIMD128 context reuse handler
+│   │   │       └── package.json                 ← Node.js dependencies
 │   │   ├── step_functions/
 │   │   │   └── workflow.asl.json               ← Step Functions state machine (ASL definition)
 │   │   └── cloudformation/                     ← DynamoDB table, IAM role, Step Functions definitions
 │   └── experiments/
-│       ├── runner.py                           ← Experiment Runner
+│       ├── runner.py                           ← Experiment Runner (general + cosmic-ai)
+│       ├── cosmic_ai/                          ← Astronomical inference experiments
+│       │   ├── __init__.py
+│       │   ├── inference.py                    ← AstroMAE inference module (adapted)
+│       │   ├── task_generator.py               ← Generate LLM tasks from SDSS data
+│       │   └── blocks/                         ← Model architecture (from AI-for-Astronomy)
+│       │       ├── model_vit_inception.py      ← ViT + Inception model
+│       │       ├── photoz.py                   ← Inception block + magnitude model
+│       │       └── normal_cell.py              ← Transformer cell with PCM
 │       ├── scenarios/                          ← Scenario configuration files (JSON/YAML)
 │       ├── analysis/                           ← Jupyter notebooks for visualization
 │       └── results/                            ← Experiment output data
@@ -379,7 +410,7 @@ cylon-armada/
 
 **Responsibility:** Store and retrieve contexts with embeddings from DynamoDB and Redis.
 
-**Implementations:** `python/context/manager.py` and `node/context/manager.mjs`
+**Implementations:** `target/shared/scripts/context/manager.py` and `target/aws/scripts/lambda/node/context_handler.mjs`
 
 **Interface:**
 
@@ -422,7 +453,7 @@ class ContextManager:
 
 **Responsibility:** Find similar contexts using SIMD-accelerated cosine similarity and make reuse decisions.
 
-**Implementations:** `python/context/router.py` and `node/context/router.mjs`
+**Implementations:** `target/shared/scripts/context/router.py` and `target/aws/scripts/lambda/node/context_handler.mjs`
 
 **Interface:**
 
@@ -466,7 +497,7 @@ class ContextRouter:
 
 **Responsibility:** Generate embeddings via Amazon Titan Text Embeddings V2 with configurable dimensions.
 
-**Implementations:** `python/context/embedding.py` and `node/context/embedding.mjs`
+**Implementations:** `target/shared/scripts/context/embedding.py` and `target/aws/scripts/lambda/node/context_handler.mjs`
 
 **Interface:**
 
@@ -606,7 +637,7 @@ config = FMIConfig(
 
 **Responsibility:** Extend the existing `CostTracker` framework with Bedrock LLM and embedding cost tracking.
 
-**Implementation:** `python/cost/bedrock_pricing.py`
+**Implementation:** `target/shared/scripts/cost/bedrock_pricing.py`
 
 **Pricing Resolution:**
 
@@ -677,7 +708,7 @@ class BedrockCostTracker:
 
 **Responsibility:** Execute experiment scenarios with parameter sweeps and collect structured results.
 
-**Implementation:** `python/experiments/runner.py`
+**Implementation:** `target/experiments/runner.py`
 
 **Interface:**
 
@@ -734,7 +765,7 @@ execution:
 
 **Responsibility:** Node.js Lambda handler for Path B, extending the existing `wasm_handler.mjs` with context reuse operations.
 
-**Implementation:** `node/handlers/context_handler.mjs`
+**Implementation:** `target/aws/scripts/lambda/node/context_handler.mjs`
 
 **Operations:**
 
@@ -762,7 +793,7 @@ const OPERATIONS = {
 
 **Responsibility:** Execute LLM chains via AWS Bedrock using LangChain. This is the component that constructs prompts, invokes the LLM, and parses responses. The Context Router delegates to this when a new LLM call is needed (no cache hit).
 
-**Implementations:** `python/chain/executor.py` and `node/chain/executor.mjs`
+**Implementations:** `target/shared/scripts/chain/executor.py` and `target/aws/scripts/lambda/node/context_handler.mjs`
 
 **Interface:**
 
@@ -825,7 +856,7 @@ class ChainExecutor {
 
 **Responsibility:** Push the entire similarity search loop into C/C++ via a Cython extension, eliminating per-embedding Python→C++ boundary crossing overhead. This is the Path A2 optimization.
 
-**Implementation:** `python/simd/batch_search.pyx`
+**Implementation:** `target/shared/scripts/simd/batch_search.pyx`
 
 **Interface:**
 
@@ -1171,55 +1202,26 @@ Extends `cylon/docker/aws/lambda/Dockerfile` which already includes:
 - pycylon bindings, boto3, redis-py, awslambdaric
 - hiredis, redis-plus-plus (C++ Redis clients)
 
-**Additional layers for context reuse:**
+**S3 Script Runner Pattern:**
 
-```dockerfile
-# Extends cylon/docker/aws/lambda/Dockerfile
-FROM cylon-lambda-base:latest
+The Python Lambda follows Cylon's `lambda_entry1.py` pattern: instead of baking application code into the Docker image, the handler downloads scripts from S3 at runtime. This decouples code updates from container builds.
 
-# LangChain + experiment dependencies
-RUN . /opt/conda/etc/profile.d/conda.sh && \
-    conda activate cylon_dev && \
-    pip install langchain-aws langchain-core numpy pyyaml && \
-    pip install cython
-
-# Copy context reuse code
-COPY python/ /cylon-armada/python/
-
-# Build Cython batch search (Path A2)
-RUN . /opt/conda/etc/profile.d/conda.sh && \
-    conda activate cylon_dev && \
-    cd /cylon-armada/python/simd && \
-    python setup.py build_ext --inplace
-
-ENV PYTHONPATH="/cylon-armada/python:$PYTHONPATH"
-
-# Lambda entry point
-CMD ["python", "-m", "awslambdaric", "coordinator.lambda_handler.handler"]
+```
+Step Functions → Lambda handler (handler.py)
+                      │
+                      ├── 1. Set env vars from event payload
+                      ├── 2. Download scripts from S3 bucket
+                      ├── 3. Execute run_action.py via subprocess
+                      └── 4. Return result JSON to Step Functions
 ```
 
-**Estimated image size:** ~850MB (base Cylon image ~800MB + LangChain ~50MB)
+The Docker image contains only the Lambda handler, dependencies, and Cylon — the context reuse scripts (`context/`, `chain/`, `cost/`, `simd/`, `coordinator/`) are uploaded to S3 and downloaded at invocation time.
 
-#### Path B: Node.js + WASM
+**Dockerfiles:** `docker/Dockerfile.python` and `docker/Dockerfile.nodejs`
 
-Extends the Node.js Lambda runtime with the cylon-wasm module. Significantly smaller than Path A.
-
-```dockerfile
-FROM public.ecr.aws/lambda/nodejs:18
-
-# Copy WASM module and handler code
-COPY node/ ${LAMBDA_TASK_ROOT}/
-
-# Install dependencies
-RUN cd ${LAMBDA_TASK_ROOT} && npm install --production
-
-# cylon-wasm module (pre-built)
-COPY cylon-wasm/ ${LAMBDA_TASK_ROOT}/node_modules/cylon-wasm/
-
-CMD ["handlers/context_handler.handler"]
-```
-
-**Estimated image size:** ~50-80MB (Node.js runtime + WASM module + LangChain.js)
+**Estimated image sizes:**
+- Python (Path A1/A2): ~850MB (base Cylon image ~800MB + LangChain ~50MB)
+- Node.js (Path B): ~50-80MB (Node.js runtime + WASM module + LangChain.js)
 
 ### Lambda Function Configuration
 
@@ -1227,14 +1229,14 @@ CMD ["handlers/context_handler.handler"]
 
 | Function | Runtime | Memory | Timeout | Description |
 |----------|---------|--------|---------|-------------|
-| `context-reuse-python` | Python 3.10 (Docker) | 1024 MB | 300s | Path A1/A2 worker — context routing + LLM execution |
-| `context-reuse-nodejs` | Node.js 18 (Docker) | 512 MB | 300s | Path B worker — WASM SIMD context routing |
-| `context-coordinator` | Python 3.10 (Docker) | 512 MB | 300s | Agent Coordinator — prepare tasks (embed), aggregate results |
+| `cylon-armada-worker` | Python 3.10 (Docker) | 1024 MB | 300s | Path A1/A2 — S3 script runner, all actions (prepare/route/aggregate) |
+| `cylon-armada-worker-node` | Node.js 18 (Docker) | 512 MB | 300s | Path B — WASM SIMD context routing |
 
 **Memory rationale:**
 - Python worker at 1024 MB: pycylon + embedding arrays + LangChain overhead
 - Node.js worker at 512 MB: WASM module is lightweight, smaller embedding overhead
-- Coordinator at 512 MB: embeds all tasks in prepare step (needs Bedrock client + numpy)
+
+**Note:** With the S3 script runner pattern, a single Python Lambda function handles all three actions (prepare_tasks, route_task, aggregate_results). The `ACTION` field in the Step Functions payload determines which function to execute.
 
 #### Step Functions State Machine
 
@@ -1453,10 +1455,36 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 
 ---
 
+### Scenario 5: Astronomical Inference Analysis (cosmic-ai)
+
+**Purpose:** Demonstrate context reuse on real scientific workloads. Tasks are dynamically generated from AstroMAE inference on SDSS photometric data, validating the architecture's applicability to the scientific domain.
+
+**Source:** AI-for-Astronomy / cosmic-ai (arXiv:2501.06249)
+
+**Tasks:** Generated dynamically from real inference results:
+- Per-galaxy redshift analysis (galaxies with similar photometric profiles → high semantic overlap)
+- Color-based morphological classification (similar color indices → clustered prompts)
+- Outlier analysis for prediction errors (top 10% residuals)
+- Batch-level performance summaries and cost analysis
+
+**Task generation pipeline:**
+1. Load SDSS data partition (`.pt` file from `cosmicai-data` S3 bucket)
+2. Run AstroMAE model inference → predictions, magnitudes, redshifts
+3. Generate LLM analysis tasks from real observations via configurable templates
+4. Feed tasks through the context reuse pipeline
+
+**Expected reuse rate:** 50-65% — galaxies with similar magnitude profiles produce highly overlapping analysis prompts. Outlier analyses are more unique.
+
+**Key question:** Does context reuse provide the same cost savings on scientific domain tasks as on general-purpose NLP tasks? This validates the architecture is domain-agnostic.
+
+**Configuration:** Templates and survey types are configurable via JSON config file, direct parameter override, or `COSMIC_AI_CONFIG` environment variable.
+
+---
+
 ### Scenario Design Principles
 
 1. **Controlled similarity distribution:** Each scenario has a known distribution of similar/dissimilar tasks so reuse rates can be predicted and validated.
-2. **Reproducible task sets:** Task descriptions are stored as JSON files in `python/experiments/scenarios/` and version-controlled.
+2. **Reproducible task sets:** Task descriptions are stored as JSON files in `target/experiments/scenarios/` or generated dynamically from data (cosmic-ai) and version-controlled.
 3. **Baseline pairing:** Every reuse run has a corresponding baseline run with the same tasks, enabling paired statistical comparison.
 4. **Cross-path consistency:** All three execution paths (A1, A2, B) run the same task sets to ensure fair comparison.
 
@@ -1472,7 +1500,7 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 | Reuse quality | **>0.80 ROUGE-L** for reused responses vs. fresh | Quality analysis comparing reused vs. baseline responses |
 | Similarity search latency | **<20ms** for 1000 contexts (512-dim) | `search_latency_p50` per-path metrics |
 | SIMD speedup | **>2x** vs. numpy scalar fallback | Path A1 vs. Fallback latency comparison |
-| End-to-end pipeline | **All 4 scenarios** complete successfully on Lambda | Experiment runner completes without errors |
+| End-to-end pipeline | **All 5 scenarios** complete successfully on Lambda | Experiment runner completes without errors |
 
 ### Secondary Metrics (Should Achieve)
 
@@ -1493,7 +1521,7 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 - [ ] All 3 execution paths (A1, A2, B) running on Lambda
 - [ ] Cylon Communicator coordinating parallel Lambda workers
 - [ ] BedrockCostTracker capturing real USD costs with pricing resolution
-- [ ] 4 test scenarios with 32-48 tasks each, stored as reproducible JSON
+- [ ] 5 test scenarios with 32-48 tasks each (4 general-purpose + 1 cosmic-ai from real data)
 - [ ] Parameter sweep (54 configurations per scenario) completed
 - [ ] Jupyter notebooks with cost curves, latency distributions, path comparisons, quality analysis
 - [ ] Proposal paper draft with experimental methodology, results, and visualizations

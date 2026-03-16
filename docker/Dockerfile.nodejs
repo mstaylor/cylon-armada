@@ -1,0 +1,41 @@
+FROM node:18-slim
+
+# ---------------------------------------------------------------------------
+# System dependencies
+# ---------------------------------------------------------------------------
+
+RUN apt-get update -y && \
+    apt-get install -y ca-certificates && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# Copy cylon-wasm WASM module (pre-built)
+# Build context must include the cylon-wasm pkg directory
+# ---------------------------------------------------------------------------
+
+COPY cylon/rust/cylon-wasm/pkg/ /app/cylon-wasm/
+
+ENV CYLON_WASM_PATH=/app/cylon-wasm/cylon_wasm_bg.wasm
+ENV CYLON_WASM_BINDINGS=/app/cylon-wasm/cylon_wasm.js
+
+# ---------------------------------------------------------------------------
+# Application dependencies
+# ---------------------------------------------------------------------------
+
+WORKDIR /app
+
+COPY target/aws/scripts/lambda/node/package.json /app/package.json
+RUN npm install --production
+
+# ---------------------------------------------------------------------------
+# Copy application code
+# ---------------------------------------------------------------------------
+
+COPY target/aws/scripts/lambda/node/ /app/
+
+# ---------------------------------------------------------------------------
+# Lambda handler entry point
+# ---------------------------------------------------------------------------
+
+CMD ["context_handler.handler"]

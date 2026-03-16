@@ -264,10 +264,44 @@ if __name__ == "__main__":
     parser.add_argument("--tasks-file", type=str, default=None,
                         help="Path to JSON file with custom tasks (list of strings)")
 
+    # cosmic-ai: generate tasks from real astronomical inference
+    cosmic = parser.add_argument_group("cosmic-ai", "Generate tasks from SDSS inference")
+    cosmic.add_argument("--cosmic-ai", action="store_true",
+                        help="Run with tasks generated from AstroMAE inference")
+    cosmic.add_argument("--data-path", type=str, default=None,
+                        help="Path to SDSS .pt data partition")
+    cosmic.add_argument("--model-path", type=str, default=None,
+                        help="Path to pre-trained AstroMAE model checkpoint")
+    cosmic.add_argument("--inference-batch-size", type=int, default=512,
+                        help="Batch size for AstroMAE inference")
+    cosmic.add_argument("--inference-device", type=str, default="cpu",
+                        choices=["cpu", "cuda"],
+                        help="Device for inference")
+
     args = parser.parse_args()
 
     custom_tasks = None
-    if args.tasks_file:
+
+    if args.cosmic_ai:
+        if not args.data_path or not args.model_path:
+            parser.error("--cosmic-ai requires --data-path and --model-path")
+
+        from cosmic_ai.task_generator import generate_tasks_from_data
+
+        custom_tasks, inference_results = generate_tasks_from_data(
+            data_path=args.data_path,
+            model_path=args.model_path,
+            batch_size=args.inference_batch_size,
+            device=args.inference_device,
+            max_tasks=max(args.tasks) if args.tasks else 16,
+            seed=42,
+        )
+        logger.info(
+            "cosmic-ai: generated %d tasks from %d inference results",
+            len(custom_tasks), inference_results["metrics"]["num_samples"],
+        )
+
+    elif args.tasks_file:
         custom_tasks = load_tasks(args.tasks_file)
         logger.info("Loaded %d tasks from %s", len(custom_tasks), args.tasks_file)
 

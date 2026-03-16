@@ -1,0 +1,19 @@
+{
+  "name": "cylon-armada-context-handler",
+  "version": "1.0.0",
+  "description": "Path B — Node.js + WASM SIMD128 context reuse handler",
+  "type": "module",
+  "main": "context_handler.mjs",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "benchmark": "node context_handler.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.500.0",
+    "@aws-sdk/client-dynamodb": "^3.500.0",
+    "redis": "^4.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
