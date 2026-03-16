@@ -1,7 +1,7 @@
 {
   "name": "cylon-armada-context-handler",
   "version": "1.0.0",
-  "description": "Path B — Node.js + WASM SIMD128 context reuse handler",
+  "description": "Path B — Node.js + WASM SIMD128 context reuse + ONNX inference handler",
   "type": "module",
   "main": "context_handler.mjs",
   "scripts": {
@@ -11,6 +11,8 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.500.0",
     "@aws-sdk/client-dynamodb": "^3.500.0",
+    "@aws-sdk/client-s3": "^3.500.0",
+    "onnxruntime-node": "^1.17.0",
     "redis": "^4.6.0"
   },
   "engines": {

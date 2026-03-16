@@ -98,8 +98,105 @@ The context reuse architecture is validated on real scientific workloads using t
 - `blocks/` — AstroMAE model architecture (ViT + Inception, photoz, NormalCell) — from AI-for-Astronomy
 - `inference.py` — refactored inference module (callable, returns structured results)
 - `task_generator.py` — generates LLM tasks from inference output with configurable templates
+- `export_onnx.py` — export AstroMAE to ONNX for Node.js inference and model parallelism
+
+**Node.js / ONNX support:** The AstroMAE model is exported to ONNX format and runs via `onnxruntime-node` on the Path B Node.js Lambda runtime. This gives Path B a complete end-to-end pipeline: ONNX inference → task generation → WASM SIMD context reuse.
 
 **cosmic-ai AWS infrastructure** (`AI-for-Astronomy/aws/`) uses the same 3-stage serverless pattern as cylon-armada: Initialize → Distributed Map → Summarize. Same S3 script runner, same Lambda containers, same Step Functions orchestration.
+
+### Serverless Model Parallelism via FMI (Phase 1)
+
+For models that exceed a single Lambda's memory or compute capacity, the system supports **model parallelism across Lambda functions** using Cylon's FMI communicator for inter-Lambda tensor exchange.
+
+**Architecture:**
+
+AstroMAE has a natural parallel split — the ViT encoder and Inception branch are **independent** and can execute concurrently on separate Lambda containers:
+
+```
+                     ┌─────────────────────────┐
+                     │  Input: [image, magnitude]│
+                     └──────────┬──────────────┘
+                                │
+                   ┌────────────┴────────────┐
+                   ▼                         ▼
+        ┌──────────────────┐      ┌──────────────────┐
+        │ Lambda 0 (rank=0)│      │ Lambda 1 (rank=1)│
+        │                  │      │                  │
+        │ ONNX Stage 0:   │      │ ONNX Stage 1:   │
+        │ ViT Encoder      │      │ Inception Branch │
+        │  patch_embed     │      │  conv2d_init     │
+        │  transformer     │      │  inception blocks│
+        │  blocks          │      │  magnitude MLP   │
+        │  fc_norm + head  │      │                  │
+        │  vit_block       │      │                  │
+        │                  │      │                  │
+        │ Output: (B,1096) │      │ Output: (B,2120) │
+        └────────┬─────────┘      └────────┬─────────┘
+                 │                         │
+                 └──────────┬──────────────┘
+                            │ FMI all-gather
+                            ▼
+                 ┌──────────────────────┐
+                 │ Lambda 0 or 1        │
+                 │ ONNX Stage 2:        │
+                 │ Fusion (concat_block)│
+                 │ Output: (B, 1)       │
+                 │ → redshift prediction│
+                 └──────────────────────┘
+```
+
+**Key design decisions:**
+
+1. **ONNX graph partitioning:** The full ONNX model is split into 2-3 subgraphs at export time. Each Lambda loads only its assigned subgraph — reducing per-Lambda memory and enabling models that don't fit in a single container.
+
+2. **FMI tensor exchange:** Intermediate activations are exchanged via Cylon's FMI communicator:
+   - **Direct channel (TCPunch):** <10ms latency via Rendezvous Server — primary for pipeline stages
+   - **Redis channel:** Fallback for tensor exchange, also used for coordination
+   - **S3 channel:** For very large intermediate tensors (>100MB)
+
+3. **Parallel branches:** AstroMAE's ViT and Inception branches run concurrently (data parallelism within model parallelism). The FMI `all-gather` collects outputs from both branches before the fusion stage.
+
+4. **Generalization:** While AstroMAE is the Phase 1 demo model, the ONNX partition + FMI exchange pattern works for any model — including large language models split across Lambda containers. This is a key thesis contribution: **serverless model parallelism using FMI-based communication.**
+
+**Components:**
+- `export_onnx.py` — export and optionally partition the ONNX model
+- Node.js: `onnxruntime-node` for ONNX inference in Lambda containers
+- Python: `onnxruntime` for ONNX inference (alternative to PyTorch for lighter containers)
+- FMI communicator (Redis/Direct channel) for inter-Lambda tensor exchange
+
+**Memory-Aware Partitioning:**
+
+Each ONNX subgraph has different memory requirements. The export/partition tool estimates per-stage memory so the orchestrator can assign appropriate Lambda memory configurations:
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ ONNX Partition Report                                          │
+├──────────┬──────────┬──────────────┬──────────────────────────┤
+│ Stage    │ Params   │ Est. Memory  │ Lambda Memory Config     │
+├──────────┼──────────┼──────────────┼──────────────────────────┤
+│ 0 (ViT)  │ ~60-70%  │ ~350MB peak  │ 1024 MB                  │
+│ 1 (Incep)│ ~30-40%  │ ~200MB peak  │ 512 MB                   │
+│ 2 (Fuse) │ <1%      │ ~50MB peak   │ 256 MB (runs on rank 0)  │
+└──────────┴──────────┴──────────────┴──────────────────────────┘
+```
+
+Peak memory per Lambda = (subgraph size) + (local activations) + (FMI exchange buffer)
+
+**Memory management strategy:**
+
+1. **Per-stage Lambda memory config** — Step Functions payload specifies memory per rank. The ViT stage (heavier transformer blocks) gets more memory than the Inception stage (lighter CNNs).
+
+2. **S3 lazy loading** — each Lambda downloads only its assigned ONNX subgraph from S3 at cold start. The full model is never loaded on any single Lambda.
+
+3. **Deep partitioning for very large models** — if a single stage exceeds Lambda's 10GB container limit, transformer blocks can be further split across Lambdas (e.g., blocks 0-5 on rank 0, blocks 6-11 on rank 1) with FMI pipelining activations between stages.
+
+4. **Memory estimation at export time** — `export_onnx.py` reports per-stage parameter counts and estimated peak memory, enabling the orchestrator to auto-configure Lambda memory settings.
+
+**Benchmark dimensions:**
+- Single Lambda (full model) vs. 2-Lambda parallel (ViT + Inception split)
+- FMI Direct channel vs. Redis channel for tensor exchange latency
+- Memory utilization per stage (actual vs. estimated)
+- Model size threshold at which parallelism becomes beneficial
 
 ### Swarm Orchestration (Future Phase — Custom Implementation)
 
