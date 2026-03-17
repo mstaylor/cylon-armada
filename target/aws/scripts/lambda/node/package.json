@@ -8,6 +8,14 @@
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "benchmark": "node context_handler.mjs"
   },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "transform": {},
+    "testMatch": ["**/__tests__/**/*.test.mjs"]
+  },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.500.0",
     "@aws-sdk/client-dynamodb": "^3.500.0",
