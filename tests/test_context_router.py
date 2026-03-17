@@ -87,19 +87,18 @@ class TestContextRouter:
         reuse, match = router.should_reuse(query, workflow_id="test-wf")
         assert reuse is False
 
-    def test_numpy_cosine_similarity(self, router):
+    def test_cosine_similarity_identical(self, router):
         a = np.array([1.0, 0.0, 0.0], dtype=np.float32)
         b = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
-        # Same vectors should have similarity 1.0
-        sim = router._numpy_cosine_similarity(a, b)
+        sim = router._cosine_similarity(a, b)
         assert sim == pytest.approx(1.0, abs=1e-6)
 
-    def test_numpy_cosine_orthogonal(self, router):
+    def test_cosine_similarity_orthogonal(self, router):
         a = np.array([1.0, 0.0, 0.0], dtype=np.float32)
         b = np.array([0.0, 1.0, 0.0], dtype=np.float32)
 
-        sim = router._numpy_cosine_similarity(a, b)
+        sim = router._cosine_similarity(a, b)
         assert sim == pytest.approx(0.0, abs=1e-6)
 
     def test_backend_enum(self):
