@@ -50,6 +50,7 @@ ENV_EMBEDDING_DIMENSIONS = "BEDROCK_EMBEDDING_DIMENSIONS"
 ENV_SIMILARITY_THRESHOLD = "SIMILARITY_THRESHOLD"
 ENV_PRICING_CONFIG_PATH = "BEDROCK_PRICING_CONFIG"
 ENV_AWS_REGION = "AWS_DEFAULT_REGION"
+ENV_CONTEXT_BACKEND = "CONTEXT_BACKEND"
 
 
 @dataclass
@@ -65,6 +66,7 @@ class BedrockConfig:
     embedding_dimensions: int = 1024
     similarity_threshold: float = 0.85
     region: str = "us-east-1"
+    context_backend: str = "cylon"  # "cylon" (Arrow SIMD, default) or "redis" (numpy+bytes)
 
     @classmethod
     def from_env(cls) -> "BedrockConfig":
@@ -75,6 +77,7 @@ class BedrockConfig:
             embedding_dimensions=int(os.environ.get(ENV_EMBEDDING_DIMENSIONS, cls.embedding_dimensions)),
             similarity_threshold=float(os.environ.get(ENV_SIMILARITY_THRESHOLD, cls.similarity_threshold)),
             region=os.environ.get(ENV_AWS_REGION, cls.region),
+            context_backend=os.environ.get(ENV_CONTEXT_BACKEND, cls.context_backend),
         )
 
     @classmethod
@@ -86,6 +89,7 @@ class BedrockConfig:
             embedding_dimensions=int(payload.get("embedding_dimensions", cls.embedding_dimensions)),
             similarity_threshold=float(payload.get("similarity_threshold", cls.similarity_threshold)),
             region=payload.get("region", cls.region),
+            context_backend=payload.get("context_backend", cls.context_backend),
         )
 
     @classmethod
@@ -140,6 +144,8 @@ class BedrockConfig:
                 config.similarity_threshold = float(payload["similarity_threshold"])
             if "region" in payload:
                 config.region = payload["region"]
+            if "context_backend" in payload:
+                config.context_backend = payload["context_backend"]
 
         # 2 → 1: Env vars override everything
         if ENV_LLM_MODEL_ID in os.environ:
@@ -152,6 +158,8 @@ class BedrockConfig:
             config.similarity_threshold = float(os.environ[ENV_SIMILARITY_THRESHOLD])
         if ENV_AWS_REGION in os.environ:
             config.region = os.environ[ENV_AWS_REGION]
+        if ENV_CONTEXT_BACKEND in os.environ:
+            config.context_backend = os.environ[ENV_CONTEXT_BACKEND]
 
         return config
 

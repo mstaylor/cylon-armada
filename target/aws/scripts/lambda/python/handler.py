@@ -114,10 +114,14 @@ _OPTIONAL_ENV_FIELDS = [
     "RANK",
     "WORLD_SIZE",
     "ACTION",
-    # Cylon communicator (Phase 2+)
+    # Cylon FMI communicator
     "RENDEZVOUS_HOST",
     "RENDEZVOUS_PORT",
     "FMI_CHANNEL_TYPE",
+    "FMI_CHANNEL",
+    "FMI_MAX_TIMEOUT",
+    # Context backend
+    "CONTEXT_BACKEND",
     # Cost tracking
     "ENABLE_COST_TRACKING",
     # Logging

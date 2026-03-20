@@ -21,6 +21,7 @@ from context.embedding import EmbeddingService
 from context.manager import ContextManager
 from context.router import ContextRouter, SIMDBackend
 from chain.executor import ChainExecutor
+from communicator.fmi_bridge import FMIBridge
 from cost.bedrock_pricing import BedrockConfig, BedrockCostTracker
 
 logger = logging.getLogger(__name__)

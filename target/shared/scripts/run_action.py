@@ -26,6 +26,7 @@ from context.embedding import EmbeddingService
 from context.router import ContextRouter, SIMDBackend
 from context.manager import ContextManager
 from chain.executor import ChainExecutor
+from communicator.fmi_bridge import FMIBridge
 from cost.bedrock_pricing import BedrockConfig, BedrockCostTracker
 
 logging.basicConfig(
@@ -59,7 +60,12 @@ def action_prepare_tasks(payload):
 
 
 def action_route_task(payload):
-    """Route a single task — called by each Map iteration."""
+    """Route a single task — called by each Map iteration.
+
+    If FMI is available and world_size > 1, uses the communicator to:
+    1. Broadcast context cache from rank 0 (avoids N independent Redis lookups)
+    2. Reduce cost metrics back to rank 0 after routing
+    """
     config = BedrockConfig.resolve(payload=payload.get("config", {}))
     context_manager = ContextManager(
         redis_host=os.environ.get("REDIS_HOST", "localhost"),
@@ -69,6 +75,35 @@ def action_route_task(payload):
     router = ContextRouter(context_manager, config=config)
     chain_executor = ChainExecutor(config=config)
     cost_tracker = BedrockCostTracker.create(region=config.region)
+
+    # Initialize FMI if rank/world_size present
+    fmi = FMIBridge.from_payload(payload)
+
+    # If FMI is available, rank 0 loads embeddings and broadcasts to all workers.
+    # This avoids each worker independently querying Redis for the full embedding set.
+    if fmi.available and fmi.world_size > 1:
+        workflow_id = payload["workflow_id"]
+        if fmi.rank == 0:
+            all_embeddings = context_manager.get_all_embeddings(workflow_id=workflow_id)
+            # Serialize embeddings for broadcast
+            import base64
+            cache_data = [
+                (ctx_id, base64.b64encode(emb.tobytes()).decode("ascii"))
+                for ctx_id, emb in all_embeddings
+            ]
+        else:
+            cache_data = None
+
+        cache_data = fmi.broadcast_embeddings(cache_data, root=0)
+        logger.info("FMI: received %d cached embeddings via broadcast (rank=%d)",
+                     len(cache_data), fmi.rank)
+
+        # Pre-populate the context manager's cache from broadcast data
+        import base64
+        import numpy as np
+        for ctx_id, emb_b64 in cache_data:
+            emb = np.frombuffer(base64.b64decode(emb_b64), dtype=np.float32)
+            context_manager.cache_embedding(ctx_id, emb, workflow_id=workflow_id)
 
     # Decode embedding from base64
     import numpy as np
@@ -88,6 +123,13 @@ def action_route_task(payload):
         cost_tracker=cost_tracker,
         embedding_metadata=payload["embedding_metadata"],
     )
+
+    # Reduce cost metrics back to rank 0
+    if fmi.available and fmi.world_size > 1:
+        result["total_cost_reduced"] = fmi.reduce_cost(
+            result.get("cost_usd", 0), root=0,
+        )
+        fmi.finalize()
 
     return result
 
