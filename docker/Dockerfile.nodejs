@@ -10,7 +10,7 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
-# Copy cylon-wasm WASM module (pre-built)
+# Copy cylon-wasm WASM module (pre-built, SIMD + core operations)
 # Build context must include the cylon-wasm pkg directory
 # ---------------------------------------------------------------------------
 
@@ -18,6 +18,15 @@ COPY cylon/rust/cylon-wasm/pkg/ /app/cylon-wasm/
 
 ENV CYLON_WASM_PATH=/app/cylon-wasm/cylon_wasm_bg.wasm
 ENV CYLON_WASM_BINDINGS=/app/cylon-wasm/cylon_wasm.js
+
+# ---------------------------------------------------------------------------
+# Copy cylon-armada-wasm WASM module (pre-built, ContextTable)
+# ---------------------------------------------------------------------------
+
+COPY rust/cylon-armada-wasm/pkg/ /app/cylon-armada-wasm/
+
+ENV CYLON_ARMADA_WASM_PATH=/app/cylon-armada-wasm/cylon_armada_wasm_bg.wasm
+ENV CYLON_ARMADA_WASM_BINDINGS=/app/cylon-armada-wasm/cylon_armada_wasm.js
 
 # ---------------------------------------------------------------------------
 # Application dependencies

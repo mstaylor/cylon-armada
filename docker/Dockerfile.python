@@ -7,6 +7,7 @@ ENV PATH=/opt/conda/bin:$PATH
 
 ENV CYLON_HOME=/cylon
 ENV CYLON_PREFIX=/cylon/install
+ENV CYLON_ARMADA_PREFIX=/cylon-armada/install
 
 ARG EXPOSE_ENV=33000
 ENV EXPOSE_ENV $EXPOSE_ENV
@@ -30,10 +31,10 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-L
     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate cylon_dev" >> ~/.bashrc && \
-    echo "export LD_LIBRARY_PATH=$CYLON_PREFIX/lib" >> ~/.bashrc
+    echo "export LD_LIBRARY_PATH=$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib" >> ~/.bashrc
 
 # ---------------------------------------------------------------------------
-# Cylon (clone, build with Redis + FMI flags)
+# Cylon (clone, build with Redis + FMI + SIMD flags)
 # ---------------------------------------------------------------------------
 
 ADD https://google.com cache_bust
@@ -66,13 +67,13 @@ RUN git clone https://github.com/redis/hiredis.git /hiredis && \
     cmake -DREDIS_PLUS_PLUS_CXX_STANDARD=11 .. && make && make install
 
 # ---------------------------------------------------------------------------
-# Build Cylon C++ + pycylon (with Redis and FMI support)
+# Build Cylon C++ + pycylon (with Redis, FMI, and SIMD support)
 # ---------------------------------------------------------------------------
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
     cd $CYLON_HOME && \
-    python build.py -cmake-flags="-DCYLON_USE_REDIS=1 -DCYLON_FMI=1" -ipath="$CYLON_PREFIX" --cpp --python
+    python build.py -cmake-flags="-DCYLON_USE_REDIS=1 -DCYLON_FMI=1 -DCYLON_SIMD=1" -ipath="$CYLON_PREFIX" --cpp --python
 
 # ---------------------------------------------------------------------------
 # cylon-armada dependencies (LangChain, Cython)
@@ -83,11 +84,43 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     pip install langchain-aws langchain-core cython
 
 # ---------------------------------------------------------------------------
-# Copy cylon-armada application code
+# Copy cylon-armada source code
 # ---------------------------------------------------------------------------
 
 COPY target/shared/scripts/ /cylon-armada/scripts/
 COPY target/aws/scripts/lambda/python/handler.py /cylon-armada/handler.py
+COPY cpp/ /cylon-armada/cpp/
+COPY python/ /cylon-armada/python/
+
+# ---------------------------------------------------------------------------
+# Build cylon-armada C++ library (libcylon_armada.so)
+# ---------------------------------------------------------------------------
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    mkdir -p /cylon-armada/cpp/build && \
+    cd /cylon-armada/cpp/build && \
+    cmake -DCYLON_PREFIX=$CYLON_PREFIX \
+          -DCYLON_USE_REDIS=1 \
+          -DCYLON_FMI=1 \
+          -DCMAKE_INSTALL_PREFIX=$CYLON_ARMADA_PREFIX \
+          -DCMAKE_BUILD_TYPE=Release \
+          .. && \
+    cmake --build . --parallel $(nproc) && \
+    cmake --install .
+
+# ---------------------------------------------------------------------------
+# Build cylon-armada Python context bindings
+# ---------------------------------------------------------------------------
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    cd /cylon-armada/python && \
+    CYLON_PREFIX=$CYLON_PREFIX \
+    CYLON_ARMADA_PREFIX=$CYLON_ARMADA_PREFIX \
+    CYLON_REDIS=1 \
+    CYLON_FMI=1 \
+    python setup.py build_ext --inplace
 
 # ---------------------------------------------------------------------------
 # Build Cython SIMD extension (Path A2)
@@ -104,8 +137,8 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 
 EXPOSE $EXPOSE_ENV
 
-ENV PYTHONPATH="$CYLON_PREFIX/lib:/cylon-armada/scripts:$PYTHONPATH"
-ENV LD_LIBRARY_PATH="$CYLON_PREFIX/lib"
+ENV PYTHONPATH="$CYLON_PREFIX/lib:/cylon-armada/scripts:/cylon-armada/python:$PYTHONPATH"
+ENV LD_LIBRARY_PATH="$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib"
 
 COPY target/aws/scripts/lambda/python/handler.py /cylon-armada/lambda_entry.py
 

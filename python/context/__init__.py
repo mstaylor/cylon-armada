@@ -12,5 +12,5 @@
  # limitations under the License.
  ##
 
-from pycylon.context.context_table import ContextTable
-from pycylon.context.context_table import *
+from context.context_table import ContextTable
+from context.context_table import *

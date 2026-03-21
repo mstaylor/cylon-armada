@@ -22,7 +22,7 @@ from libc.stdint cimport int64_t, uint8_t
 
 from pycylon.common.status cimport CStatus
 from pycylon.ctx.context cimport CCylonContext, CylonContext
-from pycylon.context.context_table cimport (
+from context.context_table cimport (
     CContextMetadata,
     CContextTable,
     CSearchResult,
@@ -31,10 +31,10 @@ from pycylon.api.lib cimport pycylon_unwrap_context
 from pyarrow.lib cimport CRecordBatch, pyarrow_wrap_batch
 
 IF CYTHON_REDIS:
-    from pycylon.context.context_table cimport CSaveToRedis, CLoadFromRedis
+    from context.context_table cimport CSaveToRedis, CLoadFromRedis
 
 IF CYTHON_FMI:
-    from pycylon.context.context_table cimport CSaveToS3, CLoadFromS3
+    from context.context_table cimport CSaveToS3, CLoadFromS3
 
 
 cdef class ContextTable:
