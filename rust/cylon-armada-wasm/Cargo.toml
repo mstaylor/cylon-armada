@@ -1,0 +1,26 @@
+[package]
+name = "cylon-armada-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WASM bindings for cylon-armada ContextTable"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cylon-armada = { path = "../cylon-armada" }
+cylon = { path = "/home/parallels/cylon/rust", default-features = false }
+
+arrow = { version = "57.1.0", default-features = false, features = ["ipc"] }
+arrow-array = { version = "57.1.0", default-features = false }
+
+wasm-bindgen = "0.2"
+serde_json = "1.0"
+
+# WASM-compatible random number generation (required by some dependencies)
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[profile.release]
+opt-level = 3
+lto = true
