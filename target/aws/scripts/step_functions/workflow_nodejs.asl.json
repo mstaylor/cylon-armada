@@ -4,7 +4,7 @@
   "States": {
     "PrepareTasks": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker-node",
+      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker-node",
       "Parameters": {
         "action": "prepare_tasks",
         "action_payload": {
@@ -37,7 +37,7 @@
         "States": {
           "RouteTask": {
             "Type": "Task",
-            "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker-node",
+            "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker-node",
             "Parameters": {
               "action": "route_task",
               "action_payload": {
@@ -67,7 +67,7 @@
     },
     "AggregateResults": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker-node",
+      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker-node",
       "Parameters": {
         "action": "aggregate_results",
         "action_payload": {

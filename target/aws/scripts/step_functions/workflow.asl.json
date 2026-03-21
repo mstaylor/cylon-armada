@@ -4,7 +4,7 @@
   "States": {
     "PrepareTasks": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker",
+      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker",
       "Parameters": {
         "S3_BUCKET": "cylon-armada-scripts",
         "S3_OBJECT_NAME": "target/shared/scripts",
@@ -47,7 +47,7 @@
         "States": {
           "RouteTask": {
             "Type": "Task",
-            "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker",
+            "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker",
             "Parameters": {
               "S3_BUCKET": "cylon-armada-scripts",
               "S3_OBJECT_NAME": "target/shared/scripts",
@@ -90,7 +90,7 @@
     },
     "AggregateResults": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:cylon-armada-worker",
+      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker",
       "Parameters": {
         "S3_BUCKET": "cylon-armada-scripts",
         "S3_OBJECT_NAME": "target/shared/scripts",
