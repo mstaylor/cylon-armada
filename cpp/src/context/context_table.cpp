@@ -84,40 +84,41 @@ std::unique_ptr<ContextBuilders> ContextBuilders::Create(int embedding_dim) {
   return b;
 }
 
-void ContextBuilders::Append(const std::string& ctx_id,
-                              const float* emb, int dim,
-                              const ContextMetadata& meta) {
-  (void)context_id->Append(ctx_id);
-  (void)workflow_id->Append(meta.workflow_id);
-  (void)embedding->Append();
+arrow::Status ContextBuilders::Append(const std::string& ctx_id,
+                                      const float* emb, int dim,
+                                      const ContextMetadata& meta) {
+  ARROW_RETURN_NOT_OK(context_id->Append(ctx_id));
+  ARROW_RETURN_NOT_OK(workflow_id->Append(meta.workflow_id));
+  ARROW_RETURN_NOT_OK(embedding->Append());
   auto* vals = static_cast<arrow::FloatBuilder*>(embedding->value_builder());
-  (void)vals->AppendValues(emb, dim);
-  (void)response->Append(meta.response);
-  (void)model_id->Append(meta.model_id);
-  (void)input_tokens->Append(meta.input_tokens);
-  (void)output_tokens->Append(meta.output_tokens);
-  (void)cost_usd->Append(meta.cost_usd);
+  ARROW_RETURN_NOT_OK(vals->AppendValues(emb, dim));
+  ARROW_RETURN_NOT_OK(response->Append(meta.response));
+  ARROW_RETURN_NOT_OK(model_id->Append(meta.model_id));
+  ARROW_RETURN_NOT_OK(input_tokens->Append(meta.input_tokens));
+  ARROW_RETURN_NOT_OK(output_tokens->Append(meta.output_tokens));
+  ARROW_RETURN_NOT_OK(cost_usd->Append(meta.cost_usd));
   auto now = std::chrono::system_clock::now();
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
       now.time_since_epoch()).count();
-  (void)created_at->Append(millis);
-  (void)reuse_count->Append(0);
+  ARROW_RETURN_NOT_OK(created_at->Append(millis));
+  ARROW_RETURN_NOT_OK(reuse_count->Append(0));
   ++length;
+  return arrow::Status::OK();
 }
 
-std::shared_ptr<arrow::RecordBatch> ContextBuilders::Finish(
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> ContextBuilders::Finish(
     const std::shared_ptr<arrow::Schema>& schema) {
   std::shared_ptr<arrow::Array> a0, a1, a2, a3, a4, a5, a6, a7, a8, a9;
-  (void)context_id->Finish(&a0);
-  (void)workflow_id->Finish(&a1);
-  (void)embedding->Finish(&a2);
-  (void)response->Finish(&a3);
-  (void)model_id->Finish(&a4);
-  (void)input_tokens->Finish(&a5);
-  (void)output_tokens->Finish(&a6);
-  (void)cost_usd->Finish(&a7);
-  (void)created_at->Finish(&a8);
-  (void)reuse_count->Finish(&a9);
+  ARROW_RETURN_NOT_OK(context_id->Finish(&a0));
+  ARROW_RETURN_NOT_OK(workflow_id->Finish(&a1));
+  ARROW_RETURN_NOT_OK(embedding->Finish(&a2));
+  ARROW_RETURN_NOT_OK(response->Finish(&a3));
+  ARROW_RETURN_NOT_OK(model_id->Finish(&a4));
+  ARROW_RETURN_NOT_OK(input_tokens->Finish(&a5));
+  ARROW_RETURN_NOT_OK(output_tokens->Finish(&a6));
+  ARROW_RETURN_NOT_OK(cost_usd->Finish(&a7));
+  ARROW_RETURN_NOT_OK(created_at->Finish(&a8));
+  ARROW_RETURN_NOT_OK(reuse_count->Finish(&a9));
   auto rows = length;
   length = 0;
   return arrow::RecordBatch::Make(schema, rows,
@@ -167,6 +168,12 @@ arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromRecordBatch(
     const std::shared_ptr<arrow::RecordBatch>& batch) {
   if (!batch) {
     return arrow::Status::Invalid("batch is null");
+  }
+  auto expected_schema = MakeSchema(1);  // dim doesn't matter for field count
+  if (batch->num_columns() != expected_schema->num_fields()) {
+    return arrow::Status::Invalid(
+        "expected " + std::to_string(expected_schema->num_fields())
+        + " columns, got " + std::to_string(batch->num_columns()));
   }
   auto embedding_field = batch->schema()->field(kEmbeddingCol);
   auto fsl_type = std::dynamic_pointer_cast<arrow::FixedSizeListType>(
@@ -218,7 +225,10 @@ Status ContextTable::Put(const std::string& context_id,
   }
 
   // Append to builders — O(1)
-  builders_->Append(context_id, embedding, dim, metadata);
+  auto append_status = builders_->Append(context_id, embedding, dim, metadata);
+  if (!append_status.ok()) {
+    return {Code::ExecutionError, "Builder append failed: " + append_status.ToString()};
+  }
   auto new_idx = batch_->num_rows() + builder_count_;
   index_[context_id] = new_idx;
   ++builder_count_;
@@ -232,7 +242,8 @@ std::optional<std::shared_ptr<arrow::RecordBatch>> ContextTable::Get(
   if (it == index_.end()) {
     return std::nullopt;
   }
-  MaterializeIfDirty();
+  auto s = MaterializeIfDirty();
+  if (!s.is_ok()) return std::nullopt;
   return batch_->Slice(it->second, 1);
 }
 
@@ -243,7 +254,7 @@ Status ContextTable::GetRow(const std::string& context_id,
     *out = nullptr;
     return Status::OK();
   }
-  MaterializeIfDirty();
+  { auto s = MaterializeIfDirty(); if (!s.is_ok()) return s; }
   *out = batch_->Slice(it->second, 1);
   return Status::OK();
 }
@@ -264,7 +275,8 @@ Status ContextTable::Remove(const std::string& context_id) {
 
 std::shared_ptr<arrow::RecordBatch> ContextTable::GetWorkflow(
     const std::string& workflow_id) {
-  MaterializeIfDirty();
+  auto s = MaterializeIfDirty();
+  if (!s.is_ok()) return nullptr;
 
   auto wf_array = std::static_pointer_cast<arrow::StringArray>(
       batch_->column(kWorkflowIdCol));
@@ -306,9 +318,10 @@ std::vector<simd::SearchResult> ContextTable::Search(
     const float* query, int dim,
     float threshold, int top_k,
     const std::string& workflow_id) {
-  MaterializeIfDirty();
+  auto s = MaterializeIfDirty();
+  if (!s.is_ok()) return {};
 
-  if (!batch_ || batch_->num_rows() == 0 || dim != embedding_dim_) {
+  if (!batch_ || batch_->num_rows() == 0 || dim != embedding_dim_ || top_k <= 0) {
     return {};
   }
 
@@ -375,7 +388,8 @@ int64_t ContextTable::TotalRows() const {
 }
 
 std::shared_ptr<arrow::RecordBatch> ContextTable::Batch() {
-  MaterializeIfDirty();
+  auto s = MaterializeIfDirty();
+  if (!s.is_ok()) return nullptr;
   return batch_;
 }
 
@@ -387,12 +401,17 @@ std::shared_ptr<arrow::Schema> ContextTable::GetSchema() const {
 // Materialize — flush builders into batch
 // ---------------------------------------------------------------------------
 
-void ContextTable::MaterializeIfDirty() {
+Status ContextTable::MaterializeIfDirty() {
   if (!dirty_ || builder_count_ == 0) {
-    return;
+    return Status::OK();
   }
 
-  auto new_batch = builders_->Finish(schema_);
+  auto finish_result = builders_->Finish(schema_);
+  if (!finish_result.ok()) {
+    return {Code::ExecutionError, "Builder finish failed: " + finish_result.status().ToString()};
+  }
+  auto new_batch = std::move(*finish_result);
+
   if (batch_->num_rows() == 0) {
     batch_ = std::move(new_batch);
   } else {
@@ -400,6 +419,9 @@ void ContextTable::MaterializeIfDirty() {
     for (int c = 0; c < schema_->num_fields(); ++c) {
       auto concat_result = arrow::Concatenate(
           {batch_->column(c), new_batch->column(c)});
+      if (!concat_result.ok()) {
+        return {Code::ExecutionError, "Concatenate failed: " + concat_result.status().ToString()};
+      }
       merged.push_back(std::move(*concat_result));
     }
     batch_ = arrow::RecordBatch::Make(
@@ -409,6 +431,7 @@ void ContextTable::MaterializeIfDirty() {
   builders_ = ContextBuilders::Create(embedding_dim_);
   builder_count_ = 0;
   dirty_ = false;
+  return Status::OK();
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +439,7 @@ void ContextTable::MaterializeIfDirty() {
 // ---------------------------------------------------------------------------
 
 Status ContextTable::Compact() {
-  MaterializeIfDirty();
+  { auto s = MaterializeIfDirty(); if (!s.is_ok()) return s; }
 
   if (!batch_ || batch_->num_rows() == 0 || deleted_.empty()) {
     return Status::OK();
@@ -469,7 +492,7 @@ void ContextTable::RebuildIndex() {
 // ---------------------------------------------------------------------------
 
 Status ContextTable::ToIpc(std::vector<uint8_t>* data) {
-  MaterializeIfDirty();
+  { auto s = MaterializeIfDirty(); if (!s.is_ok()) return s; }
 
   // Filter tombstoned rows
   std::shared_ptr<arrow::RecordBatch> batch_to_write;
@@ -521,7 +544,11 @@ Status ContextTable::ToIpc(std::vector<uint8_t>* data) {
 
 arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromIpc(
     const uint8_t* data, int64_t size) {
-  auto buffer = std::make_shared<arrow::Buffer>(data, size);
+  // Copy the data so the ContextTable owns the buffer — the caller's
+  // memory (Python bytes, Redis response) may be freed before us.
+  ARROW_ASSIGN_OR_RAISE(auto owned_buffer, arrow::AllocateBuffer(size));
+  std::memcpy(owned_buffer->mutable_data(), data, size);
+  auto buffer = std::shared_ptr<arrow::Buffer>(std::move(owned_buffer));
   auto input = std::make_shared<arrow::io::BufferReader>(buffer);
 
   auto reader_result = arrow::ipc::RecordBatchStreamReader::Open(input);
@@ -547,7 +574,7 @@ Status ContextTable::Broadcast(const std::shared_ptr<CylonContext>& ctx,
   }
   auto comm = ctx->GetCommunicator();
 
-  MaterializeIfDirty();
+  { auto s = MaterializeIfDirty(); if (!s.is_ok()) return s; }
   auto status = Compact();
   if (!status.is_ok()) {
     return status;
@@ -590,7 +617,7 @@ Status ContextTable::AllGather(const std::shared_ptr<CylonContext>& ctx) {
   }
   auto comm = ctx->GetCommunicator();
 
-  MaterializeIfDirty();
+  { auto s = MaterializeIfDirty(); if (!s.is_ok()) return s; }
   auto status = Compact();
   if (!status.is_ok()) {
     return status;

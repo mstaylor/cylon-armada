@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 cylon-armada = { path = "../cylon-armada" }
-cylon = { path = "/home/parallels/cylon/rust", default-features = false }
+cylon = { path = "../../../cylon/rust", default-features = false }
 
 arrow = { version = "57.1.0", default-features = false, features = ["ipc"] }
 arrow-array = { version = "57.1.0", default-features = false }

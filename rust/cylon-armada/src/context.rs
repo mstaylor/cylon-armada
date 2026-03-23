@@ -198,6 +198,14 @@ impl ContextTable {
 
     /// Reconstruct from a RecordBatch.
     pub fn from_record_batch(batch: RecordBatch) -> CylonResult<Self> {
+        let expected_fields = make_schema(1).fields().len();
+        if batch.num_columns() != expected_fields {
+            return Err(CylonError::Invalid(format!(
+                "expected {} columns, got {}",
+                expected_fields,
+                batch.num_columns()
+            )));
+        }
         let dim = match batch.schema().field(EMBEDDING_COL).data_type() {
             DataType::FixedSizeList(inner, size) => {
                 if inner.data_type() != &DataType::Float32 {
@@ -264,7 +272,9 @@ impl ContextTable {
         if !self.index.contains_key(context_id) {
             return None;
         }
-        self.materialize_if_dirty();
+        if self.materialize_if_dirty().is_err() {
+            return None;
+        }
         self.index
             .get(context_id)
             .map(|&idx| self.batch.slice(idx, 1))
@@ -292,7 +302,9 @@ impl ContextTable {
         top_k: usize,
         workflow_id: Option<&str>,
     ) -> Vec<SearchResult> {
-        self.materialize_if_dirty();
+        if self.materialize_if_dirty().is_err() {
+            return vec![];
+        }
 
         if self.batch.num_rows() == 0 || query.len() != self.embedding_dim {
             return vec![];
@@ -352,7 +364,7 @@ impl ContextTable {
 
     /// Retrieve all rows for a given workflow_id.
     pub fn get_workflow(&mut self, workflow_id: &str) -> CylonResult<RecordBatch> {
-        self.materialize_if_dirty();
+        self.materialize_if_dirty()?;
 
         let wf_col = self
             .batch
@@ -391,7 +403,7 @@ impl ContextTable {
 
     /// The underlying RecordBatch (materializes if dirty).
     pub fn batch(&mut self) -> &RecordBatch {
-        self.materialize_if_dirty();
+        let _ = self.materialize_if_dirty();
         &self.batch
     }
 
@@ -401,7 +413,7 @@ impl ContextTable {
 
     /// Remove tombstoned rows and rebuild.
     pub fn compact(&mut self) -> CylonResult<()> {
-        self.materialize_if_dirty();
+        self.materialize_if_dirty()?;
 
         if self.deleted.is_empty() {
             return Ok(());
@@ -421,7 +433,7 @@ impl ContextTable {
 
     /// Serialize to Arrow IPC. Filters tombstoned rows.
     pub fn to_ipc(&mut self) -> CylonResult<Vec<u8>> {
-        self.materialize_if_dirty();
+        self.materialize_if_dirty()?;
 
         let batch_to_write = if self.deleted.is_empty() {
             self.batch.clone()
@@ -471,7 +483,7 @@ impl ContextTable {
             None => return Ok(()),
         };
 
-        self.materialize_if_dirty();
+        self.materialize_if_dirty()?;
         self.compact()?;
 
         let cylon_table =
@@ -495,7 +507,7 @@ impl ContextTable {
             None => return Ok(()),
         };
 
-        self.materialize_if_dirty();
+        self.materialize_if_dirty()?;
         self.compact()?;
 
         let cylon_table =
@@ -528,12 +540,12 @@ impl ContextTable {
     // --- Internal ---
 
     /// Flush builders into the main batch. Called before any read.
-    fn materialize_if_dirty(&mut self) {
+    fn materialize_if_dirty(&mut self) -> CylonResult<()> {
         if !self.dirty || self.builder_count == 0 {
-            return;
+            return Ok(());
         }
 
-        let new_batch = self.builders.finish(&self.schema).unwrap();
+        let new_batch = self.builders.finish(&self.schema)?;
         if self.batch.num_rows() == 0 {
             self.batch = new_batch;
         } else {
@@ -541,12 +553,13 @@ impl ContextTable {
                 &self.schema,
                 &[self.batch.clone(), new_batch],
             )
-            .unwrap();
+            .map_err(CylonError::Arrow)?;
         }
 
         self.builders = Builders::new(self.embedding_dim);
         self.builder_count = 0;
         self.dirty = false;
+        Ok(())
     }
 
     fn rebuild_index(&mut self) {

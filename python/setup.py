@@ -16,6 +16,11 @@ if not CYLON_PREFIX:
     print("CYLON_PREFIX must be set", file=sys.stderr)
     sys.exit(1)
 
+if not os.path.isdir(os.path.join(CYLON_HOME, "python", "pycylon")):
+    print(f"CYLON_HOME={CYLON_HOME} does not contain python/pycylon. "
+          "Set CYLON_HOME to the cylon source root.", file=sys.stderr)
+    sys.exit(1)
+
 pyarrow_location = os.path.dirname(pa.__file__)
 pyarrow_include = os.path.join(pyarrow_location, "include")
 arrow_include = os.path.join(ARROW_PREFIX, "include") if ARROW_PREFIX else pyarrow_include

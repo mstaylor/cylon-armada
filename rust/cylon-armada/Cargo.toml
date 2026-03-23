@@ -7,7 +7,8 @@ license = "Apache-2.0"
 
 [dependencies]
 # Core Cylon for SIMD primitives, CylonContext, Table, error types
-cylon = { path = "/home/parallels/cylon/rust", default-features = false }
+# For local dev, set CYLON_RUST_PATH env or use: cargo build --config 'patch.crates-io.cylon.path="../../cylon/rust"'
+cylon = { path = "../../../cylon/rust", default-features = false }
 
 # Arrow (matching cylon's version)
 arrow = { version = "57.1.0", default-features = false, features = ["ipc"] }

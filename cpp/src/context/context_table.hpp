@@ -59,11 +59,11 @@ struct ContextBuilders {
 
   static std::unique_ptr<ContextBuilders> Create(int embedding_dim);
 
-  void Append(const std::string& context_id,
-              const float* embedding, int dim,
-              const ContextMetadata& metadata);
+  arrow::Status Append(const std::string& context_id,
+                       const float* embedding, int dim,
+                       const ContextMetadata& metadata);
 
-  std::shared_ptr<arrow::RecordBatch> Finish(
+  arrow::Result<std::shared_ptr<arrow::RecordBatch>> Finish(
       const std::shared_ptr<arrow::Schema>& schema);
 
   int64_t length = 0;
@@ -133,7 +133,7 @@ class ContextTable {
   void RebuildIndex();
 
   /// Flush builders into the main batch if dirty.
-  void MaterializeIfDirty();
+  Status MaterializeIfDirty();
 
   std::shared_ptr<arrow::RecordBatch> batch_;
   std::unique_ptr<ContextBuilders> builders_;
