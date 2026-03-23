@@ -118,6 +118,7 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     cd /cylon-armada/python && \
     CYLON_PREFIX=$CYLON_PREFIX \
     CYLON_ARMADA_PREFIX=$CYLON_ARMADA_PREFIX \
+    CYLON_HOME=$CYLON_HOME \
     CYLON_REDIS=1 \
     CYLON_FMI=1 \
     python setup.py build_ext --inplace
