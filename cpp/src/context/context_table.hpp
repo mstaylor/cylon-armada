@@ -24,6 +24,7 @@
 #include <vector>
 
 #include <arrow/api.h>
+#include <arrow/builder.h>
 #include <arrow/ipc/api.h>
 
 #include <cylon/simd/simd_ops.hpp>
@@ -43,114 +44,104 @@ struct ContextMetadata {
   double cost_usd = 0.0;
 };
 
+/// Arrow builders for all columns. Supports O(1) append.
+struct ContextBuilders {
+  std::unique_ptr<arrow::StringBuilder> context_id;
+  std::unique_ptr<arrow::StringBuilder> workflow_id;
+  std::unique_ptr<arrow::FixedSizeListBuilder> embedding;
+  std::unique_ptr<arrow::LargeStringBuilder> response;
+  std::unique_ptr<arrow::StringBuilder> model_id;
+  std::unique_ptr<arrow::Int64Builder> input_tokens;
+  std::unique_ptr<arrow::Int64Builder> output_tokens;
+  std::unique_ptr<arrow::DoubleBuilder> cost_usd;
+  std::unique_ptr<arrow::TimestampBuilder> created_at;
+  std::unique_ptr<arrow::Int64Builder> reuse_count;
+
+  static std::unique_ptr<ContextBuilders> Create(int embedding_dim);
+
+  void Append(const std::string& context_id,
+              const float* embedding, int dim,
+              const ContextMetadata& metadata);
+
+  std::shared_ptr<arrow::RecordBatch> Finish(
+      const std::shared_ptr<arrow::Schema>& schema);
+
+  int64_t length = 0;
+};
+
 /// Arrow-native key-value store optimized for embedding storage and
-/// SIMD similarity search. Backed by an Arrow RecordBatch with a
-/// FixedSizeList<Float32> embedding column and a hash index on context_id.
+/// SIMD similarity search.
 ///
-/// Put/Get/Remove are O(1) via hash index. Deleted rows are tracked in a
-/// tombstone set and skipped during search. Call Compact() to reclaim space.
+/// Uses Arrow builders for O(1) inserts. Data is materialized into a
+/// RecordBatch lazily before reads (search, get, serialize). Deleted rows
+/// are tracked in a tombstone set. Call Compact() to reclaim space.
 class ContextTable {
  public:
-  /// Create an empty ContextTable with the given embedding dimension.
-  /// @param embedding_dim The fixed size of each embedding vector (required).
   static arrow::Result<std::shared_ptr<ContextTable>> Create(int embedding_dim);
 
-  /// Status-based factory (for Cython bindings).
   static Status MakeEmpty(int embedding_dim, std::shared_ptr<ContextTable>* out);
 
-  /// Reconstruct a ContextTable from a RecordBatch (e.g., after IPC
-  /// deserialization). Infers embedding_dim from the FixedSizeList column.
   static arrow::Result<std::shared_ptr<ContextTable>> FromRecordBatch(
       const std::shared_ptr<arrow::RecordBatch>& batch);
 
-  /// Status-based factory from IPC (for Cython bindings).
   static Status MakeFromIpc(const uint8_t* data, int64_t size,
                             std::shared_ptr<ContextTable>* out);
 
-  /// Insert or update a context entry. O(1) amortized.
+  /// Insert or update a context entry. O(1).
   Status Put(const std::string& context_id,
              const float* embedding, int dim,
              const ContextMetadata& metadata);
 
-  /// Retrieve a single row by context_id. O(1). Returns nullopt if not found.
+  /// Retrieve a single row by context_id. O(1).
   std::optional<std::shared_ptr<arrow::RecordBatch>> Get(
       const std::string& context_id);
 
   /// Status-based Get for Cython bindings. O(1).
-  /// Sets *out to the row batch, or nullptr if not found.
   Status GetRow(const std::string& context_id,
                 std::shared_ptr<arrow::RecordBatch>* out);
 
-  /// Mark a row as deleted. O(1). Call Compact() to reclaim space.
+  /// Mark a row as deleted. O(1).
   Status Remove(const std::string& context_id);
 
-  /// Retrieve all rows for a given workflow_id.
   std::shared_ptr<arrow::RecordBatch> GetWorkflow(
       const std::string& workflow_id);
 
-  /// SIMD cosine similarity search across all (or workflow-filtered) embeddings.
-  /// Returns up to @p top_k results with similarity >= @p threshold,
-  /// sorted by descending similarity. Skips tombstoned rows.
   std::vector<simd::SearchResult> Search(
       const float* query, int dim,
       float threshold, int top_k = 5,
       const std::string& workflow_id = "");
 
-  /// Number of active (non-deleted) rows.
   int64_t Size() const;
-
-  /// Total rows including deleted (tombstoned).
   int64_t TotalRows() const;
-
-  /// The underlying RecordBatch (includes tombstoned rows).
-  std::shared_ptr<arrow::RecordBatch> Batch() const;
-
-  /// The Arrow schema.
+  std::shared_ptr<arrow::RecordBatch> Batch();
   std::shared_ptr<arrow::Schema> GetSchema() const;
-
-  /// Embedding dimension.
   int EmbeddingDim() const { return embedding_dim_; }
 
-  /// Rebuild the RecordBatch, removing tombstoned rows and compacting memory.
   Status Compact();
+  Status ToIpc(std::vector<uint8_t>* data);
 
-  /// Serialize to Arrow IPC stream format.
-  Status ToIpc(std::vector<uint8_t>* data) const;
-
-  /// Deserialize from Arrow IPC stream format.
   static arrow::Result<std::shared_ptr<ContextTable>> FromIpc(
       const uint8_t* data, int64_t size);
 
-  /// Broadcast this ContextTable from root rank to all workers.
-  /// On non-root ranks, replaces the current contents with the broadcast data.
-  /// Compacts before broadcasting to avoid sending tombstoned rows.
-  /// @param ctx CylonContext with distributed communicator.
-  /// @param root Rank of the broadcasting process.
   Status Broadcast(const std::shared_ptr<CylonContext>& ctx, int root = 0);
-
-  /// AllGather: each worker contributes its ContextTable, and all workers
-  /// receive the merged result. Compacts before gathering.
-  /// @param ctx CylonContext with distributed communicator.
   Status AllGather(const std::shared_ptr<CylonContext>& ctx);
 
  private:
   ContextTable() = default;
 
-  /// Build the schema for the given embedding dimension.
   static std::shared_ptr<arrow::Schema> MakeSchema(int embedding_dim);
-
-  /// Rebuild the hash index from the current batch (used after Compact/FromIpc).
   void RebuildIndex();
 
-  /// Append a single row to the batch. Returns the new row index.
-  arrow::Result<int64_t> AppendRow(
-      const std::string& context_id,
-      const float* embedding, int dim,
-      const ContextMetadata& metadata);
+  /// Flush builders into the main batch if dirty.
+  void MaterializeIfDirty();
 
   std::shared_ptr<arrow::RecordBatch> batch_;
-  std::unordered_map<std::string, int64_t> index_;    // context_id → row
-  std::unordered_set<int64_t> deleted_;                // tombstoned row indices
+  std::unique_ptr<ContextBuilders> builders_;
+  bool dirty_ = false;
+  int64_t builder_count_ = 0;
+  std::shared_ptr<arrow::Schema> schema_;
+  std::unordered_map<std::string, int64_t> index_;
+  std::unordered_set<int64_t> deleted_;
   int embedding_dim_ = 0;
 };
 

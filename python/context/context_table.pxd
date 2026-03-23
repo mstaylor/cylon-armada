@@ -61,7 +61,7 @@ cdef extern from "cylon_armada/context/context_table.hpp" namespace "cylon::cont
         CStatus Remove(const string& context_id)
         CStatus Compact()
 
-        shared_ptr[CRecordBatch] Batch() const
+        shared_ptr[CRecordBatch] Batch()
         shared_ptr[CSchema] GetSchema() const
 
         vector[CSearchResult] Search(
@@ -71,7 +71,7 @@ cdef extern from "cylon_armada/context/context_table.hpp" namespace "cylon::cont
 
         shared_ptr[CRecordBatch] GetWorkflow(const string& workflow_id)
 
-        CStatus ToIpc(vector[uint8_t]* data) const
+        CStatus ToIpc(vector[uint8_t]* data)
 
         CStatus Broadcast(const shared_ptr[CCylonContext]& ctx, int root)
         CStatus AllGather(const shared_ptr[CCylonContext]& ctx)

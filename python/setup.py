@@ -9,6 +9,7 @@ from setuptools import Extension, setup
 
 CYLON_PREFIX = os.environ.get('CYLON_PREFIX')
 CYLON_ARMADA_PREFIX = os.environ.get('CYLON_ARMADA_PREFIX', CYLON_PREFIX)
+CYLON_HOME = os.environ.get('CYLON_HOME', '/cylon')
 ARROW_PREFIX = os.environ.get('ARROW_PREFIX', os.environ.get('CONDA_PREFIX'))
 
 if not CYLON_PREFIX:
@@ -26,6 +27,15 @@ include_dirs = [
     pyarrow_include,
     np.get_include(),
 ]
+
+# The pycylon .pxd files generate #include "../../../../cpp/src/cylon/..." in C++.
+# These relative paths resolve from pycylon's source subdirectories (e.g. pycylon/common/).
+# Add those directories so the C compiler can find the headers via -I.
+_pycylon_src = os.path.join(CYLON_HOME, "python", "pycylon", "pycylon")
+for subdir in ["common", "ctx", "api", "data", "net", "context", "checkpoint"]:
+    p = os.path.join(_pycylon_src, subdir)
+    if os.path.isdir(p):
+        include_dirs.append(p)
 
 library_dirs = [
     os.path.join(CYLON_PREFIX, "lib"),
@@ -51,6 +61,12 @@ except Exception:
 
 extra_compile_args = ['-std=c++17', '-DOMPI_SKIP_MPICXX=1']
 
+macros = []
+if os.environ.get('CYLON_REDIS'):
+    macros.append(('BUILD_CYLON_REDIS', '1'))
+if os.environ.get('CYLON_FMI'):
+    macros.append(('BUILD_CYLON_FMI', '1'))
+
 extensions = [
     Extension(
         "context.context_table",
@@ -60,6 +76,7 @@ extensions = [
         extra_compile_args=extra_compile_args,
         libraries=libraries,
         library_dirs=library_dirs,
+        define_macros=macros,
     )
 ]
 

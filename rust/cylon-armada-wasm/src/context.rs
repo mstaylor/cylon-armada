@@ -48,7 +48,7 @@ impl WasmContextTable {
             .map_err(|e| JsValue::from_str(&format!("{}", e)))
     }
 
-    pub fn get(&self, context_id: &str) -> Result<JsValue, JsValue> {
+    pub fn get(&mut self, context_id: &str) -> Result<JsValue, JsValue> {
         match self.inner.get(context_id) {
             Some(batch) => {
                 let id_col = batch.column(0).as_any()
@@ -90,7 +90,7 @@ impl WasmContextTable {
     }
 
     pub fn search(
-        &self,
+        &mut self,
         query: &[f32],
         threshold: f32,
         top_k: usize,
@@ -105,7 +105,7 @@ impl WasmContextTable {
     }
 
     pub fn search_workflow(
-        &self,
+        &mut self,
         query: &[f32],
         workflow_id: &str,
         threshold: f32,
@@ -120,7 +120,7 @@ impl WasmContextTable {
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
-    pub fn to_ipc(&self) -> Result<Vec<u8>, JsValue> {
+    pub fn to_ipc(&mut self) -> Result<Vec<u8>, JsValue> {
         self.inner
             .to_ipc()
             .map_err(|e| JsValue::from_str(&format!("{}", e)))

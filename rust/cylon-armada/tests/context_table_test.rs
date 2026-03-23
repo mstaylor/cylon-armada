@@ -332,7 +332,7 @@ fn test_ipc_round_trip() {
     let data = table.to_ipc().unwrap();
     assert!(!data.is_empty());
 
-    let restored = ContextTable::from_ipc(&data).unwrap();
+    let mut restored = ContextTable::from_ipc(&data).unwrap();
     assert_eq!(restored.len(), 3);
     assert_eq!(restored.embedding_dim(), 8);
     for i in 0..3 {
