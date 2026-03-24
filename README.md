@@ -254,11 +254,11 @@ At a 75% reuse rate, this reduces per-task cost from $0.00202 to $0.00052 — a 
 
 | Scenario | Tasks | Expected Reuse | Domain |
 |----------|-------|---------------|--------|
-| Code Review (high similarity) | 32 | 60-70% | Software Engineering |
-| Documentation (moderate similarity) | 32 | 40-50% | Software Engineering |
-| Bug Analysis (low similarity) | 32 | 20-30% | Software Engineering |
-| Mixed Workload (realistic) | 48 | 40-55% | Software Engineering |
-| Astronomical Inference (cosmic-ai) | Dynamic | 50-65% | Science (SDSS/AstroMAE) |
+| Astronomical Inference (cosmic-ai) | Dynamic | 50-65% | Astronomy (SDSS/AstroMAE) |
+| Hydrological Analysis | 32 | 50-60% | Hydrology (watershed, flood risk) |
+| Epidemiological Modeling | 32 | 45-55% | Epidemiology (disease spread) |
+| Seismological Hazard Assessment | 32 | 45-55% | Seismology (earthquake risk) |
+| Mixed Scientific + Benchmarks | 48 | 40-55% | Cross-domain + system performance |
 
 ## Roadmap
 

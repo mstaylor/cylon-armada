@@ -10,21 +10,28 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
-# Copy cylon-wasm WASM module (pre-built, SIMD + core operations)
-# Build context must include the cylon-wasm pkg directory
+# Copy WASM modules (pre-built)
+#
+# Before running docker build, copy the pre-built packages into the
+# cylon-armada repo so everything is under one build context:
+#
+#   # Build WASM packages
+#   cd /path/to/cylon/rust/cylon-wasm && wasm-pack build --target nodejs --release
+#   cd /path/to/cylon-armada/rust/cylon-armada-wasm && wasm-pack build --target nodejs --release
+#
+#   # Copy cylon-wasm pkg into cylon-armada for docker build
+#   cp -r /path/to/cylon/rust/cylon-wasm/pkg /path/to/cylon-armada/docker/wasm/cylon-wasm
+#   cp -r /path/to/cylon-armada/rust/cylon-armada-wasm/pkg /path/to/cylon-armada/docker/wasm/cylon-armada-wasm
+#
+#   # Build
+#   cd /path/to/cylon-armada && docker build -f docker/Dockerfile.nodejs -t cylon-armada-nodejs .
 # ---------------------------------------------------------------------------
 
-COPY cylon/rust/cylon-wasm/pkg/ /app/cylon-wasm/
+COPY docker/wasm/cylon-wasm/ /app/cylon-wasm/
+COPY docker/wasm/cylon-armada-wasm/ /app/cylon-armada-wasm/
 
 ENV CYLON_WASM_PATH=/app/cylon-wasm/cylon_wasm_bg.wasm
 ENV CYLON_WASM_BINDINGS=/app/cylon-wasm/cylon_wasm.js
-
-# ---------------------------------------------------------------------------
-# Copy cylon-armada-wasm WASM module (pre-built, ContextTable)
-# ---------------------------------------------------------------------------
-
-COPY rust/cylon-armada-wasm/pkg/ /app/cylon-armada-wasm/
-
 ENV CYLON_ARMADA_WASM_PATH=/app/cylon-armada-wasm/cylon_armada_wasm_bg.wasm
 ENV CYLON_ARMADA_WASM_BINDINGS=/app/cylon-armada-wasm/cylon_armada_wasm.js
 

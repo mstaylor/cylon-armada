@@ -1493,78 +1493,14 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 
 ## Test Scenarios
 
-### Scenario 1: Code Review Tasks (High Similarity)
+### Scenario 1: Astronomical Inference Analysis (cosmic-ai)
 
-**Purpose:** Validate context reuse with tasks that are semantically similar — many code review requests share common patterns (style, security, performance).
-
-**Tasks:** 32 code review requests across 4 categories (8 per category):
-- Style/formatting reviews (high mutual similarity)
-- Security vulnerability checks (high mutual similarity)
-- Performance optimization suggestions (moderate similarity)
-- Architecture review comments (low mutual similarity)
-
-**Expected reuse rate:** 60-70% — style and security tasks should cluster tightly; architecture reviews are more unique.
-
-**Key question:** Does the router correctly reuse style/security reviews while generating fresh responses for architecture tasks?
-
----
-
-### Scenario 2: Documentation Generation (Moderate Similarity)
-
-**Purpose:** Test context reuse with tasks that share structural similarity but differ in content — generating docstrings, README sections, API docs for different modules.
-
-**Tasks:** 32 documentation generation requests:
-- 8 function docstring requests (high similarity in structure)
-- 8 README section drafts (moderate similarity)
-- 8 API endpoint descriptions (moderate similarity)
-- 8 changelog entries (low similarity — each is unique)
-
-**Expected reuse rate:** 40-50% — structural templates reuse well, but content specifics limit reuse.
-
-**Key question:** At what threshold does reusing a docstring template degrade quality vs. a fresh generation?
-
----
-
-### Scenario 3: Bug Analysis Tasks (Low Similarity)
-
-**Purpose:** Stress-test the system with tasks that appear similar superficially but require distinct responses — diagnosing different bugs in related code.
-
-**Tasks:** 32 bug analysis requests:
-- 8 null pointer / undefined errors
-- 8 concurrency / race condition bugs
-- 8 memory leak investigations
-- 8 API integration failures
-
-**Expected reuse rate:** 20-30% — bug analysis is context-specific even within categories.
-
-**Key question:** Does the system correctly identify when two bug reports are similar enough to reuse vs. when they need fresh analysis? This scenario tests false positive rate.
-
----
-
-### Scenario 4: Mixed Workload (Realistic)
-
-**Purpose:** Simulate a realistic multi-agent workflow with a mix of task types and similarity levels, matching what a production system would encounter.
-
-**Tasks:** 48 tasks across all categories:
-- 12 code review (from Scenario 1)
-- 12 documentation (from Scenario 2)
-- 12 bug analysis (from Scenario 3)
-- 12 general coding tasks (new — implementation suggestions, refactoring advice)
-
-**Expected reuse rate:** 40-55% — blended across high/moderate/low similarity tasks.
-
-**Key question:** What is the overall cost reduction in a realistic workload? This scenario produces the headline number for the thesis.
-
----
-
-### Scenario 5: Astronomical Inference Analysis (cosmic-ai)
-
-**Purpose:** Demonstrate context reuse on real scientific workloads. Tasks are dynamically generated from AstroMAE inference on SDSS photometric data, validating the architecture's applicability to the scientific domain.
+**Purpose:** Demonstrate context reuse on real astronomical inference workloads. Tasks are dynamically generated from AstroMAE predictions on SDSS photometric data.
 
 **Source:** AI-for-Astronomy / cosmic-ai (arXiv:2501.06249)
 
-**Tasks:** Generated dynamically from real inference results:
-- Per-galaxy redshift analysis (galaxies with similar photometric profiles → high semantic overlap)
+**Tasks:** Generated dynamically from real inference results via configurable templates:
+- Per-galaxy redshift analysis (similar photometric profiles → high semantic overlap)
 - Color-based morphological classification (similar color indices → clustered prompts)
 - Outlier analysis for prediction errors (top 10% residuals)
 - Batch-level performance summaries and cost analysis
@@ -1575,11 +1511,84 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 3. Generate LLM analysis tasks from real observations via configurable templates
 4. Feed tasks through the context reuse pipeline
 
-**Expected reuse rate:** 50-65% — galaxies with similar magnitude profiles produce highly overlapping analysis prompts. Outlier analyses are more unique.
+**Expected reuse rate:** 50-65% — galaxies with similar magnitude profiles produce highly overlapping analysis prompts.
 
-**Key question:** Does context reuse provide the same cost savings on scientific domain tasks as on general-purpose NLP tasks? This validates the architecture is domain-agnostic.
+**Key question:** Does context reuse provide the same cost savings on scientific domain tasks as on general-purpose NLP tasks?
 
-**Configuration:** Templates and survey types are configurable via JSON config file, direct parameter override, or `COSMIC_AI_CONFIG` environment variable.
+**Configuration:** Templates configurable via JSON config file, direct parameter override, or `COSMIC_AI_CONFIG` environment variable.
+
+---
+
+### Scenario 2: Hydrological Analysis (High Similarity)
+
+**Purpose:** Validate context reuse with watershed assessment and flood risk tasks. Similar catchment parameters and hydrological regimes produce semantically overlapping prompts.
+
+**Source:** Biocomplexity Institute — hydrology research domain
+
+**Tasks:** 32 hydrological analysis tasks across 4 categories (8 per category):
+- Watershed flood risk assessment (similar drainage area, precipitation, soil type)
+- Climate change impact modeling (similar temperature/precipitation scenarios)
+- Water quality and nutrient loading (similar agricultural parameters)
+- Groundwater and sediment dynamics (moderate similarity)
+
+**Expected reuse rate:** 50-60% — catchments with similar parameters produce highly reusable flood risk and water balance analyses.
+
+**Key question:** How precisely can embeddings distinguish between watersheds with different parameters but similar analytical frameworks?
+
+---
+
+### Scenario 3: Epidemiological Modeling (Moderate Similarity)
+
+**Purpose:** Test context reuse with disease spread modeling where similar transmission parameters and population structures produce partially reusable analyses.
+
+**Source:** Biocomplexity Institute — computational epidemiology research domain
+
+**Tasks:** 32 epidemiological analysis tasks across 4 categories:
+- Disease spread modeling (similar R0, serial interval, population size)
+- Intervention evaluation (vaccination, school closures, contact tracing)
+- Surveillance and forecasting (detection systems, resistance emergence)
+- Population health and severity (age structure, behavioral dynamics)
+
+**Expected reuse rate:** 45-55% — epidemic models with similar parameters cluster well, but intervention-specific details limit reuse.
+
+**Key question:** Does the system correctly reuse base epidemic models while generating fresh analyses for different intervention strategies?
+
+---
+
+### Scenario 4: Seismological Hazard Assessment (Moderate Similarity)
+
+**Purpose:** Validate context reuse with earthquake hazard and risk analysis tasks where similar magnitude, depth, and tectonic settings produce reusable hazard evaluations.
+
+**Source:** Biocomplexity Institute — earthquake prediction research domain
+
+**Tasks:** 32 seismological analysis tasks across 4 categories:
+- Probabilistic seismic hazard assessment (similar fault parameters, distance, site conditions)
+- Ground motion prediction and aftershock modeling (similar magnitude/distance scenarios)
+- Structural vulnerability and lifeline analysis (similar building types, infrastructure)
+- Induced seismicity and catalog analysis (moderate similarity)
+
+**Expected reuse rate:** 45-55% — sites with similar distance-to-fault, VS30, and design earthquake produce highly overlapping hazard assessments.
+
+**Key question:** How does the similarity engine handle the trade-off between reusing a hazard assessment for a "similar enough" site versus generating a fresh site-specific analysis?
+
+---
+
+### Scenario 5: Mixed Scientific Workload + Benchmarks
+
+**Purpose:** Simulate a realistic multi-domain research workflow with tasks spanning all scientific domains plus system performance benchmarks. Tests cross-domain context isolation and overall cost reduction.
+
+**Source:** Biocomplexity Institute — cross-domain research workload
+
+**Tasks:** 48 tasks across all domains:
+- 6 astronomy (cosmic-ai redshift, galaxy classification, model performance)
+- 6 hydrology (watershed analysis, climate impact, water quality)
+- 6 epidemiology (disease spread, interventions, surveillance)
+- 6 seismology (hazard assessment, ground motion, vulnerability)
+- 24 system benchmarks (SIMD throughput, path comparison, cost analysis, scalability, FMI overhead, Arrow IPC performance)
+
+**Expected reuse rate:** 40-55% — within-domain tasks reuse well; cross-domain reuse should be near zero (validating domain isolation). Benchmark tasks test system performance rather than LLM content.
+
+**Key question:** What is the overall cost reduction in a realistic multi-domain scientific workflow? Does cross-domain contamination occur (e.g., an epidemiology response reused for seismology)?
 
 ---
 
@@ -1616,15 +1625,17 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 
 ### Deliverable Checklist
 
-- [ ] Working context store (DynamoDB + Redis) with store/retrieve/search operations
-- [ ] Context Router with configurable threshold making correct reuse/new-call decisions
-- [ ] LangChain Executor invoking Claude via Bedrock and returning structured responses
-- [ ] Cython batch similarity search (Path A2) compiled and functional
-- [ ] All 3 execution paths (A1, A2, B) running on Lambda
-- [ ] Cylon Communicator coordinating parallel Lambda workers
-- [ ] BedrockCostTracker capturing real USD costs with pricing resolution
-- [ ] 5 test scenarios with 32-48 tasks each (4 general-purpose + 1 cosmic-ai from real data)
-- [ ] Parameter sweep (54 configurations per scenario) completed
+- [x] Working context store (Cylon ContextTable + DynamoDB + Redis, configuration-driven backend)
+- [x] Context Router with configurable threshold making correct reuse/new-call decisions
+- [x] LangChain Executor invoking Claude via Bedrock and returning structured responses
+- [x] Cython batch similarity search (Path A2) compiled and functional
+- [x] All 3 execution paths (A1, A2, B) — Python S3 script runner + Node.js direct dispatch
+- [x] Cylon FMI Communicator coordinating parallel Lambda workers (context broadcast, cost reduction)
+- [x] BedrockCostTracker capturing real USD costs with pricing resolution (Python + Node.js)
+- [x] Terraform infrastructure (Lambda, Step Functions, DynamoDB, ECR, S3, IAM)
+- [x] cosmic-ai integration (AstroMAE inference, task generation, ONNX export, model parallelism)
+- [x] 5 test scenarios with 32-48 tasks each (4 general-purpose + 1 cosmic-ai from real data)
+- [ ] Deploy to AWS, execute experiments, capture results
 - [ ] Jupyter notebooks with cost curves, latency distributions, path comparisons, quality analysis
 - [ ] Proposal paper draft with experimental methodology, results, and visualizations
 

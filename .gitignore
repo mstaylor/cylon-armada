@@ -41,3 +41,4 @@ credentials.json
 
 # Docker
 docker/*.tar
+docker/wasm/
