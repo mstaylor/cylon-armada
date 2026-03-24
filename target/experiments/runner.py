@@ -78,6 +78,66 @@ def load_tasks(tasks_file: str) -> list[str]:
     )
 
 
+def sample_tasks(
+    tasks: list[str],
+    count: int,
+    strategy: str = "stratified",
+    seed: int = 42,
+) -> list[str]:
+    """Select a subset of tasks using the specified sampling strategy.
+
+    Args:
+        tasks: Full task list.
+        count: Number of tasks to select.
+        strategy: Sampling strategy:
+            - "stratified": Pick evenly across the task list, ensuring
+              coverage of all categories (default).
+            - "sequential": Take the first N tasks (for debugging).
+            - "random": Uniform random sample.
+        seed: Random seed for reproducibility (used by stratified and random).
+
+    Returns:
+        Selected task list of length min(count, len(tasks)).
+    """
+    if count >= len(tasks):
+        return list(tasks)
+
+    if strategy == "sequential":
+        return tasks[:count]
+
+    if strategy == "random":
+        import random
+        rng = random.Random(seed)
+        return rng.sample(tasks, count)
+
+    # Stratified: pick evenly spaced indices across the full list.
+    # For 4 tasks from 32: picks indices 0, 8, 16, 24 — one from each quarter.
+    # This ensures coverage across all categories in structured scenario files.
+    import random
+    rng = random.Random(seed)
+    step = len(tasks) / count
+    indices = [int(i * step) for i in range(count)]
+
+    # Add jitter within each stratum so repeated runs with different seeds
+    # don't always pick the exact same task from each category.
+    stratum_size = max(1, int(step))
+    sampled_indices = []
+    for base_idx in indices:
+        stratum_start = base_idx
+        stratum_end = min(base_idx + stratum_size, len(tasks))
+        sampled_indices.append(rng.randint(stratum_start, stratum_end - 1))
+
+    # Deduplicate while preserving order (rare edge case with small lists)
+    seen = set()
+    unique = []
+    for idx in sampled_indices:
+        if idx not in seen:
+            seen.add(idx)
+            unique.append(idx)
+
+    return [tasks[i] for i in unique]
+
+
 @dataclass
 class ExperimentConfig:
     """Configuration for a single experiment run."""
@@ -87,6 +147,8 @@ class ExperimentConfig:
     embedding_dimensions: int
     backend: str = "NUMPY"
     baseline: bool = False
+    sampling_strategy: str = "stratified"  # "stratified", "sequential", "random"
+    seed: int = 42
     llm_model_id: str = "amazon.nova-lite-v1:0"
     embedding_model_id: str = "amazon.titan-embed-text-v2:0"
     region: str = "us-east-1"
@@ -123,7 +185,12 @@ def run_experiment(
     )
 
     coordinator = AgentCoordinator(config=bedrock_config)
-    task_list = (tasks or DEFAULT_TASKS)[:config.task_count]
+    all_tasks = tasks or DEFAULT_TASKS
+    task_list = sample_tasks(
+        all_tasks, config.task_count,
+        strategy=config.sampling_strategy,
+        seed=config.seed,
+    )
     backend = SIMDBackend[config.backend]
 
     logger.info(
@@ -158,6 +225,8 @@ def run_experiment_matrix(
     output_dir: str = "target/experiments/results",
     include_baseline: bool = True,
     tasks: Optional[list[str]] = None,
+    sampling_strategy: str = "stratified",
+    seed: int = 42,
 ) -> list[ExperimentResult]:
     """Run a matrix of experiments and save results.
 
@@ -169,6 +238,8 @@ def run_experiment_matrix(
         output_dir: Directory for result JSON files
         include_baseline: Whether to include a baseline (no reuse) run per config
         tasks: Custom task list. If None, uses DEFAULT_TASKS.
+        sampling_strategy: How to select tasks: "stratified" (default), "sequential", "random".
+        seed: Random seed for reproducible sampling (default: 42).
 
     Returns:
         List of ExperimentResult objects
@@ -196,6 +267,8 @@ def run_experiment_matrix(
             embedding_dimensions=dim,
             backend=be,
             baseline=False,
+            sampling_strategy=sampling_strategy,
+            seed=seed,
         ))
 
         # Baseline run (no reuse)
@@ -207,6 +280,8 @@ def run_experiment_matrix(
                 embedding_dimensions=dim,
                 backend=be,
                 baseline=True,
+                sampling_strategy=sampling_strategy,
+                seed=seed,
             ))
 
     logger.info("Running %d experiments (run_id=%s)", len(configs), run_id)
@@ -263,6 +338,11 @@ if __name__ == "__main__":
                         help="Skip baseline runs")
     parser.add_argument("--tasks-file", type=str, default=None,
                         help="Path to JSON file with custom tasks (list of strings)")
+    parser.add_argument("--sampling", type=str, default="stratified",
+                        choices=["stratified", "sequential", "random"],
+                        help="Task sampling strategy (default: stratified)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducible sampling (default: 42)")
 
     # cosmic-ai: generate tasks from real astronomical inference
     cosmic = parser.add_argument_group("cosmic-ai", "Generate tasks from SDSS inference")
@@ -313,4 +393,6 @@ if __name__ == "__main__":
         output_dir=args.output,
         include_baseline=not args.no_baseline,
         tasks=custom_tasks,
+        sampling_strategy=args.sampling,
+        seed=args.seed,
     )

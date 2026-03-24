@@ -1599,6 +1599,35 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 3. **Baseline pairing:** Every reuse run has a corresponding baseline run with the same tasks, enabling paired statistical comparison.
 4. **Cross-path consistency:** All three execution paths (A1, A2, B) run the same task sets to ensure fair comparison.
 
+### Task Sampling Strategy
+
+When `--tasks N` is less than the total tasks in a scenario file, the experiment runner selects a subset using a configurable sampling strategy:
+
+| Strategy | Flag | Behavior | Use Case |
+|----------|------|----------|----------|
+| **Stratified** (default) | `--sampling stratified` | Picks evenly across the task list with jitter within each stratum. For 4 tasks from a 32-task file with 4 categories: selects 1 from each category. | Production experiments — ensures coverage of all task categories regardless of subset size. |
+| **Sequential** | `--sampling sequential` | Takes the first N tasks in order. | Debugging and quick validation — predictable, fast. |
+| **Random** | `--sampling random` | Uniform random sample. | Robustness testing — verify results aren't sensitive to task selection. |
+
+All strategies are seeded (`--seed 42` default) for reproducibility. Same seed + same strategy = same tasks every run.
+
+**Why stratified is the default:** Scenario files are structured with intentional category grouping (e.g., hydrology.json has 8 watershed + 8 climate + 8 water quality + 8 groundwater tasks). Sequential sampling with `--tasks 4` would only test watershed tasks, missing the cross-category reuse patterns that the experiment is designed to measure. Stratified sampling guarantees coverage of the full similarity distribution at any subset size.
+
+**Example:**
+```bash
+# 4 tasks from hydrology (one from each of 4 categories)
+python runner.py --tasks-file scenarios/hydrology.json --tasks 4
+
+# Same but sequential (first 4 = all watershed)
+python runner.py --tasks-file scenarios/hydrology.json --tasks 4 --sampling sequential
+
+# Random with different seed
+python runner.py --tasks-file scenarios/hydrology.json --tasks 4 --sampling random --seed 99
+
+# Full scenario (no sampling needed)
+python runner.py --tasks-file scenarios/hydrology.json --tasks 32
+```
+
 ---
 
 ## Success Criteria
