@@ -43,7 +43,7 @@ brew install redis
 redis-server
 
 # DynamoDB Local — run via Docker on the host
-docker run -p 8000:8000 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb
+docker run -p 8100:8100 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb
 ```
 
 ```bash
@@ -54,7 +54,7 @@ ip neighbor show
 # Set environment variables for the VM:
 export REDIS_HOST=10.211.55.2
 export REDIS_PORT=6379
-export DYNAMO_ENDPOINT_URL=http://10.211.55.2:8000
+export DYNAMO_ENDPOINT_URL=http://10.211.55.2:1000
 ```
 
 ```bash
