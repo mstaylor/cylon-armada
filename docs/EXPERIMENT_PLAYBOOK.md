@@ -1,4 +1,4 @@
-# Experiment Playbook
+I # Experiment Playbook
 
 Step-by-step guide for executing Phase 1 experiments.
 
@@ -29,11 +29,36 @@ python -c "import boto3, redis, numpy, langchain_aws; print('Python deps OK')"
 cd target/shared/scripts/simd
 CYLON_PREFIX=$CYLON_PREFIX python setup.py build_ext --inplace
 cd -
+```
 
-# Start local services
-docker compose up -d  # DynamoDB Local + Redis
+### Host Services (Redis + DynamoDB Local)
 
-# Create DynamoDB table locally
+Redis and DynamoDB Local run on the **host OS** (Mac), not inside the Parallels VM.
+The VM connects via the Parallels network IP. See [Cylon ENVIRONMENT_SETUP.md](../../cylon/ENVIRONMENT_SETUP.md) for details.
+
+```bash
+# On the host OS (Mac):
+# Redis — install and run via Homebrew
+brew install redis
+redis-server
+
+# DynamoDB Local — run via Docker on the host
+docker run -p 8000:8000 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb
+```
+
+```bash
+# In the Parallels VM — find the host IP:
+ip neighbor show
+# Look for: 10.211.55.2 dev enp0s5 ... REACHABLE
+
+# Set environment variables for the VM:
+export REDIS_HOST=10.211.55.2
+export REDIS_PORT=6379
+export DYNAMO_ENDPOINT_URL=http://10.211.55.2:8000
+```
+
+```bash
+# Create DynamoDB table (from VM, pointing to host)
 aws dynamodb create-table \
     --table-name cylon-armada-context-store \
     --attribute-definitions \
@@ -46,7 +71,7 @@ aws dynamodb create-table \
     --global-secondary-indexes \
         'IndexName=workflow_id-created_at-index,KeySchema=[{AttributeName=workflow_id,KeyType=HASH},{AttributeName=created_at,KeyType=RANGE}],Projection={ProjectionType=ALL}' \
     --billing-mode PAY_PER_REQUEST \
-    --endpoint-url http://localhost:8000
+    --endpoint-url $DYNAMO_ENDPOINT_URL
 ```
 
 ### 1.2 Run Tests
@@ -60,6 +85,8 @@ cd target/aws/scripts/lambda/node && npm test && cd -
 ```
 
 ### 1.3 Smoke Test
+
+Ensure `REDIS_HOST` and `DYNAMO_ENDPOINT_URL` are set (see above).
 
 ```bash
 # Minimal run: 4 tasks, stratified sampling, single config
