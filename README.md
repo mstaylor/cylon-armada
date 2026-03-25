@@ -106,9 +106,7 @@ cylon-armada/
 │   │   │   └── embedding.py                 # Embedding Service (Bedrock Titan V2)
 │   │   ├── chain/
 │   │   │   └── executor.py                  # LangChain Executor (Bedrock LLM)
-│   │   ├── simd/
-│   │   │   ├── batch_search.pyx             # Cython batch SIMD search (Path A2)
-│   │   │   └── setup.py                     # Build config (requires CYLON_PREFIX)
+│   │   ├── simd/                              # Compiled .so placed here after build
 │   │   ├── coordinator/
 │   │   │   └── agent_coordinator.py         # Step Functions orchestration
 │   │   ├── communicator/
@@ -140,6 +138,10 @@ cylon-armada/
 ├── docker/
 │   ├── Dockerfile.python                    # Path A1/A2 (Cylon + cylon_dev conda env)
 │   └── Dockerfile.nodejs                    # Path B (WASM + ONNX Runtime)
+├── python/
+│   └── simd/
+│       ├── batch_search.pyx                 # Cython source: batch SIMD search (Path A2)
+│       └── setup.py                         # Build config (requires CYLON_PREFIX)
 ├── tests/                                   # Python tests (pytest)
 └── docs/
     └── PHASE1_IMPLEMENTATION_PLAN.md        # Implementation plan
@@ -163,7 +165,7 @@ conda activate cylon_dev
 pip install langchain-aws langchain-core cython
 
 # Build Cython SIMD extension (Path A2)
-cd target/shared/scripts/simd
+cd python/simd
 CYLON_PREFIX=/path/to/cylon/install python setup.py build_ext --inplace
 
 # Run tests

@@ -129,8 +129,9 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
-    cd /cylon-armada/scripts/simd && \
-    CYLON_PREFIX=$CYLON_PREFIX python setup.py build_ext --inplace
+    cd /cylon-armada/python/simd && \
+    CYLON_PREFIX=$CYLON_PREFIX python setup.py build_ext --inplace && \
+    cp *.so /cylon-armada/scripts/simd/ 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Environment and entry point

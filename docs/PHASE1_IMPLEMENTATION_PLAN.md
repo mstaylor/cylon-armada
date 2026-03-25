@@ -456,9 +456,7 @@ cylon-armada/
 │   │   │   └── embedding.py                    ← Embedding Service (Bedrock Titan V2)
 │   │   ├── chain/
 │   │   │   └── executor.py                     ← LangChain Executor (Bedrock LLM chains)
-│   │   ├── simd/
-│   │   │   ├── batch_search.pyx                ← Cython: batch similarity search (Path A2)
-│   │   │   └── setup.py                        ← Cython build configuration (requires CYLON_PREFIX)
+│   │   ├── simd/                                ← compiled .so placed here after build
 │   │   ├── run_action.py                        ← Action dispatcher (downloaded from S3, executed by Lambda)
 │   │   ├── coordinator/
 │   │   │   └── agent_coordinator.py            ← Agent Coordinator (triggered by Step Functions)
@@ -496,6 +494,10 @@ cylon-armada/
 ├── config/
 │   ├── dynamo_tables.json                      ← DynamoDB table definitions
 │   └── experiment_defaults.yaml                ← Default experiment parameters
+├── python/
+│   └── simd/
+│       ├── batch_search.pyx                    ← Cython source: batch SIMD search (Path A2)
+│       └── setup.py                            ← Cython build config (requires CYLON_PREFIX)
 ├── docker/
 │   ├── Dockerfile.python                       ← Path A1/A2 Docker image
 │   └── Dockerfile.nodejs                       ← Path B Docker image
@@ -958,7 +960,7 @@ class ChainExecutor {
 
 **Responsibility:** Push the entire similarity search loop into C/C++ via a Cython extension, eliminating per-embedding Python→C++ boundary crossing overhead. This is the Path A2 optimization.
 
-**Implementation:** `target/shared/scripts/simd/batch_search.pyx`
+**Implementation:** `python/simd/batch_search.pyx` (source), compiled `.so` installed to `target/shared/scripts/simd/`
 
 **Interface:**
 

@@ -26,7 +26,7 @@ conda activate cylon_dev
 python -c "import boto3, redis, numpy, langchain_aws; print('Python deps OK')"
 
 # Build Cython SIMD extension (Path A2)
-cd target/shared/scripts/simd
+cd python/simd
 CYLON_PREFIX=$CYLON_PREFIX python setup.py build_ext --inplace
 cd -
 ```
