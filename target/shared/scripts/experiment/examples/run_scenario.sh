@@ -28,7 +28,7 @@ export CONTEXT_BACKEND REDIS_HOST REDIS_PORT DYNAMO_ENDPOINT_URL DYNAMO_TABLE_NA
 
 # First positional arg is the scenario name
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <scenario> [runner args...]"
+    echo "Usage: $0 <scenario> [--backend cylon|redis] [runner args...]"
     echo ""
     echo "Available scenarios:"
     ls "${EXPERIMENT_DIR}/scenarios/"*.json 2>/dev/null | xargs -I{} basename {} .json
@@ -36,6 +36,17 @@ if [[ $# -lt 1 ]]; then
 fi
 
 SCENARIO="$1"; shift
+
+# Parse --backend before passing remaining args to runner
+RUNNER_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --backend) CONTEXT_BACKEND="$2"; export CONTEXT_BACKEND; shift 2 ;;
+        *) RUNNER_ARGS+=("$1"); shift ;;
+    esac
+done
+set -- "${RUNNER_ARGS[@]+"${RUNNER_ARGS[@]}"}"
+
 SCENARIO_FILE="${EXPERIMENT_DIR}/scenarios/${SCENARIO}.json"
 
 if [[ ! -f "${SCENARIO_FILE}" ]]; then

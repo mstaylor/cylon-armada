@@ -271,27 +271,33 @@ Each scenario runs a parameter sweep:
 
 | Variable | Values |
 |----------|--------|
+| Context backend | cylon, redis |
 | Similarity threshold | 0.70, 0.80, 0.90 |
 | Embedding dimensions | 256, 512, 1024 |
 | Execution path | NUMPY, PYCYLON, CYTHON_BATCH |
 | Baseline | yes, no |
 
-Per scenario: 3 × 3 × 3 × 2 = **54 configurations**
+Per scenario: 2 × 3 × 3 × 3 × 2 = **108 configurations**
 
 ### 3.3 Run All Scenarios (Local)
 
 ```bash
-# Run all scenarios with default parameter sweep
+# Run all scenarios with default parameter sweep (redis backend)
 target/shared/scripts/experiment/examples/run_all_scenarios.sh
+
+# Run all scenarios with Cylon ContextTable backend
+target/shared/scripts/experiment/examples/run_all_scenarios.sh --backend cylon
 
 # Or run individual scenarios
 target/shared/scripts/experiment/examples/run_scenario.sh hydrology
+target/shared/scripts/experiment/examples/run_scenario.sh hydrology --backend cylon
 target/shared/scripts/experiment/examples/run_scenario.sh epidemiology
 target/shared/scripts/experiment/examples/run_scenario.sh seismology
 target/shared/scripts/experiment/examples/run_scenario.sh mixed_scientific
 
 # With custom parameters
 target/shared/scripts/experiment/examples/run_scenario.sh hydrology \
+    --backend cylon \
     --tasks 8 16 32 \
     --thresholds 0.70 0.80 0.90 \
     --dimensions 256 512 1024 \
