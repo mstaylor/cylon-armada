@@ -1,0 +1,55 @@
+
++---------------------+--------------------------------------------------------------------------------+
+| Attribute           | Value                                                                          |
+|---------------------+--------------------------------------------------------------------------------|
+| BUG_REPORT_URL      | "https://bugs.launchpad.net/ubuntu/"                                           |
+| DISTRIB_CODENAME    | noble                                                                          |
+| DISTRIB_DESCRIPTION | "Ubuntu 24.04.4 LTS"                                                           |
+| DISTRIB_ID          | Ubuntu                                                                         |
+| DISTRIB_RELEASE     | 24.04                                                                          |
+| HOME_URL            | "https://www.ubuntu.com/"                                                      |
+| ID                  | ubuntu                                                                         |
+| ID_LIKE             | debian                                                                         |
+| LOGO                | ubuntu-logo                                                                    |
+| NAME                | "Ubuntu"                                                                       |
+| PRETTY_NAME         | "Ubuntu 24.04.4 LTS"                                                           |
+| PRIVACY_POLICY_URL  | "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"               |
+| SUPPORT_URL         | "https://help.ubuntu.com/"                                                     |
+| UBUNTU_CODENAME     | noble                                                                          |
+| VERSION             | "24.04.4 LTS (Noble Numbat)"                                                   |
+| VERSION_CODENAME    | noble                                                                          |
+| VERSION_ID          | "24.04"                                                                        |
+| cpu                 |                                                                                |
+| cpu_cores           | 4                                                                              |
+| cpu_count           | 4                                                                              |
+| cpu_threads         | 4                                                                              |
+| date                | 2026-03-26 12:00:57.920130                                                     |
+| frequency           | None                                                                           |
+| mem.active          | 6.0 GiB                                                                        |
+| mem.available       | 8.3 GiB                                                                        |
+| mem.free            | 2.0 GiB                                                                        |
+| mem.inactive        | 6.0 GiB                                                                        |
+| mem.percent         | 46.9 %                                                                         |
+| mem.total           | 15.6 GiB                                                                       |
+| mem.used            | 7.3 GiB                                                                        |
+| platform.version    | #106-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 07:44:40 UTC 2026                   |
+| python              | 3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:42:04) [GCC 14.3.0] |
+| python.pip          | 26.0.1                                                                         |
+| python.version      | 3.11.14                                                                        |
+| sys.platform        | linux                                                                          |
+| uname.machine       | aarch64                                                                        |
+| uname.node          | ubuntu-linux-22-04-02-desktop                                                  |
+| uname.processor     | aarch64                                                                        |
+| uname.release       | 6.8.0-106-generic                                                              |
+| uname.system        | Linux                                                                          |
+| uname.version       | #106-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 07:44:40 UTC 2026                   |
+| user                | parallels                                                                      |
++---------------------+--------------------------------------------------------------------------------+
+
++---------------------------------+----------+--------+--------+---------------------+---------------------------+-------+-------------------------------+-----------+-------+--------------------------------------------------------------+
+| Name                            | Status   |   Time |    Sum | Start               | tag                       | msg   | Node                          | User      | OS    | Version                                                      |
+|---------------------------------+----------+--------+--------+---------------------+---------------------------+-------+-------------------------------+-----------+-------+--------------------------------------------------------------|
+| reuse_t4_th0.8_d256_NUMPY_total | ok       | 20.879 | 20.879 | 2026-03-26 16:00:37 | reuse_t4_th0.8_d256_NUMPY |       | ubuntu-linux-22-04-02-desktop | parallels | Linux | #106-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 07:44:40 UTC 2026 |
++---------------------------------+----------+--------+--------+---------------------+---------------------------+-------+-------------------------------+-----------+-------+--------------------------------------------------------------+
+# csv,timer,status,time,sum,start,tag,msg,uname.node,user,uname.system,platform.version
+# csv,reuse_t4_th0.8_d256_NUMPY_total,ok,20.879,20.879,2026-03-26 16:00:37,reuse_t4_th0.8_d256_NUMPY,None,ubuntu-linux-22-04-02-desktop,parallels,Linux,#106-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 07:44:40 UTC 2026

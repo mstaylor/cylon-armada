@@ -1,0 +1,10 @@
+{
+  "experiment_name": "nodejs_simd_d256_n1000",
+  "total_s": 0.725767,
+  "total_ms": 708.7,
+  "dim": 256,
+  "n_embeddings": 1000,
+  "iterations": 100,
+  "avg_search_ms": 7.09,
+  "comparisons_per_sec": 141104
+}

@@ -1,7 +1,7 @@
 /**
  * Generate LLM analysis tasks from astronomical inference results (Node.js).
  *
- * Port of target/experiments/cosmic_ai/task_generator.py for Path B.
+ * Port of target/shared/scripts/cosmic_ai/task_generator.py for Path B.
  * Takes ONNX inference output and generates semantically-clustered
  * LLM tasks for context reuse experiments.
  *

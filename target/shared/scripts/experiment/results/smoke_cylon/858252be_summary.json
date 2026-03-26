@@ -1,0 +1,30 @@
+{
+  "run_id": "858252be",
+  "total_experiments": 1,
+  "successful": 0,
+  "results": [
+    {
+      "config": {
+        "name": "reuse_t4_th0.8_d256_NUMPY",
+        "task_count": 4,
+        "similarity_threshold": 0.8,
+        "embedding_dimensions": 256,
+        "backend": "NUMPY",
+        "baseline": false,
+        "sampling_strategy": "stratified",
+        "seed": 42,
+        "llm_model_id": "amazon.nova-lite-v1:0",
+        "embedding_model_id": "amazon.titan-embed-text-v2:0",
+        "region": "us-east-1",
+        "redis_host": "10.211.55.2",
+        "redis_port": 6379,
+        "dynamo_endpoint_url": "http://10.211.55.2:8100"
+      },
+      "workflow_result": {
+        "error": "No module named 'context.context_table'"
+      },
+      "wall_clock_ms": 0,
+      "experiment_id": "8b42e939"
+    }
+  ]
+}

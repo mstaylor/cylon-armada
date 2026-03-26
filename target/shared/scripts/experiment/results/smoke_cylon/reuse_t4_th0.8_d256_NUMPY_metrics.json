@@ -1,0 +1,16 @@
+{
+  "experiment_name": "reuse_t4_th0.8_d256_NUMPY",
+  "total_s": 20.879,
+  "total_ms": 20879.0,
+  "total_cost": 0.280698,
+  "baseline_cost": 0.280698,
+  "savings_pct": 0.0,
+  "reuse_rate": 0.0,
+  "cache_hits": 0,
+  "llm_calls": 4,
+  "task_count": 4,
+  "similarity_threshold": 0.8,
+  "embedding_dimensions": 256,
+  "backend": "NUMPY",
+  "baseline": false
+}

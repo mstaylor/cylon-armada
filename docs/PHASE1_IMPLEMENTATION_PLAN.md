@@ -94,7 +94,7 @@ The context reuse architecture is validated on real scientific workloads using t
 2. **Task generation** → dynamically generate LLM analysis tasks from real inference results (redshift predictions, magnitude profiles, error metrics)
 3. **Context reuse** → similar galaxy observations produce semantically overlapping analysis prompts, creating natural context reuse opportunities
 
-**Components (under `target/experiments/cosmic_ai/`):**
+**Components (under `target/shared/scripts/cosmic_ai/`):**
 - `blocks/` — AstroMAE model architecture (ViT + Inception, photoz, NormalCell) — from AI-for-Astronomy
 - `inference.py` — refactored inference module (callable, returns structured results)
 - `task_generator.py` — generates LLM tasks from inference output with configurable templates
@@ -442,7 +442,7 @@ The existing `CostTracker` in `cylon/target/shared/scripts/scaling/costlib/` is 
 
 ### Project Structure
 
-Follows the Cylon `target/` directory pattern — shared libraries in `target/shared/scripts/`, Lambda-specific handlers in `target/aws/scripts/lambda/`, experiments in `target/experiments/`.
+Follows the Cylon `target/` directory pattern — shared libraries and experiment infrastructure in `target/shared/scripts/`, Lambda-specific handlers in `target/aws/scripts/lambda/`.
 
 ```
 cylon-armada/
@@ -812,7 +812,7 @@ class BedrockCostTracker:
 
 **Responsibility:** Execute experiment scenarios with parameter sweeps and collect structured results.
 
-**Implementation:** `target/experiments/runner.py`
+**Implementation:** `target/shared/scripts/experiment/runner.py`
 
 **Interface:**
 
@@ -1597,7 +1597,7 @@ PAY_PER_REQUEST (on-demand) keeps costs near zero for PoC workloads and avoids c
 ### Scenario Design Principles
 
 1. **Controlled similarity distribution:** Each scenario has a known distribution of similar/dissimilar tasks so reuse rates can be predicted and validated.
-2. **Reproducible task sets:** Task descriptions are stored as JSON files in `target/experiments/scenarios/` or generated dynamically from data (cosmic-ai) and version-controlled.
+2. **Reproducible task sets:** Task descriptions are stored as JSON files in `target/shared/scripts/experiment/scenarios/` or generated dynamically from data (cosmic-ai) and version-controlled.
 3. **Baseline pairing:** Every reuse run has a corresponding baseline run with the same tasks, enabling paired statistical comparison.
 4. **Cross-path consistency:** All three execution paths (A1, A2, B) run the same task sets to ensure fair comparison.
 

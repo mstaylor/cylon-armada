@@ -22,14 +22,15 @@ from itertools import product
 from typing import Optional
 
 # Add shared scripts to path so imports resolve when running standalone
-_scripts_dir = os.path.join(os.path.dirname(__file__), '..', 'shared', 'scripts')
-if os.path.isdir(_scripts_dir) and _scripts_dir not in sys.path:
+# runner.py lives in target/shared/scripts/experiment/ — parent is target/shared/scripts/
+_scripts_dir = os.path.join(os.path.dirname(__file__), '..')
+if os.path.isdir(_scripts_dir) and os.path.abspath(_scripts_dir) not in sys.path:
     sys.path.insert(0, os.path.abspath(_scripts_dir))
 
 # Add python bindings AFTER scripts so context.embedding (scripts) isn't shadowed
 # by context.context_table (python bindings)
-_python_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'python')
-if os.path.isdir(_python_dir) and _python_dir not in sys.path:
+_python_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'python')
+if os.path.isdir(_python_dir) and os.path.abspath(_python_dir) not in sys.path:
     sys.path.append(os.path.abspath(_python_dir))
 
 from coordinator.agent_coordinator import AgentCoordinator
@@ -184,7 +185,7 @@ def run_experiment(
     tasks: Optional[list[str]] = None,
     s3_bucket: Optional[str] = None,
     s3_prefix: Optional[str] = None,
-    output_dir: str = "target/experiments/results",
+    output_dir: str = "target/shared/scripts/experiment/results",
 ) -> ExperimentResult:
     """Run a single experiment locally with StopWatch instrumentation.
 
@@ -268,7 +269,7 @@ def run_experiment_matrix(
     thresholds: list[float] = None,
     dimensions: list[int] = None,
     backends: list[str] = None,
-    output_dir: str = "target/experiments/results",
+    output_dir: str = "target/shared/scripts/experiment/results",
     include_baseline: bool = True,
     tasks: Optional[list[str]] = None,
     sampling_strategy: str = "stratified",
@@ -385,7 +386,7 @@ if __name__ == "__main__":
                         help="Embedding dimensions")
     parser.add_argument("--backends", type=str, nargs="+", default=["NUMPY"],
                         help="SIMD backends")
-    parser.add_argument("--output", type=str, default="target/experiments/results",
+    parser.add_argument("--output", type=str, default="target/shared/scripts/experiment/results",
                         help="Output directory")
     parser.add_argument("--no-baseline", action="store_true",
                         help="Skip baseline runs")

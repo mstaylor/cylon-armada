@@ -89,16 +89,22 @@ cd target/aws/scripts/lambda/node && npm test && cd -
 Ensure `REDIS_HOST` and `DYNAMO_ENDPOINT_URL` are set (see above).
 
 ```bash
-# Minimal run: 4 tasks, stratified sampling, single config
-python target/experiments/runner.py \
-    --tasks-file target/experiments/scenarios/hydrology.json \
+# Redis backend (default)
+target/shared/scripts/experiment/examples/smoke_test.sh
+
+# Cylon ContextTable backend
+target/shared/scripts/experiment/examples/smoke_test.sh --backend cylon
+```
+
+Or run the runner directly:
+
+```bash
+python target/shared/scripts/experiment/runner.py \
+    --tasks-file target/shared/scripts/experiment/scenarios/hydrology.json \
     --tasks 4 \
     --thresholds 0.8 \
     --dimensions 256 \
-    --output target/experiments/results/smoke_test
-
-# Verify output
-cat target/experiments/results/smoke_test/*_summary.json | python -m json.tool
+    --output target/shared/scripts/experiment/results/smoke_test
 ```
 
 Checklist:
@@ -113,11 +119,9 @@ Checklist:
 Requires cylon-wasm built (`wasm-pack build --target nodejs --release` in `cylon/rust/cylon-wasm`).
 
 ```bash
-cd target/aws/scripts/lambda/node
-
-# Ensure cylon_host stub exists for local testing
-mkdir -p /path/to/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host
-cat > /path/to/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host/index.js << 'STUB'
+# Ensure cylon_host stub exists for local testing (one-time setup)
+mkdir -p ~/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host
+cat > ~/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host/index.js << 'STUB'
 module.exports = {
     host_get_rank: () => 0,
     host_get_world_size: () => 1,
@@ -129,35 +133,24 @@ module.exports = {
     host_all_gather: (p, l, o) => l,
 };
 STUB
+```
 
+```bash
 # SIMD benchmark (no AWS dependencies — pure WASM SIMD throughput)
-CYLON_WASM_BINDINGS=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm.js \
-CYLON_WASM_PATH=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm_bg.wasm \
-node run_experiment.mjs \
-    --action simd_benchmark \
-    --dim 256 --n 1000 --iterations 100 \
-    --name nodejs_simd_d256_n1000 \
-    --output ../../../../experiments/results/smoke_nodejs
+target/shared/scripts/experiment/examples/run_nodejs_simd.sh
 
-# Verify output
-cat ../../../../experiments/results/smoke_nodejs/*_metrics.json | python -m json.tool
+# With custom params
+target/shared/scripts/experiment/examples/run_nodejs_simd.sh --dim 1024 --n 5000
 ```
 
 Expected output: `comparisons_per_sec` > 100,000 for 256-dim, `avg_search_ms` < 10ms for 1000 embeddings.
 
 ```bash
 # Full route_task experiment (requires Redis + Bedrock)
-CYLON_WASM_BINDINGS=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm.js \
-CYLON_WASM_PATH=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm_bg.wasm \
-REDIS_HOST=10.211.55.2 \
-node run_experiment.mjs \
-    --action route_task \
-    --tasks-file ../../../../experiments/scenarios/hydrology.json \
-    --tasks 4 --threshold 0.8 --dimensions 256 \
-    --name nodejs_route_hydrology_t4 \
-    --output ../../../../experiments/results/smoke_nodejs
+target/shared/scripts/experiment/examples/run_nodejs_route.sh
 
-cd -
+# With custom params
+target/shared/scripts/experiment/examples/run_nodejs_route.sh --tasks 8 --threshold 0.9
 ```
 
 ### 1.5 S3 Upload (Optional)
@@ -167,12 +160,12 @@ Omit to keep results local only.
 
 ```bash
 # Python with S3 upload
-python target/experiments/runner.py \
-    --tasks-file target/experiments/scenarios/hydrology.json \
+python target/shared/scripts/experiment/runner.py \
+    --tasks-file target/shared/scripts/experiment/scenarios/hydrology.json \
     --tasks 4 --thresholds 0.8 --dimensions 256 \
     --s3-bucket cylon-armada-results \
     --s3-prefix experiments/hydrology \
-    --output target/experiments/results/smoke_test
+    --output target/shared/scripts/experiment/results/smoke_test
 
 # Node.js with S3 upload
 node run_experiment.mjs \
@@ -288,8 +281,24 @@ Per scenario: 3 × 3 × 3 × 2 = **54 configurations**
 ### 3.3 Run All Scenarios (Local)
 
 ```bash
+# Run all scenarios with default parameter sweep
+target/shared/scripts/experiment/examples/run_all_scenarios.sh
+
+# Or run individual scenarios
+target/shared/scripts/experiment/examples/run_scenario.sh hydrology
+target/shared/scripts/experiment/examples/run_scenario.sh epidemiology
+target/shared/scripts/experiment/examples/run_scenario.sh seismology
+target/shared/scripts/experiment/examples/run_scenario.sh mixed_scientific
+
+# With custom parameters
+target/shared/scripts/experiment/examples/run_scenario.sh hydrology \
+    --tasks 8 16 32 \
+    --thresholds 0.70 0.80 0.90 \
+    --dimensions 256 512 1024 \
+    --backends NUMPY PYCYLON CYTHON_BATCH
+
 # Scenario 1: Astronomical inference (cosmic-ai — dynamic tasks)
-python target/experiments/runner.py \
+python target/shared/scripts/experiment/runner.py \
     --cosmic-ai \
     --data-path /path/to/sdss/data.pt \
     --model-path /path/to/astromae/model.pt \
@@ -297,43 +306,7 @@ python target/experiments/runner.py \
     --thresholds 0.70 0.80 0.90 \
     --dimensions 256 512 1024 \
     --backends NUMPY PYCYLON CYTHON_BATCH \
-    --output target/experiments/results/scenario1_cosmicai
-
-# Scenario 2: Hydrology
-python target/experiments/runner.py \
-    --tasks-file target/experiments/scenarios/hydrology.json \
-    --tasks 8 16 32 \
-    --thresholds 0.70 0.80 0.90 \
-    --dimensions 256 512 1024 \
-    --backends NUMPY PYCYLON CYTHON_BATCH \
-    --output target/experiments/results/scenario2_hydrology
-
-# Scenario 3: Epidemiology
-python target/experiments/runner.py \
-    --tasks-file target/experiments/scenarios/epidemiology.json \
-    --tasks 8 16 32 \
-    --thresholds 0.70 0.80 0.90 \
-    --dimensions 256 512 1024 \
-    --backends NUMPY PYCYLON CYTHON_BATCH \
-    --output target/experiments/results/scenario3_epidemiology
-
-# Scenario 4: Seismology
-python target/experiments/runner.py \
-    --tasks-file target/experiments/scenarios/seismology.json \
-    --tasks 8 16 32 \
-    --thresholds 0.70 0.80 0.90 \
-    --dimensions 256 512 1024 \
-    --backends NUMPY PYCYLON CYTHON_BATCH \
-    --output target/experiments/results/scenario4_seismology
-
-# Scenario 5: Mixed scientific + benchmarks
-python target/experiments/runner.py \
-    --tasks-file target/experiments/scenarios/mixed_scientific.json \
-    --tasks 16 32 48 \
-    --thresholds 0.70 0.80 0.90 \
-    --dimensions 256 512 1024 \
-    --backends NUMPY PYCYLON CYTHON_BATCH \
-    --output target/experiments/results/scenario5_mixed
+    --output target/shared/scripts/experiment/results/scenario1_cosmicai
 ```
 
 ### 3.4 Run on AWS (Step Functions)
@@ -348,7 +321,7 @@ aws stepfunctions start-sync-execution \
     --state-machine-arn $PYTHON_SFN \
     --input "$(python -c "
 import json
-tasks = json.load(open('target/experiments/scenarios/hydrology.json'))['tasks'][:16]
+tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:16]
 print(json.dumps({
     'workflow_id': 'exp-hydrology-th08-d256',
     'tasks': tasks,
@@ -361,7 +334,7 @@ print(json.dumps({
         'redis_port': '6379'
     }
 }))
-")" --query 'output' --output text > target/experiments/results/aws_hydrology.json
+")" --query 'output' --output text > target/shared/scripts/experiment/results/aws_hydrology.json
 ```
 
 ### 3.5 Per-Scenario Checklist
@@ -373,7 +346,7 @@ For each scenario:
 - [ ] Run reuse experiment with same tasks (same seed)
 - [ ] Verify result JSON has all expected fields
 - [ ] Check `reuse_rate` is within expected range for the scenario
-- [ ] Save raw results to `target/experiments/results/`
+- [ ] Save raw results to `target/shared/scripts/experiment/results/`
 
 ---
 
@@ -385,9 +358,9 @@ For each scenario:
 python -c "
 import json, glob
 results = []
-for f in sorted(glob.glob('target/experiments/results/*_summary.json')):
+for f in sorted(glob.glob('target/shared/scripts/experiment/results/*_summary.json')):
     results.append(json.load(open(f)))
-json.dump(results, open('target/experiments/results/all_summaries.json', 'w'), indent=2)
+json.dump(results, open('target/shared/scripts/experiment/results/all_summaries.json', 'w'), indent=2)
 print(f'Collected {len(results)} experiment summaries')
 "
 ```
@@ -407,7 +380,7 @@ print(f'Collected {len(results)} experiment summaries')
 
 ### 4.3 Visualizations (Jupyter Notebooks)
 
-Create in `target/experiments/analysis/`:
+Create in `target/shared/scripts/experiment/analysis/`:
 
 1. **Cost reduction curves** — savings % vs similarity threshold, one line per dimension
 2. **Reuse rate by domain** — bar chart: astronomy, hydrology, epidemiology, seismology

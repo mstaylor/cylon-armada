@@ -1,0 +1,2 @@
+experiment_name,total_ms,total_cost,baseline_cost,savings_pct,reuse_rate,cache_hits,llm_calls,task_count,similarity_threshold,embedding_dimensions,backend,baseline
+reuse_t4_th0.8_d256_NUMPY,20879.0,0.280698,0.280698,0.0,0.0,0,4,4,0.8,256,NUMPY,False

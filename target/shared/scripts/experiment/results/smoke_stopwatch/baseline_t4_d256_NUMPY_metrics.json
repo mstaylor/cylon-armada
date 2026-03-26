@@ -1,0 +1,16 @@
+{
+  "experiment_name": "baseline_t4_d256_NUMPY",
+  "total_s": 20.8691,
+  "total_ms": 20869.1,
+  "total_cost": 0.304548,
+  "baseline_cost": 0.304548,
+  "savings_pct": 0.0,
+  "reuse_rate": 0.0,
+  "cache_hits": 0,
+  "llm_calls": 4,
+  "task_count": 4,
+  "similarity_threshold": 1.0,
+  "embedding_dimensions": 256,
+  "backend": "NUMPY",
+  "baseline": true
+}

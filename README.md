@@ -172,10 +172,10 @@ CYLON_PREFIX=/path/to/cylon/install python setup.py build_ext --inplace
 python -m pytest tests/ -v
 
 # Run experiments locally
-python target/experiments/runner.py --tasks 4 8 --thresholds 0.8 --dimensions 256
+python target/shared/scripts/experiment/runner.py --tasks 4 8 --thresholds 0.8 --dimensions 256
 
 # Run with cosmic-ai data
-python target/experiments/runner.py --cosmic-ai \
+python target/shared/scripts/experiment/runner.py --cosmic-ai \
     --data-path /path/to/sdss/data.pt \
     --model-path /path/to/astromae/model.pt \
     --tasks 8 16
@@ -205,18 +205,18 @@ terraform apply
 
 ```bash
 # Full model export
-python target/experiments/cosmic_ai/export_onnx.py \
+python target/shared/scripts/cosmic_ai/export_onnx.py \
     --model-path /path/to/model.pt \
     --output-path astromae.onnx
 
 # Partitioned export (model parallelism)
-python target/experiments/cosmic_ai/export_onnx.py \
+python target/shared/scripts/cosmic_ai/export_onnx.py \
     --model-path /path/to/model.pt \
     --output-dir partitions/ \
     --partition
 
 # Memory estimation only
-python target/experiments/cosmic_ai/export_onnx.py \
+python target/shared/scripts/cosmic_ai/export_onnx.py \
     --model-path /path/to/model.pt \
     --memory-report
 ```
