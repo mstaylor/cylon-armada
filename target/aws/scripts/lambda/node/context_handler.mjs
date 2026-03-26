@@ -16,8 +16,9 @@
  * Based on: cylon/target/aws/scripts/lambda/wasm_handler.mjs
  *
  * Environment variables:
- *   CYLON_WASM_PATH:     Path to cylon_wasm_bg.wasm
- *   CYLON_WASM_BINDINGS: Path to cylon_wasm.js bindings
+ *   CONTEXT_BACKEND:     Search backend: "wasm" (SIMD128, default) or "redis" (JS dot product)
+ *   CYLON_WASM_PATH:     Path to cylon_wasm_bg.wasm (wasm backend only)
+ *   CYLON_WASM_BINDINGS: Path to cylon_wasm.js bindings (wasm backend only)
  *   REDIS_HOST:          Redis host for context cache
  *   REDIS_PORT:          Redis port (default: 6379)
  *   DYNAMO_TABLE_NAME:   DynamoDB table (default: context-store)
@@ -339,7 +340,15 @@ async function incrementReuseCount(contextId) {
 }
 
 // ---------------------------------------------------------------------------
-// SIMD similarity search (WASM SIMD128 via cylon-wasm)
+// Context backend configuration
+// ---------------------------------------------------------------------------
+
+function getContextBackend() {
+    return process.env.CONTEXT_BACKEND || 'wasm';
+}
+
+// ---------------------------------------------------------------------------
+// Similarity search — WASM SIMD128 (via cylon-wasm) or JS Float32Array
 // ---------------------------------------------------------------------------
 
 function simdCosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold, topK = 5) {
@@ -358,6 +367,43 @@ function simdCosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, thre
 
     results.sort((a, b) => b.similarity - a.similarity);
     return results.slice(0, topK);
+}
+
+function jsCosineSimilaritySearch(queryEmbedding, storedEmbeddings, threshold, topK = 5) {
+    const results = [];
+    const dim = queryEmbedding.length;
+
+    // Precompute query norm
+    let queryNormSq = 0;
+    for (let i = 0; i < dim; i++) queryNormSq += queryEmbedding[i] * queryEmbedding[i];
+    const queryNorm = Math.sqrt(queryNormSq);
+    if (queryNorm === 0) return results;
+
+    for (const { contextId, embedding } of storedEmbeddings) {
+        let dot = 0;
+        let embNormSq = 0;
+        for (let i = 0; i < dim; i++) {
+            dot += queryEmbedding[i] * embedding[i];
+            embNormSq += embedding[i] * embedding[i];
+        }
+        const embNorm = Math.sqrt(embNormSq);
+        if (embNorm === 0) continue;
+
+        const similarity = dot / (queryNorm * embNorm);
+        if (similarity >= threshold) {
+            results.push({ contextId, similarity });
+        }
+    }
+
+    results.sort((a, b) => b.similarity - a.similarity);
+    return results.slice(0, topK);
+}
+
+function cosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold, topK = 5) {
+    if (getContextBackend() === 'redis') {
+        return jsCosineSimilaritySearch(queryEmbedding, storedEmbeddings, threshold, topK);
+    }
+    return simdCosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold, topK);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,7 +514,7 @@ async function actionRouteTask(wasm, params, costTracker) {
     // Similarity search
     StopWatch.start('search');
     const storedEmbeddings = await getAllEmbeddings(workflowId);
-    const matches = simdCosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold);
+    const matches = cosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold);
     StopWatch.stop('search');
 
     if (matches.length > 0) {
@@ -631,7 +677,7 @@ export async function handler(event, context) {
             return { statusCode: 400, body: JSON.stringify({ error: "Missing 'action' field" }) };
         }
 
-        const wasm = await initWasm();
+        const wasm = getContextBackend() === 'redis' ? null : await initWasm();
         const costTracker = new CostTracker();
         const payload = event.action_payload || event;
 
@@ -653,7 +699,7 @@ export async function handler(event, context) {
                 const { embedding, metadata } = await embedText(text);
                 costTracker.recordEmbeddingCall(metadata.model_id, metadata.token_count);
                 const stored = await getAllEmbeddings(workflow_id);
-                const matches = simdCosineSimilaritySearch(wasm, embedding, stored, threshold, top_k);
+                const matches = cosineSimilaritySearch(wasm, embedding, stored, threshold, top_k);
                 return { matches, embedding_length: embedding.length, cost_summary: costTracker.getSummary() };
             }
 
@@ -667,7 +713,7 @@ export async function handler(event, context) {
 
                 const start = performance.now();
                 for (let i = 0; i < iterations; i++) {
-                    simdCosineSimilaritySearch(wasm, query, embeddings, 0.0, n);
+                    cosineSimilaritySearch(wasm, query, embeddings, 0.0, n);
                 }
                 const elapsedMs = performance.now() - start;
 

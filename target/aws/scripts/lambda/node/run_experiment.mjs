@@ -27,6 +27,7 @@ import { handler } from './context_handler.mjs';
 function parseArgs() {
     const args = {
         action: 'simd_benchmark',
+        contextBackend: null,
         dim: 256,
         n: 1000,
         iterations: 100,
@@ -44,6 +45,7 @@ function parseArgs() {
     for (let i = 0; i < argv.length; i++) {
         switch (argv[i]) {
             case '--action': args.action = argv[++i]; break;
+            case '--context-backend': args.contextBackend = argv[++i]; break;
             case '--dim': args.dim = parseInt(argv[++i]); break;
             case '--n': args.n = parseInt(argv[++i]); break;
             case '--iterations': args.iterations = parseInt(argv[++i]); break;
@@ -82,6 +84,7 @@ async function runSIMDBenchmark(args) {
     }, {});
     StopWatch.stop(`${experimentName}_total`);
 
+    StopWatch.record('context_backend', process.env.CONTEXT_BACKEND || 'wasm');
     StopWatch.record('dim', args.dim);
     StopWatch.record('n_embeddings', args.n);
     StopWatch.record('iterations', args.iterations);
@@ -167,13 +170,21 @@ async function runRouteTaskExperiment(args) {
     StopWatch.record('task_count', tasks.length);
     StopWatch.record('similarity_threshold', args.threshold);
     StopWatch.record('embedding_dimensions', args.dimensions);
-    StopWatch.record('backend', 'WASM_SIMD128');
+    const contextBackend = process.env.CONTEXT_BACKEND || 'wasm';
+    StopWatch.record('context_backend', contextBackend);
+    StopWatch.record('backend', contextBackend === 'redis' ? 'JS_FLOAT32' : 'WASM_SIMD128');
 
     return aggregateResult;
 }
 
 async function main() {
     const args = parseArgs();
+
+    // Set CONTEXT_BACKEND env var if provided via CLI (before handler import caches it)
+    if (args.contextBackend) {
+        process.env.CONTEXT_BACKEND = args.contextBackend;
+    }
+
     let result;
 
     if (args.action === 'simd_benchmark') {

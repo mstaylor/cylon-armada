@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 ##
-# Node.js route_task experiment — runs tasks through WASM SIMD + Bedrock.
+# Node.js route_task experiment — runs tasks through similarity search + Bedrock.
+#
+# Supports two backends:
+#   - wasm (default): WASM SIMD128 via cylon-wasm
+#   - redis: Pure JS Float32Array dot product (no WASM required)
 #
 # Requires Redis + Bedrock access.
 #
 # Usage:
-#   ./run_nodejs_route.sh
+#   ./run_nodejs_route.sh                        # wasm backend (default)
+#   ./run_nodejs_route.sh --context-backend redis # JS dot product
 #   ./run_nodejs_route.sh --tasks 8 --threshold 0.9 --dim 1024
 ##
 
@@ -23,30 +28,33 @@ NODE_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)/aws/scripts/lambda/node"
 export CYLON_WASM_BINDINGS CYLON_WASM_PATH REDIS_HOST
 
 # Default params
+CONTEXT_BACKEND=""
 TASKS=4
 THRESHOLD=0.8
 DIM=256
 SCENARIO_FILE="${EXPERIMENT_DIR}/scenarios/hydrology.json"
-NAME="nodejs_route_hydrology_t${TASKS}"
 OUTPUT_DIR="${EXPERIMENT_DIR}/results/smoke_nodejs"
 
 # Parse overrides
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --context-backend|--backend) CONTEXT_BACKEND="$2"; shift 2 ;;
         --tasks) TASKS="$2"; shift 2 ;;
         --threshold) THRESHOLD="$2"; shift 2 ;;
         --dim|--dimensions) DIM="$2"; shift 2 ;;
         --tasks-file) SCENARIO_FILE="$2"; shift 2 ;;
-        --name) NAME="$2"; shift 2 ;;
+        --name) NAME_OVERRIDE="$2"; shift 2 ;;
         --output) OUTPUT_DIR="$2"; shift 2 ;;
         --s3-bucket) S3_BUCKET="$2"; shift 2 ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
 
-NAME="nodejs_route_hydrology_t${TASKS}"
+BACKEND_LABEL="${CONTEXT_BACKEND:-wasm}"
+NAME="${NAME_OVERRIDE:-nodejs_route_${BACKEND_LABEL}_t${TASKS}}"
 
 echo "=== Node.js Route Task Experiment ==="
+echo "Backend:     ${BACKEND_LABEL}"
 echo "Scenario:    ${SCENARIO_FILE}"
 echo "Tasks:       ${TASKS}"
 echo "Threshold:   ${THRESHOLD}"
@@ -55,9 +63,12 @@ echo "Redis:       ${REDIS_HOST}"
 echo "Output:      ${OUTPUT_DIR}"
 echo ""
 
-S3_ARGS=""
+EXTRA_ARGS=""
+if [[ -n "${CONTEXT_BACKEND}" ]]; then
+    EXTRA_ARGS="--context-backend ${CONTEXT_BACKEND}"
+fi
 if [[ -n "${S3_BUCKET:-}" ]]; then
-    S3_ARGS="--s3-bucket ${S3_BUCKET}"
+    EXTRA_ARGS="${EXTRA_ARGS} --s3-bucket ${S3_BUCKET}"
 fi
 
 cd "${NODE_DIR}"
@@ -67,7 +78,7 @@ node run_experiment.mjs \
     --tasks "${TASKS}" --threshold "${THRESHOLD}" --dimensions "${DIM}" \
     --name "${NAME}" \
     --output "${OUTPUT_DIR}" \
-    ${S3_ARGS}
+    ${EXTRA_ARGS}
 
 echo ""
 echo "=== Results ==="

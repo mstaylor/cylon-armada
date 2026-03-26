@@ -7,7 +7,7 @@ import tempfile
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'target', 'experiments'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'target', 'shared', 'scripts'))
 
 from cosmic_ai.task_generator import (
     generate_tasks_from_results,

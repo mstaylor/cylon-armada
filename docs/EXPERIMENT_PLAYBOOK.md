@@ -99,7 +99,18 @@ target/shared/scripts/experiment/examples/smoke_test.sh --backend cylon
 Or run the runner directly:
 
 ```bash
+# Redis backend
 python target/shared/scripts/experiment/runner.py \
+    --context-backend redis \
+    --tasks-file target/shared/scripts/experiment/scenarios/hydrology.json \
+    --tasks 4 \
+    --thresholds 0.8 \
+    --dimensions 256 \
+    --output target/shared/scripts/experiment/results/smoke_test
+
+# Cylon ContextTable backend
+python target/shared/scripts/experiment/runner.py \
+    --context-backend cylon \
     --tasks-file target/shared/scripts/experiment/scenarios/hydrology.json \
     --tasks 4 \
     --thresholds 0.8 \
@@ -114,12 +125,18 @@ Checklist:
 - [ ] Stratified sampling selected tasks from different categories
 - [ ] No errors in logs
 
-### 1.4 Node.js Smoke Test (Path B — WASM SIMD)
+### 1.4 Node.js Smoke Test (Path B)
+
+The Node.js path supports two context backends:
+- **wasm** (default): WASM SIMD128 via cylon-wasm — requires cylon-wasm built
+- **redis**: Pure JS `Float32Array` dot product — no WASM dependency
+
+#### WASM backend setup (one-time)
 
 Requires cylon-wasm built (`wasm-pack build --target nodejs --release` in `cylon/rust/cylon-wasm`).
 
 ```bash
-# Ensure cylon_host stub exists for local testing (one-time setup)
+# Ensure cylon_host stub exists for local testing
 mkdir -p ~/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host
 cat > ~/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host/index.js << 'STUB'
 module.exports = {
@@ -135,22 +152,45 @@ module.exports = {
 STUB
 ```
 
+#### Similarity benchmark
+
 ```bash
-# SIMD benchmark (no AWS dependencies — pure WASM SIMD throughput)
+# WASM SIMD benchmark (default)
 target/shared/scripts/experiment/examples/run_nodejs_simd.sh
+
+# JS dot product benchmark (no WASM required)
+target/shared/scripts/experiment/examples/run_nodejs_simd.sh --context-backend redis
 
 # With custom params
 target/shared/scripts/experiment/examples/run_nodejs_simd.sh --dim 1024 --n 5000
 ```
 
-Expected output: `comparisons_per_sec` > 100,000 for 256-dim, `avg_search_ms` < 10ms for 1000 embeddings.
+Expected output: `comparisons_per_sec` > 100,000 for 256-dim with WASM, `avg_search_ms` < 10ms for 1000 embeddings.
+
+#### Route task experiment
 
 ```bash
-# Full route_task experiment (requires Redis + Bedrock)
+# WASM backend (requires Redis + Bedrock + WASM)
 target/shared/scripts/experiment/examples/run_nodejs_route.sh
+
+# Redis/JS backend (requires Redis + Bedrock, no WASM)
+target/shared/scripts/experiment/examples/run_nodejs_route.sh --context-backend redis
 
 # With custom params
 target/shared/scripts/experiment/examples/run_nodejs_route.sh --tasks 8 --threshold 0.9
+```
+
+Or run the runner directly:
+
+```bash
+# WASM backend
+node target/aws/scripts/lambda/node/run_experiment.mjs \
+    --action simd_benchmark --dim 256 --n 1000
+
+# Redis/JS backend
+node target/aws/scripts/lambda/node/run_experiment.mjs \
+    --context-backend redis \
+    --action simd_benchmark --dim 256 --n 1000
 ```
 
 ### 1.5 S3 Upload (Optional)
@@ -161,6 +201,7 @@ Omit to keep results local only.
 ```bash
 # Python with S3 upload
 python target/shared/scripts/experiment/runner.py \
+    --context-backend cylon \
     --tasks-file target/shared/scripts/experiment/scenarios/hydrology.json \
     --tasks 4 --thresholds 0.8 --dimensions 256 \
     --s3-bucket cylon-armada-results \
@@ -267,17 +308,30 @@ Same seed + same strategy = identical task selection across runs. Baseline and r
 
 ### 3.2 Experiment Matrix
 
-Each scenario runs a parameter sweep:
+Each scenario runs a parameter sweep across Python and Node.js paths:
+
+**Python (Path A)**
 
 | Variable | Values |
 |----------|--------|
 | Context backend | cylon, redis |
 | Similarity threshold | 0.70, 0.80, 0.90 |
 | Embedding dimensions | 256, 512, 1024 |
-| Execution path | NUMPY, PYCYLON, CYTHON_BATCH |
+| SIMD backend | NUMPY, PYCYLON, CYTHON_BATCH |
 | Baseline | yes, no |
 
 Per scenario: 2 × 3 × 3 × 3 × 2 = **108 configurations**
+
+**Node.js (Path B)**
+
+| Variable | Values |
+|----------|--------|
+| Context backend | wasm, redis |
+| Similarity threshold | 0.70, 0.80, 0.90 |
+| Embedding dimensions | 256, 512, 1024 |
+| Baseline | yes, no |
+
+Per scenario: 2 × 3 × 3 × 2 = **36 configurations**
 
 ### 3.3 Run All Scenarios (Local)
 
@@ -305,6 +359,7 @@ target/shared/scripts/experiment/examples/run_scenario.sh hydrology \
 
 # Scenario 1: Astronomical inference (cosmic-ai — dynamic tasks)
 python target/shared/scripts/experiment/runner.py \
+    --context-backend cylon \
     --cosmic-ai \
     --data-path /path/to/sdss/data.pt \
     --model-path /path/to/astromae/model.pt \

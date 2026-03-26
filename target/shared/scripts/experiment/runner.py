@@ -160,6 +160,7 @@ class ExperimentConfig:
     similarity_threshold: float
     embedding_dimensions: int
     backend: str = "NUMPY"
+    context_backend: str = os.environ.get("CONTEXT_BACKEND", "cylon")
     baseline: bool = False
     sampling_strategy: str = "stratified"  # "stratified", "sequential", "random"
     seed: int = 42
@@ -209,6 +210,7 @@ def run_experiment(
         "embedding_dimensions": config.embedding_dimensions,
         "similarity_threshold": config.similarity_threshold,
         "region": config.region,
+        "context_backend": config.context_backend,
     })
 
     coordinator = AgentCoordinator(config=bedrock_config)
@@ -269,6 +271,7 @@ def run_experiment_matrix(
     thresholds: list[float] = None,
     dimensions: list[int] = None,
     backends: list[str] = None,
+    context_backend: Optional[str] = None,
     output_dir: str = "target/shared/scripts/experiment/results",
     include_baseline: bool = True,
     tasks: Optional[list[str]] = None,
@@ -306,6 +309,10 @@ def run_experiment_matrix(
     results = []
     run_id = str(uuid.uuid4())[:8]
 
+    # context_backend kwargs — only set if explicitly provided (otherwise ExperimentConfig
+    # reads from CONTEXT_BACKEND env var)
+    cb_kwargs = {"context_backend": context_backend} if context_backend else {}
+
     configs = []
     for tc, thresh, dim, be in product(task_counts, thresholds, dimensions, backends):
         # Context-reuse run
@@ -318,6 +325,7 @@ def run_experiment_matrix(
             baseline=False,
             sampling_strategy=sampling_strategy,
             seed=seed,
+            **cb_kwargs,
         ))
 
         # Baseline run (no reuse)
@@ -331,6 +339,7 @@ def run_experiment_matrix(
                 baseline=True,
                 sampling_strategy=sampling_strategy,
                 seed=seed,
+                **cb_kwargs,
             ))
 
     logger.info("Running %d experiments (run_id=%s)", len(configs), run_id)
@@ -386,6 +395,9 @@ if __name__ == "__main__":
                         help="Embedding dimensions")
     parser.add_argument("--backends", type=str, nargs="+", default=["NUMPY"],
                         help="SIMD backends")
+    parser.add_argument("--context-backend", type=str, default=None,
+                        choices=["cylon", "redis"],
+                        help="Context store backend (default: from CONTEXT_BACKEND env or 'cylon')")
     parser.add_argument("--output", type=str, default="target/shared/scripts/experiment/results",
                         help="Output directory")
     parser.add_argument("--no-baseline", action="store_true",
@@ -448,6 +460,7 @@ if __name__ == "__main__":
         thresholds=args.thresholds,
         dimensions=args.dimensions,
         backends=args.backends,
+        context_backend=args.context_backend,
         output_dir=args.output,
         include_baseline=not args.no_baseline,
         tasks=custom_tasks,
