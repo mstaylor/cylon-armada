@@ -43,7 +43,7 @@ brew install redis
 redis-server
 
 # DynamoDB Local — run via Docker on the host
-docker run -p 8100:8100 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb
+docker run -p 8100:8000 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb
 ```
 
 ```bash
