@@ -54,7 +54,7 @@ ip neighbor show
 # Set environment variables for the VM:
 export REDIS_HOST=10.211.55.2
 export REDIS_PORT=6379
-export DYNAMO_ENDPOINT_URL=http://10.211.55.2:1000
+export DYNAMO_ENDPOINT_URL=http://10.211.55.2:8100
 ```
 
 ```bash
@@ -102,11 +102,96 @@ cat target/experiments/results/smoke_test/*_summary.json | python -m json.tool
 ```
 
 Checklist:
-- [ ] Result JSON files created
+- [ ] Result JSON files created (`*_summary.csv`, `*_stopwatch.csv`, `*_metrics.json`)
 - [ ] `savings_pct` > 0 for reuse runs
 - [ ] `savings_pct` = 0 for baseline runs
 - [ ] Stratified sampling selected tasks from different categories
 - [ ] No errors in logs
+
+### 1.4 Node.js Smoke Test (Path B — WASM SIMD)
+
+Requires cylon-wasm built (`wasm-pack build --target nodejs --release` in `cylon/rust/cylon-wasm`).
+
+```bash
+cd target/aws/scripts/lambda/node
+
+# Ensure cylon_host stub exists for local testing
+mkdir -p /path/to/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host
+cat > /path/to/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host/index.js << 'STUB'
+module.exports = {
+    host_get_rank: () => 0,
+    host_get_world_size: () => 1,
+    host_barrier: () => {},
+    host_broadcast: (p, l, r) => l,
+    host_all_to_all: (p, l, r) => l,
+    host_gather: (p, l, r, o) => l,
+    host_scatter: (p, l, r, o) => l,
+    host_all_gather: (p, l, o) => l,
+};
+STUB
+
+# SIMD benchmark (no AWS dependencies — pure WASM SIMD throughput)
+CYLON_WASM_BINDINGS=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm.js \
+CYLON_WASM_PATH=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm_bg.wasm \
+node run_experiment.mjs \
+    --action simd_benchmark \
+    --dim 256 --n 1000 --iterations 100 \
+    --name nodejs_simd_d256_n1000 \
+    --output ../../../../experiments/results/smoke_nodejs
+
+# Verify output
+cat ../../../../experiments/results/smoke_nodejs/*_metrics.json | python -m json.tool
+```
+
+Expected output: `comparisons_per_sec` > 100,000 for 256-dim, `avg_search_ms` < 10ms for 1000 embeddings.
+
+```bash
+# Full route_task experiment (requires Redis + Bedrock)
+CYLON_WASM_BINDINGS=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm.js \
+CYLON_WASM_PATH=/path/to/cylon/rust/cylon-wasm/pkg/cylon_wasm_bg.wasm \
+REDIS_HOST=10.211.55.2 \
+node run_experiment.mjs \
+    --action route_task \
+    --tasks-file ../../../../experiments/scenarios/hydrology.json \
+    --tasks 4 --threshold 0.8 --dimensions 256 \
+    --name nodejs_route_hydrology_t4 \
+    --output ../../../../experiments/results/smoke_nodejs
+
+cd -
+```
+
+### 1.5 S3 Upload (Optional)
+
+Both Python and Node.js runners support `--s3-bucket` for uploading results to S3.
+Omit to keep results local only.
+
+```bash
+# Python with S3 upload
+python target/experiments/runner.py \
+    --tasks-file target/experiments/scenarios/hydrology.json \
+    --tasks 4 --thresholds 0.8 --dimensions 256 \
+    --s3-bucket cylon-armada-results \
+    --s3-prefix experiments/hydrology \
+    --output target/experiments/results/smoke_test
+
+# Node.js with S3 upload
+node run_experiment.mjs \
+    --action simd_benchmark --dim 256 --n 1000 \
+    --s3-bucket cylon-armada-results \
+    --s3-prefix experiments/simd
+```
+
+### Output Files
+
+Each experiment produces three files (matching Cylon's scaling.py pattern):
+
+| File | Content | Used By |
+|------|---------|---------|
+| `*_stopwatch.csv` | cloudmesh benchmark (system info + timings) | Full audit trail |
+| `*_summary.csv` | Data-only CSV (timings + metrics, no machine info) | Results pipeline aggregator |
+| `*_metrics.json` | All timings + metrics as JSON | Quick inspection, Jupyter notebooks |
+
+Both Python and Node.js produce identical CSV formats for cross-path comparison.
 
 ---
 

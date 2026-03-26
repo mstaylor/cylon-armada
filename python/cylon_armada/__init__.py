@@ -12,5 +12,5 @@
  # limitations under the License.
  ##
 
-from context.context_table import ContextTable
-from context.context_table import *
+from cylon_armada.context_table import ContextTable
+from cylon_armada.context_table import *

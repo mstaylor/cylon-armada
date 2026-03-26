@@ -81,7 +81,7 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
-    pip install langchain-aws langchain-core cython
+    pip install langchain-aws langchain-core cython cloudmesh-common pandas
 
 # ---------------------------------------------------------------------------
 # Copy cylon-armada source code

@@ -25,11 +25,11 @@ _VALID_BACKENDS = ("cylon", "redis")
 
 def _create_cylon_backend(embedding_dim, redis_addr, redis_ttl):
     """Initialize Cylon ContextTable backend."""
-    from context.context_table import ContextTable as CylonContextTable
+    from cylon_armada.context_table import ContextTable as CylonContextTable
 
     # Check if Redis persistence is available (compiled with CYLON_USE_REDIS)
     try:
-        from context.context_table import (
+        from cylon_armada.context_table import (
             save_context_to_redis,
             load_context_from_redis,
         )
@@ -101,7 +101,7 @@ class ContextManager:
         else:
             self._cylon = None
             self._redis = _create_redis_backend(redis_host, redis_port)
-            logger.info("ContextManager: backend=redis, dim=%d", embedding_dim)
+            logger.info("ContextManager: backend=redis, dim=%d, redis=%s:%d", embedding_dim, redis_host, redis_port)
 
     @classmethod
     def from_config(cls, config, **kwargs):
@@ -387,7 +387,7 @@ class ContextManager:
         """Load ContextTable from Arrow IPC bytes (e.g., from FMI broadcast)."""
         if self._cylon is None:
             raise RuntimeError("load_from_ipc requires context_backend='cylon'")
-        from context.context_table import ContextTable as CylonContextTable
+        from cylon_armada.context_table import ContextTable as CylonContextTable
         self._cylon["table"] = CylonContextTable.from_ipc(ipc_data)
         logger.info("Loaded ContextTable from IPC: %d entries", self._cylon["table"].size)
 

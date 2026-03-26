@@ -10,6 +10,7 @@ without deploying to Step Functions.
 
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Optional
@@ -150,8 +151,8 @@ class AgentCoordinator:
         workflow_id: Optional[str] = None,
         backend: SIMDBackend = SIMDBackend.NUMPY,
         dynamo_endpoint_url: Optional[str] = None,
-        redis_host: str = "localhost",
-        redis_port: int = 6379,
+        redis_host: Optional[str] = None,
+        redis_port: Optional[int] = None,
         baseline: bool = False,
     ) -> dict:
         """Run workflow locally (in-process) for development.
@@ -161,14 +162,24 @@ class AgentCoordinator:
         if workflow_id is None:
             workflow_id = str(uuid.uuid4())
 
+        if redis_host is None:
+            redis_host = os.environ.get("REDIS_HOST", "localhost")
+        if redis_port is None:
+            redis_port = int(os.environ.get("REDIS_PORT", 6379))
+        if dynamo_endpoint_url is None:
+            dynamo_endpoint_url = os.environ.get("DYNAMO_ENDPOINT_URL")
+
         config = self.config
         embedding_service = EmbeddingService(config=config)
         chain_executor = ChainExecutor(config=config)
         context_manager = ContextManager(
+            dynamo_table=os.environ.get("DYNAMO_TABLE_NAME", "context-store"),
             dynamo_endpoint_url=dynamo_endpoint_url,
             redis_host=redis_host,
             redis_port=redis_port,
             region=config.region,
+            embedding_dim=config.embedding_dimensions,
+            backend=config.context_backend,
         )
         cost_tracker = BedrockCostTracker.create(region=config.region)
 

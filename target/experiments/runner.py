@@ -14,15 +14,28 @@ Results are written to JSON files in the output directory for analysis.
 import json
 import logging
 import os
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
 from itertools import product
 from typing import Optional
 
+# Add shared scripts to path so imports resolve when running standalone
+_scripts_dir = os.path.join(os.path.dirname(__file__), '..', 'shared', 'scripts')
+if os.path.isdir(_scripts_dir) and _scripts_dir not in sys.path:
+    sys.path.insert(0, os.path.abspath(_scripts_dir))
+
+# Add python bindings AFTER scripts so context.embedding (scripts) isn't shadowed
+# by context.context_table (python bindings)
+_python_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'python')
+if os.path.isdir(_python_dir) and _python_dir not in sys.path:
+    sys.path.append(os.path.abspath(_python_dir))
+
 from coordinator.agent_coordinator import AgentCoordinator
 from context.router import SIMDBackend
 from cost.bedrock_pricing import BedrockConfig
+from experiment.benchmark import ExperimentBenchmark
 
 logging.basicConfig(
     level=logging.INFO,
@@ -151,10 +164,10 @@ class ExperimentConfig:
     seed: int = 42
     llm_model_id: str = "amazon.nova-lite-v1:0"
     embedding_model_id: str = "amazon.titan-embed-text-v2:0"
-    region: str = "us-east-1"
-    redis_host: str = "localhost"
-    redis_port: int = 6379
-    dynamo_endpoint_url: Optional[str] = "http://localhost:8000"
+    region: str = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    redis_host: str = os.environ.get("REDIS_HOST", "localhost")
+    redis_port: int = int(os.environ.get("REDIS_PORT", "6379"))
+    dynamo_endpoint_url: Optional[str] = os.environ.get("DYNAMO_ENDPOINT_URL", "http://localhost:8000")
 
 
 @dataclass
@@ -169,20 +182,33 @@ class ExperimentResult:
 def run_experiment(
     config: ExperimentConfig,
     tasks: Optional[list[str]] = None,
+    s3_bucket: Optional[str] = None,
+    s3_prefix: Optional[str] = None,
+    output_dir: str = "target/experiments/results",
 ) -> ExperimentResult:
-    """Run a single experiment locally.
+    """Run a single experiment locally with StopWatch instrumentation.
 
     Args:
         config: Experiment configuration.
         tasks: Custom task list. If None, uses DEFAULT_TASKS.
+        s3_bucket: S3 bucket for result upload. None = local only.
+        s3_prefix: S3 key prefix.
+        output_dir: Local output directory for benchmark files.
     """
-    bedrock_config = BedrockConfig(
-        llm_model_id=config.llm_model_id,
-        embedding_model_id=config.embedding_model_id,
-        embedding_dimensions=config.embedding_dimensions,
-        similarity_threshold=config.similarity_threshold,
-        region=config.region,
+    # StopWatch benchmark — clear previous timers
+    bench = ExperimentBenchmark(
+        name=config.name,
+        s3_bucket=s3_bucket,
+        s3_prefix=s3_prefix,
     )
+
+    bedrock_config = BedrockConfig.resolve(payload={
+        "llm_model_id": config.llm_model_id,
+        "embedding_model_id": config.embedding_model_id,
+        "embedding_dimensions": config.embedding_dimensions,
+        "similarity_threshold": config.similarity_threshold,
+        "region": config.region,
+    })
 
     coordinator = AgentCoordinator(config=bedrock_config)
     all_tasks = tasks or DEFAULT_TASKS
@@ -199,7 +225,7 @@ def run_experiment(
         config.embedding_dimensions, config.backend, config.baseline,
     )
 
-    start = time.perf_counter()
+    bench.start("total")
     result = coordinator.run_local(
         tasks=task_list,
         backend=backend,
@@ -208,7 +234,27 @@ def run_experiment(
         redis_port=config.redis_port,
         baseline=config.baseline,
     )
-    wall_clock_ms = (time.perf_counter() - start) * 1000
+    bench.stop("total")
+
+    wall_clock_ms = bench.elapsed_ms("total")
+
+    # Record experiment metrics for the results pipeline
+    cost_summary = result.get("cost_summary", {})
+    reuse_stats = result.get("reuse_stats", {})
+    bench.record("total_cost", cost_summary.get("total_cost", 0))
+    bench.record("baseline_cost", cost_summary.get("baseline_cost", 0))
+    bench.record("savings_pct", cost_summary.get("savings_pct", 0))
+    bench.record("reuse_rate", reuse_stats.get("reuse_rate", 0))
+    bench.record("cache_hits", reuse_stats.get("cache_hits", 0))
+    bench.record("llm_calls", reuse_stats.get("llm_calls", 0))
+    bench.record("task_count", len(task_list))
+    bench.record("similarity_threshold", config.similarity_threshold)
+    bench.record("embedding_dimensions", config.embedding_dimensions)
+    bench.record("backend", config.backend)
+    bench.record("baseline", config.baseline)
+
+    # Save benchmark files (locally + optional S3)
+    bench.save(output_dir)
 
     return ExperimentResult(
         config=asdict(config),
@@ -227,6 +273,8 @@ def run_experiment_matrix(
     tasks: Optional[list[str]] = None,
     sampling_strategy: str = "stratified",
     seed: int = 42,
+    s3_bucket: Optional[str] = None,
+    s3_prefix: Optional[str] = None,
 ) -> list[ExperimentResult]:
     """Run a matrix of experiments and save results.
 
@@ -289,7 +337,12 @@ def run_experiment_matrix(
     for i, config in enumerate(configs):
         logger.info("Experiment %d/%d: %s", i + 1, len(configs), config.name)
         try:
-            result = run_experiment(config, tasks=tasks)
+            ExperimentBenchmark.clear()
+            result = run_experiment(
+                config, tasks=tasks,
+                s3_bucket=s3_bucket, s3_prefix=s3_prefix,
+                output_dir=output_dir,
+            )
             results.append(result)
 
             # Write individual result
@@ -343,6 +396,10 @@ if __name__ == "__main__":
                         help="Task sampling strategy (default: stratified)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducible sampling (default: 42)")
+    parser.add_argument("--s3-bucket", type=str, default=None,
+                        help="S3 bucket for result upload (omit for local-only)")
+    parser.add_argument("--s3-prefix", type=str, default="experiments",
+                        help="S3 key prefix for results (default: experiments)")
 
     # cosmic-ai: generate tasks from real astronomical inference
     cosmic = parser.add_argument_group("cosmic-ai", "Generate tasks from SDSS inference")
@@ -395,4 +452,6 @@ if __name__ == "__main__":
         tasks=custom_tasks,
         sampling_strategy=args.sampling,
         seed=args.seed,
+        s3_bucket=args.s3_bucket,
+        s3_prefix=args.s3_prefix,
     )

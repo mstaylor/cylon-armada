@@ -64,7 +64,7 @@ try:
 except Exception:
     pass
 
-extra_compile_args = ['-std=c++17', '-DOMPI_SKIP_MPICXX=1']
+extra_compile_args = ['-std=c++17', '-DOMPI_SKIP_MPICXX=1', '-D_GLIBCXX_USE_CXX11_ABI=1']
 
 macros = []
 if os.environ.get('CYLON_REDIS'):
@@ -74,8 +74,8 @@ if os.environ.get('CYLON_FMI'):
 
 extensions = [
     Extension(
-        "context.context_table",
-        sources=["context/context_table.pyx"],
+        "cylon_armada.context_table",
+        sources=["cylon_armada/context_table.pyx"],
         include_dirs=include_dirs,
         language='c++',
         extra_compile_args=extra_compile_args,
@@ -102,6 +102,6 @@ setup(
         compiler_directives={"language_level": 3},
         compile_time_env=compile_time_env,
     ),
-    packages=["context"],
+    packages=["cylon_armada"],
     zip_safe=False,
 )

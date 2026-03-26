@@ -28,6 +28,7 @@
  */
 
 import { readFileSync } from 'fs';
+import { StopWatch } from './stopwatch.mjs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createClient } from 'redis';
@@ -52,10 +53,15 @@ async function initWasm() {
         join(__dirname, '..', '..', '..', '..', '..', 'cylon', 'rust', 'cylon-wasm', 'pkg', 'cylon_wasm.js');
 
     const bindings = await import(bindingsPath);
-    const wasmBytes = readFileSync(wasmPath);
-    await bindings.default({ module_or_path: wasmBytes });
 
-    if (bindings.init) bindings.init();
+    // wasm-pack --target nodejs: CJS module auto-initializes WASM on require()
+    // wasm-pack --target web/bundler: needs bindings.default({ module_or_path })
+    if (typeof bindings.default === 'function') {
+        const wasmBytes = readFileSync(wasmPath);
+        await bindings.default({ module_or_path: wasmBytes });
+    }
+
+    if (typeof bindings.init === 'function') bindings.init();
 
     wasmModule = bindings;
     return wasmModule;
@@ -449,7 +455,7 @@ async function actionRouteTask(wasm, params, costTracker) {
     } = params;
 
     const threshold = parseFloat(config.similarity_threshold || process.env.SIMILARITY_THRESHOLD || '0.85');
-    const start = performance.now();
+    StopWatch.start('route_total');
 
     // Record embedding cost from prepare step
     if (embeddingMetadata) {
@@ -460,8 +466,10 @@ async function actionRouteTask(wasm, params, costTracker) {
     const queryEmbedding = b64ToNdArray(embeddingB64);
 
     // Similarity search
+    StopWatch.start('search');
     const storedEmbeddings = await getAllEmbeddings(workflowId);
     const matches = simdCosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold);
+    StopWatch.stop('search');
 
     if (matches.length > 0) {
         // Cache hit
@@ -478,6 +486,7 @@ async function actionRouteTask(wasm, params, costTracker) {
         }
 
         const avoidedCost = costTracker.recordCacheHit(llmModelId, avoidedInput, avoidedOutput);
+        StopWatch.stop('route_total');
 
         return {
             response: context.response,
@@ -486,7 +495,8 @@ async function actionRouteTask(wasm, params, costTracker) {
             context_id: bestMatch.contextId,
             cost_usd: 0,
             avoided_cost_usd: avoidedCost,
-            total_latency_ms: Math.round((performance.now() - start) * 100) / 100,
+            total_latency_ms: StopWatch.getMs('route_total'),
+            search_latency_ms: StopWatch.getMs('search'),
             avoided_input_tokens: avoidedInput,
             avoided_output_tokens: avoidedOutput,
             cost_summary: costTracker.getSummary(),
@@ -494,10 +504,13 @@ async function actionRouteTask(wasm, params, costTracker) {
     }
 
     // Cache miss — invoke LLM
+    StopWatch.start('llm_call');
     const llmResult = await invokeLLM(taskDescription);
+    StopWatch.stop('llm_call');
     const callCost = costTracker.recordLlmCall(llmResult.model_id, llmResult.input_tokens, llmResult.output_tokens);
 
     // Store new context
+    StopWatch.start('store_context');
     const contextId = crypto.randomUUID();
     await storeContext(contextId, workflowId, taskDescription, queryEmbedding, llmResult.response, {
         model_id: llmResult.model_id,
@@ -505,6 +518,8 @@ async function actionRouteTask(wasm, params, costTracker) {
         output_tokens: llmResult.output_tokens,
         cost_usd: callCost,
     });
+    StopWatch.stop('store_context');
+    StopWatch.stop('route_total');
 
     return {
         response: llmResult.response,
@@ -514,8 +529,10 @@ async function actionRouteTask(wasm, params, costTracker) {
         input_tokens: llmResult.input_tokens,
         output_tokens: llmResult.output_tokens,
         cost_usd: callCost,
-        total_latency_ms: Math.round((performance.now() - start) * 100) / 100,
+        total_latency_ms: StopWatch.getMs('route_total'),
+        search_latency_ms: StopWatch.getMs('search'),
         llm_latency_ms: llmResult.latency_ms,
+        store_latency_ms: StopWatch.getMs('store_context'),
         model_id: llmResult.model_id,
         cost_summary: costTracker.getSummary(),
     };
