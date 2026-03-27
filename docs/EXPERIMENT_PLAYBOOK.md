@@ -164,20 +164,11 @@ The Node.js path supports two context backends:
 Requires cylon-wasm built (`wasm-pack build --target nodejs --release` in `cylon/rust/cylon-wasm`).
 
 ```bash
-# Ensure cylon_host stub exists for local testing
-mkdir -p ~/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host
-cat > ~/cylon/rust/cylon-wasm/pkg/node_modules/cylon_host/index.js << 'STUB'
-module.exports = {
-    host_get_rank: () => 0,
-    host_get_world_size: () => 1,
-    host_barrier: () => {},
-    host_broadcast: (p, l, r) => l,
-    host_all_to_all: (p, l, r) => l,
-    host_gather: (p, l, r, o) => l,
-    host_scatter: (p, l, r, o) => l,
-    host_all_gather: (p, l, o) => l,
-};
-STUB
+# Create cylon_host stub and verify WASM setup
+target/shared/scripts/experiment/examples/setup_wasm.sh
+
+# Custom pkg path (if built elsewhere):
+target/shared/scripts/experiment/examples/setup_wasm.sh --wasm-pkg /path/to/pkg
 ```
 
 #### Similarity benchmark
