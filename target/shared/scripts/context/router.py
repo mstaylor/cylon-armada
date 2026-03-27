@@ -210,9 +210,20 @@ class ContextRouter:
             response_data = ctx.get("metadata", ctx)
             response_text = ctx.get("response", response_data.get("response", ""))
 
-            # Record avoided cost using the original call's actual token counts
-            input_tokens = ctx.get("cost_input_tokens", 0)
-            output_tokens = ctx.get("cost_output_tokens", 0)
+            # Record avoided cost using the original call's actual token counts.
+            # Key name varies by backend: cylon/redis use "input_tokens",
+            # DynamoDB uses "cost_input_tokens"; metadata may be nested.
+            _meta = ctx.get("metadata", {})
+            input_tokens = (
+                ctx.get("input_tokens")
+                or ctx.get("cost_input_tokens")
+                or _meta.get("input_tokens", 0)
+            )
+            output_tokens = (
+                ctx.get("output_tokens")
+                or ctx.get("cost_output_tokens")
+                or _meta.get("output_tokens", 0)
+            )
             if input_tokens == 0 and output_tokens == 0:
                 logger.warning(
                     "Missing token counts for context %s, avoided cost will be 0",

@@ -315,9 +315,10 @@ def run_experiment_matrix(
 
     configs = []
     for tc, thresh, dim, be in product(task_counts, thresholds, dimensions, backends):
+        cb = cb_kwargs.get("context_backend") or os.environ.get("CONTEXT_BACKEND", "cylon")
         # Context-reuse run
         configs.append(ExperimentConfig(
-            name=f"reuse_t{tc}_th{thresh}_d{dim}_{be}",
+            name=f"reuse_t{tc}_th{thresh}_d{dim}_{cb}_{be}",
             task_count=tc,
             similarity_threshold=thresh,
             embedding_dimensions=dim,
@@ -328,10 +329,11 @@ def run_experiment_matrix(
             **cb_kwargs,
         ))
 
-        # Baseline run (no reuse)
+        # Baseline run (no reuse) — run immediately after reuse so baseline cost
+        # is available for savings comparison in the summary
         if include_baseline:
             configs.append(ExperimentConfig(
-                name=f"baseline_t{tc}_d{dim}_{be}",
+                name=f"baseline_t{tc}_d{dim}_{cb}_{be}",
                 task_count=tc,
                 similarity_threshold=1.0,
                 embedding_dimensions=dim,

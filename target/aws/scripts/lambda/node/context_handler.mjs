@@ -21,7 +21,7 @@
  *   CYLON_WASM_BINDINGS: Path to cylon_wasm.js bindings (wasm backend only)
  *   REDIS_HOST:          Redis host for context cache
  *   REDIS_PORT:          Redis port (default: 6379)
- *   DYNAMO_TABLE_NAME:   DynamoDB table (default: context-store)
+ *   DYNAMO_TABLE_NAME:   DynamoDB table name — optional, disabled if not set
  *   BEDROCK_LLM_MODEL_ID:       LLM model ID
  *   BEDROCK_EMBEDDING_MODEL_ID: Embedding model ID
  *   BEDROCK_EMBEDDING_DIMENSIONS: Embedding dimensions (256/512/1024)
@@ -32,7 +32,7 @@ import { readFileSync } from 'fs';
 import { StopWatch } from './stopwatch.mjs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { createClient } from 'redis';
+import { createClient, commandOptions } from 'redis';
 import { DynamoDBClient, PutItemCommand, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
@@ -257,35 +257,45 @@ async function embedText(text) {
 // Context store operations
 // ---------------------------------------------------------------------------
 
-const TABLE_NAME = process.env.DYNAMO_TABLE_NAME || 'context-store';
+// DynamoDB is optional — only enabled when DYNAMO_TABLE_NAME is set.
+// Redis is the primary persistence layer (always on when REDIS_HOST is available).
+const TABLE_NAME = process.env.DYNAMO_TABLE_NAME || null;
 
 async function storeContext(contextId, workflowId, taskDescription, embedding, response, costMetadata) {
     const redis = await getRedis();
-    const dynamo = getDynamo();
 
-    // DynamoDB
-    await dynamo.send(new PutItemCommand({
-        TableName: TABLE_NAME,
-        Item: {
-            context_id: { S: contextId },
-            workflow_id: { S: workflowId },
-            task_description: { S: taskDescription },
-            embedding: { B: Buffer.from(embedding.buffer) },
-            embedding_dim: { N: String(embedding.length) },
-            response: { S: response },
-            model_id: { S: costMetadata.model_id || '' },
-            cost_input_tokens: { N: String(costMetadata.input_tokens || 0) },
-            cost_output_tokens: { N: String(costMetadata.output_tokens || 0) },
-            cost_usd: { N: String(costMetadata.cost_usd || 0) },
-            created_at: { S: new Date().toISOString() },
-            reuse_count: { N: '0' },
-        },
-    }));
+    // DynamoDB — optional durable store
+    if (TABLE_NAME) {
+        const dynamo = getDynamo();
+        await dynamo.send(new PutItemCommand({
+            TableName: TABLE_NAME,
+            Item: {
+                context_id: { S: contextId },
+                workflow_id: { S: workflowId },
+                task_description: { S: taskDescription },
+                embedding: { B: Buffer.from(embedding.buffer) },
+                embedding_dim: { N: String(embedding.length) },
+                response: { S: response },
+                model_id: { S: costMetadata.model_id || '' },
+                cost_input_tokens: { N: String(costMetadata.input_tokens || 0) },
+                cost_output_tokens: { N: String(costMetadata.output_tokens || 0) },
+                cost_usd: { N: String(costMetadata.cost_usd || 0) },
+                created_at: { S: new Date().toISOString() },
+                reuse_count: { N: '0' },
+            },
+        }));
+    }
 
-    // Redis cache
+    // Redis — primary persistence + search embeddings
     const pipeline = redis.multi();
     pipeline.set(`embedding:${contextId}`, Buffer.from(embedding.buffer), { EX: 3600 });
-    pipeline.set(`context:${contextId}`, JSON.stringify({ response, ...costMetadata }), { EX: 3600 });
+    pipeline.set(`context:${contextId}`, JSON.stringify({
+        response,
+        input_tokens: costMetadata.input_tokens || 0,
+        output_tokens: costMetadata.output_tokens || 0,
+        model_id: costMetadata.model_id || '',
+        cost_usd: costMetadata.cost_usd || 0,
+    }), { EX: 3600 });
     pipeline.sAdd(`workflow:${workflowId}`, contextId);
     pipeline.expire(`workflow:${workflowId}`, 7200);
     await pipeline.exec();
@@ -297,7 +307,7 @@ async function getAllEmbeddings(workflowId) {
 
     const results = [];
     for (const contextId of contextIds) {
-        const embBytes = await redis.getBuffer(`embedding:${contextId}`);
+        const embBytes = await redis.get(commandOptions({ returnBuffers: true }), `embedding:${contextId}`);
         if (embBytes) {
             results.push({
                 contextId,
@@ -313,30 +323,46 @@ async function getContext(contextId) {
     const cached = await redis.get(`context:${contextId}`);
     if (cached) return JSON.parse(cached);
 
-    const dynamo = getDynamo();
-    const result = await dynamo.send(new GetItemCommand({
-        TableName: TABLE_NAME,
-        Key: { context_id: { S: contextId } },
-    }));
+    // DynamoDB fallback — only if configured
+    if (TABLE_NAME) {
+        const dynamo = getDynamo();
+        const result = await dynamo.send(new GetItemCommand({
+            TableName: TABLE_NAME,
+            Key: { context_id: { S: contextId } },
+        }));
+        if (!result.Item) return null;
+        return {
+            response: result.Item.response?.S || '',
+            model_id: result.Item.model_id?.S || '',
+            input_tokens: parseInt(result.Item.cost_input_tokens?.N || '0'),
+            output_tokens: parseInt(result.Item.cost_output_tokens?.N || '0'),
+            cost_usd: parseFloat(result.Item.cost_usd?.N || '0'),
+        };
+    }
 
-    if (!result.Item) return null;
-    return {
-        response: result.Item.response?.S || '',
-        model_id: result.Item.model_id?.S || '',
-        input_tokens: parseInt(result.Item.cost_input_tokens?.N || '0'),
-        output_tokens: parseInt(result.Item.cost_output_tokens?.N || '0'),
-        cost_usd: parseFloat(result.Item.cost_usd?.N || '0'),
-    };
+    return null;
 }
 
 async function incrementReuseCount(contextId) {
-    const dynamo = getDynamo();
-    await dynamo.send(new UpdateItemCommand({
-        TableName: TABLE_NAME,
-        Key: { context_id: { S: contextId } },
-        UpdateExpression: 'ADD reuse_count :inc',
-        ExpressionAttributeValues: { ':inc': { N: '1' } },
-    }));
+    // Update Redis metadata
+    const redis = await getRedis();
+    const cached = await redis.get(`context:${contextId}`);
+    if (cached) {
+        const data = JSON.parse(cached);
+        data.reuse_count = (data.reuse_count || 0) + 1;
+        await redis.set(`context:${contextId}`, JSON.stringify(data), { KEEPTTL: true });
+    }
+
+    // DynamoDB — only if configured
+    if (TABLE_NAME) {
+        const dynamo = getDynamo();
+        await dynamo.send(new UpdateItemCommand({
+            TableName: TABLE_NAME,
+            Key: { context_id: { S: contextId } },
+            UpdateExpression: 'ADD reuse_count :inc',
+            ExpressionAttributeValues: { ':inc': { N: '1' } },
+        }));
+    }
 }
 
 // ---------------------------------------------------------------------------
