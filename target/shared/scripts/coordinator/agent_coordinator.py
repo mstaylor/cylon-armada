@@ -173,7 +173,7 @@ class AgentCoordinator:
         embedding_service = EmbeddingService(config=config)
         chain_executor = ChainExecutor(config=config)
         context_manager = ContextManager(
-            dynamo_table=os.environ.get("DYNAMO_TABLE_NAME", "context-store"),
+            dynamo_table=os.environ.get("DYNAMO_TABLE_NAME"),
             dynamo_endpoint_url=dynamo_endpoint_url,
             redis_host=redis_host,
             redis_port=redis_port,

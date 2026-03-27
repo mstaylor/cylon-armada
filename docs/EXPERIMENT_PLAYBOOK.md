@@ -31,19 +31,15 @@ CYLON_PREFIX=$CYLON_PREFIX python setup.py build_ext --inplace
 cd -
 ```
 
-### Host Services (Redis + DynamoDB Local)
+### Host Services (Redis)
 
-Redis and DynamoDB Local run on the **host OS** (Mac), not inside the Parallels VM.
+Redis runs on the **host OS** (Mac), not inside the Parallels VM.
 The VM connects via the Parallels network IP. See [Cylon ENVIRONMENT_SETUP.md](../../cylon/ENVIRONMENT_SETUP.md) for details.
 
 ```bash
 # On the host OS (Mac):
-# Redis — install and run via Homebrew
 brew install redis
 redis-server
-
-# DynamoDB Local — run via Docker on the host
-docker run -p 8100:8000 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb
 ```
 
 ```bash
@@ -54,11 +50,37 @@ ip neighbor show
 # Set environment variables for the VM:
 export REDIS_HOST=10.211.55.2
 export REDIS_PORT=6379
-export DYNAMO_ENDPOINT_URL=http://10.211.55.2:8100
 ```
 
+Redis is the **primary persistence layer** (default). Context metadata JSON and
+workflow membership sets are stored in Redis alongside the search embeddings,
+enabling cross-invocation reuse within the TTL window.
+
+### Persistence Configuration
+
+The context manager has two independent persistence layers:
+
+| Layer | Default | Env var to enable | Purpose |
+|-------|---------|-------------------|---------|
+| Redis metadata | **ON** | `REDIS_HOST` / `REDIS_PORT` | Primary — cross-invocation reuse within TTL |
+| DynamoDB | **OFF** | `DYNAMO_TABLE_NAME` | Optional — durable long-term history + analytics |
+
+**Redis only (default)** — recommended for experiments:
 ```bash
-# Create DynamoDB table (from VM, pointing to host)
+export REDIS_HOST=10.211.55.2
+# DYNAMO_TABLE_NAME not set → DynamoDB disabled
+```
+
+**Redis + DynamoDB** — for durable audit trail:
+```bash
+export REDIS_HOST=10.211.55.2
+export DYNAMO_TABLE_NAME=cylon-armada-context-store
+export DYNAMO_ENDPOINT_URL=http://10.211.55.2:8100  # local dev only
+
+# Start DynamoDB Local (host OS):
+docker run -p 8100:8000 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb
+
+# Create table (from VM):
 aws dynamodb create-table \
     --table-name cylon-armada-context-store \
     --attribute-definitions \
@@ -74,6 +96,12 @@ aws dynamodb create-table \
     --endpoint-url $DYNAMO_ENDPOINT_URL
 ```
 
+**In-memory only** — no external services required (contexts lost between runs):
+```bash
+export CONTEXT_BACKEND=redis   # or cylon
+# REDIS_HOST not needed — set persist_to_redis=False in code or use --no-persist flag
+```
+
 ### 1.2 Run Tests
 
 ```bash
@@ -86,7 +114,7 @@ cd target/aws/scripts/lambda/node && npm test && cd -
 
 ### 1.3 Smoke Test
 
-Ensure `REDIS_HOST` and `DYNAMO_ENDPOINT_URL` are set (see above).
+Ensure `REDIS_HOST` is set (see above). `DYNAMO_TABLE_NAME` is optional — omit to use Redis-only persistence.
 
 ```bash
 # Redis backend (default)
@@ -393,6 +421,7 @@ print(json.dumps({
         'similarity_threshold': '0.80',
         'redis_host': '$REDIS_HOST',
         'redis_port': '6379'
+        # To enable DynamoDB: add 'dynamo_table': 'cylon-armada-context-store'
     }
 }))
 ")" --query 'output' --output text > target/shared/scripts/experiment/results/aws_hydrology.json
@@ -471,7 +500,7 @@ Create in `target/shared/scripts/experiment/analysis/`:
 | Titan V2 embeddings | ~$0.001 | $0.27 | $0.27 |
 | Claude Haiku LLM | ~$0.01 | $2.70 | $2.70 |
 | Lambda compute | ~$0.002 | $0.54 | $0.54 |
-| DynamoDB | ~$0.001 | $0.27 | $0.27 |
+| DynamoDB (optional) | ~$0.001 | $0.27 | $0.27 |
 | ElastiCache | $0.017/hr | ~4 hrs | $0.07 |
 | **Total** | | | **~$3.85** |
 
@@ -485,5 +514,6 @@ Create in `target/shared/scripts/experiment/analysis/`:
 | Lambda timeout (300s) | Large task count or slow Bedrock | Increase timeout or reduce tasks per run |
 | Redis connection refused | Lambda not in VPC with ElastiCache | Add VPC config to Lambda via Terraform |
 | `ModuleNotFoundError: pycylon` | Docker image missing pycylon | Verify Dockerfile build includes Cylon |
-| Empty search results | Context store empty | Run baseline first, check workflow_id |
+| Empty search results | Context store empty | Run baseline first, check workflow_id matches across prepare/route calls |
+| Contexts not reused across Lambda invocations | Redis persistence off | Ensure `REDIS_HOST` is set and `persist_to_redis=True` (default) |
 | Stratified sampling returns fewer tasks than requested | Deduplication on small task lists | Use `--sampling sequential` or increase task pool |
