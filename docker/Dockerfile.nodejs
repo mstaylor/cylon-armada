@@ -62,4 +62,9 @@ COPY target/aws/scripts/lambda/node/ /app/
 # Lambda handler entry point
 # ---------------------------------------------------------------------------
 
-CMD ["context_handler.handler"]
+# Each Lambda function uses the same image with a different CMD:
+#   cylon-armada-init:      CMD ["armada_init.handler"]
+#   cylon-armada-executor:  CMD ["armada_executor.handler"]
+#   cylon-armada-aggregate: CMD ["armada_aggregate.handler"]
+#   (legacy single-handler: CMD ["context_handler.handler"])
+CMD ["armada_init.handler"]

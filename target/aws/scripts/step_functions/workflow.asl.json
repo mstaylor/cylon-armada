@@ -1,29 +1,16 @@
 {
-  "Comment": "Context-Based Cost Optimization Workflow — Phase 1 PoC. Orchestrates parallel context reuse across Lambda workers using S3 script runner pattern.",
-  "StartAt": "PrepareTasks",
+  "Comment": "Context-Based Cost Optimization Workflow. Follows the cylon paper architecture: armada_init fans out per-task payloads → Map state invokes armada_executor per task → armada_aggregate collects results.",
+  "StartAt": "ArmadaInit",
   "States": {
-    "PrepareTasks": {
+    "ArmadaInit": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker",
+      "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-init",
       "Parameters": {
-        "S3_BUCKET": "cylon-armada-scripts",
-        "S3_OBJECT_NAME": "target/shared/scripts",
-        "S3_OBJECT_TYPE": "folder",
-        "SCRIPT": "/tmp/target/shared/scripts/run_action.py",
-        "ACTION": "prepare_tasks",
-        "BEDROCK_LLM_MODEL_ID.$": "$.config.llm_model_id",
-        "BEDROCK_EMBEDDING_MODEL_ID.$": "$.config.embedding_model_id",
-        "BEDROCK_EMBEDDING_DIMENSIONS.$": "$.config.embedding_dimensions",
-        "SIMILARITY_THRESHOLD.$": "$.config.similarity_threshold",
-        "REDIS_HOST.$": "$.config.redis_host",
-        "REDIS_PORT.$": "$.config.redis_port",
-        "action_payload": {
-          "workflow_id.$": "$.workflow_id",
-          "tasks.$": "$.tasks",
-          "config.$": "$.config"
-        }
+        "workflow_id.$": "$.workflow_id",
+        "tasks.$": "$.tasks",
+        "config.$": "$.config"
       },
-      "ResultPath": "$.prepare_output",
+      "ResultPath": "$.init_output",
       "Retry": [
         {
           "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
@@ -36,43 +23,14 @@
     },
     "ProcessTasks": {
       "Type": "Map",
-      "ItemsPath": "$.prepare_output.task_payloads",
-      "MaxConcurrency": 10,
-      "Parameters": {
-        "task_payload.$": "$$.Map.Item.Value",
-        "s3_config.$": "$.config"
-      },
+      "ItemsPath": "$.init_output.body",
+      "MaxConcurrency": 1000,
       "Iterator": {
         "StartAt": "RouteTask",
         "States": {
           "RouteTask": {
             "Type": "Task",
-            "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker",
-            "Parameters": {
-              "S3_BUCKET": "cylon-armada-scripts",
-              "S3_OBJECT_NAME": "target/shared/scripts",
-              "S3_OBJECT_TYPE": "folder",
-              "SCRIPT": "/tmp/target/shared/scripts/run_action.py",
-              "ACTION": "route_task",
-              "BEDROCK_LLM_MODEL_ID.$": "$.task_payload.config.llm_model_id",
-              "BEDROCK_EMBEDDING_MODEL_ID.$": "$.task_payload.config.embedding_model_id",
-              "BEDROCK_EMBEDDING_DIMENSIONS.$": "$.task_payload.config.embedding_dimensions",
-              "SIMILARITY_THRESHOLD.$": "$.task_payload.config.similarity_threshold",
-              "REDIS_HOST.$": "$.s3_config.redis_host",
-              "REDIS_PORT.$": "$.s3_config.redis_port",
-              "WORKFLOW_ID.$": "$.task_payload.workflow_id",
-              "RANK.$": "$.task_payload.rank",
-              "WORLD_SIZE.$": "$.task_payload.world_size",
-              "action_payload": {
-                "task_description.$": "$.task_payload.task_description",
-                "embedding_b64.$": "$.task_payload.embedding_b64",
-                "embedding_metadata.$": "$.task_payload.embedding_metadata",
-                "workflow_id.$": "$.task_payload.workflow_id",
-                "rank.$": "$.task_payload.rank",
-                "world_size.$": "$.task_payload.world_size",
-                "config.$": "$.task_payload.config"
-              }
-            },
+            "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-executor",
             "Retry": [
               {
                 "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
@@ -90,18 +48,11 @@
     },
     "AggregateResults": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker",
+      "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-aggregate",
       "Parameters": {
-        "S3_BUCKET": "cylon-armada-scripts",
-        "S3_OBJECT_NAME": "target/shared/scripts",
-        "S3_OBJECT_TYPE": "folder",
-        "SCRIPT": "/tmp/target/shared/scripts/run_action.py",
-        "ACTION": "aggregate_results",
-        "action_payload": {
-          "workflow_id.$": "$.prepare_output.workflow_id",
-          "task_results.$": "$.task_results",
-          "prepare_cost.$": "$.prepare_output.prepare_cost"
-        }
+        "workflow_id.$": "$.workflow_id",
+        "task_results.$": "$.task_results",
+        "prepare_cost.$": "$.init_output.prepare_cost"
       },
       "Retry": [
         {

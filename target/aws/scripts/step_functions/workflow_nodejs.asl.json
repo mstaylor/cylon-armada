@@ -1,19 +1,16 @@
 {
-  "Comment": "Context-Based Cost Optimization — Path B (Node.js + WASM SIMD128). Same 3-stage workflow as Python path but targeting the Node.js Lambda with direct action dispatch.",
-  "StartAt": "PrepareTasks",
+  "Comment": "Context-Based Cost Optimization — Path B (Node.js + WASM SIMD128). Follows the cylon paper architecture: armada_init → Map (armada_executor per task) → armada_aggregate.",
+  "StartAt": "ArmadaInit",
   "States": {
-    "PrepareTasks": {
+    "ArmadaInit": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker-node",
+      "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-init-node",
       "Parameters": {
-        "action": "prepare_tasks",
-        "action_payload": {
-          "workflow_id.$": "$.workflow_id",
-          "tasks.$": "$.tasks",
-          "config.$": "$.config"
-        }
+        "workflow_id.$": "$.workflow_id",
+        "tasks.$": "$.tasks",
+        "config.$": "$.config"
       },
-      "ResultPath": "$.prepare_output",
+      "ResultPath": "$.init_output",
       "Retry": [
         {
           "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
@@ -26,30 +23,14 @@
     },
     "ProcessTasks": {
       "Type": "Map",
-      "ItemsPath": "$.prepare_output.task_payloads",
-      "MaxConcurrency": 10,
-      "Parameters": {
-        "task_payload.$": "$$.Map.Item.Value",
-        "s3_config.$": "$.config"
-      },
+      "ItemsPath": "$.init_output.body",
+      "MaxConcurrency": 1000,
       "Iterator": {
         "StartAt": "RouteTask",
         "States": {
           "RouteTask": {
             "Type": "Task",
-            "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker-node",
-            "Parameters": {
-              "action": "route_task",
-              "action_payload": {
-                "task_description.$": "$.task_payload.task_description",
-                "embedding_b64.$": "$.task_payload.embedding_b64",
-                "embedding_metadata.$": "$.task_payload.embedding_metadata",
-                "workflow_id.$": "$.task_payload.workflow_id",
-                "rank.$": "$.task_payload.rank",
-                "world_size.$": "$.task_payload.world_size",
-                "config.$": "$.task_payload.config"
-              }
-            },
+            "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-executor-node",
             "Retry": [
               {
                 "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
@@ -67,14 +48,11 @@
     },
     "AggregateResults": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:cylon-armada-worker-node",
+      "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-aggregate-node",
       "Parameters": {
-        "action": "aggregate_results",
-        "action_payload": {
-          "workflow_id.$": "$.prepare_output.workflow_id",
-          "task_results.$": "$.task_results",
-          "prepare_cost.$": "$.prepare_output.prepare_cost"
-        }
+        "workflow_id.$": "$.workflow_id",
+        "task_results.$": "$.task_results",
+        "prepare_cost.$": "$.init_output.prepare_cost"
       },
       "Retry": [
         {

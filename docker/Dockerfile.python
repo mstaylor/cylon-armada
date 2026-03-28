@@ -89,6 +89,9 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 
 COPY target/shared/scripts/ /cylon-armada/scripts/
 COPY target/aws/scripts/lambda/python/handler.py /cylon-armada/handler.py
+COPY target/aws/scripts/lambda/python/armada_init.py /cylon-armada/armada_init.py
+COPY target/aws/scripts/lambda/python/armada_executor.py /cylon-armada/armada_executor.py
+COPY target/aws/scripts/lambda/python/armada_aggregate.py /cylon-armada/armada_aggregate.py
 COPY cpp/ /cylon-armada/cpp/
 COPY python/ /cylon-armada/python/
 
@@ -141,8 +144,14 @@ EXPOSE $EXPOSE_ENV
 
 ENV PYTHONPATH="$CYLON_PREFIX/lib:/cylon-armada/scripts:/cylon-armada/python:$PYTHONPATH"
 ENV LD_LIBRARY_PATH="$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib"
+ENV SHARED_SCRIPTS_PATH="/cylon-armada/scripts"
 
-COPY target/aws/scripts/lambda/python/handler.py /cylon-armada/lambda_entry.py
+WORKDIR /cylon-armada
 
 ENTRYPOINT [ "/cylon/target/aws/scripts/lambda/runCyloninLambda.sh" ]
-CMD [ "python", "-m", "awslambdaric", "lambda_entry.handler" ]
+
+# Each Lambda function uses the same image with a different CMD:
+#   cylon-armada-init:      CMD ["python", "-m", "awslambdaric", "armada_init.handler"]
+#   cylon-armada-executor:  CMD ["python", "-m", "awslambdaric", "armada_executor.handler"]
+#   cylon-armada-aggregate: CMD ["python", "-m", "awslambdaric", "armada_aggregate.handler/"]
+CMD [ "python", "-m", "awslambdaric", "armada_init.handler" ]
