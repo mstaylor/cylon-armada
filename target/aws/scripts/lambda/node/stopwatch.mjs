@@ -158,16 +158,45 @@ export const StopWatch = {
         const csvPath = `${outputDir}/${name}_stopwatch.csv`;
         this.benchmark({ tag: tag || name, filename: csvPath });
 
-        const jsonPath = `${outputDir}/${name}_metrics.json`;
-        writeFileSync(jsonPath, JSON.stringify(this.toDict(name), null, 2));
+        // Summary CSV — data-only, compatible with results pipeline aggregator
+        const summaryPath = `${outputDir}/${name}_summary.csv`;
+        this._writeSummaryCsv(name, summaryPath);
 
-        const result = { csv: csvPath, json: jsonPath };
+        const result = { csv: csvPath, summary: summaryPath };
 
         if (s3Bucket) {
-            result.s3Keys = await this._uploadToS3(s3Bucket, s3Prefix, name, [csvPath, jsonPath]);
+            result.s3Keys = await this._uploadToS3(s3Bucket, s3Prefix, name, [csvPath, summaryPath]);
         }
 
         return result;
+    },
+
+    /**
+     * Write a data-only summary CSV (matches Python ExperimentBenchmark format).
+     *
+     * Columns: experiment_name, phase timings (ms), and all recorded metrics.
+     * One header row + one data row.
+     */
+    _writeSummaryCsv(experimentName, filepath) {
+        const row = { experiment_name: experimentName };
+
+        // Timing columns (milliseconds)
+        for (const [name, t] of Object.entries(timers)) {
+            const phase = experimentName ? name.replace(`${experimentName}_`, '') : name;
+            row[`${phase}_ms`] = parseFloat((t.elapsed * 1000).toFixed(4));
+        }
+
+        // Metric columns
+        Object.assign(row, metrics);
+
+        const keys = Object.keys(row);
+        const header = keys.join(',');
+        const values = keys.map(k => {
+            const v = row[k];
+            return typeof v === 'string' ? `${v}` : v;
+        }).join(',');
+
+        writeFileSync(filepath, header + '\n' + values + '\n');
     },
 
     async _uploadToS3(bucket, prefix, name, filePaths) {

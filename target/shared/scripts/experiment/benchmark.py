@@ -91,16 +91,15 @@ class ExperimentBenchmark:
     def save(self, output_dir: str) -> dict:
         """Save results locally. Optionally upload to S3.
 
-        Produces three files:
+        Produces two files:
         - {name}_stopwatch.csv  — cloudmesh benchmark (system info + timings)
         - {name}_summary.csv    — data-only summary (like scaling.py output)
-        - {name}_metrics.json   — full metrics + timings as JSON
 
         Args:
             output_dir: Local directory for output files.
 
         Returns:
-            dict with 'stopwatch_csv', 'summary_csv', 'json',
+            dict with 'stopwatch_csv', 'summary_csv',
             and optionally 's3_keys' paths.
         """
         os.makedirs(output_dir, exist_ok=True)
@@ -116,19 +115,12 @@ class ExperimentBenchmark:
         self._write_summary_csv(summary_path)
         paths["summary_csv"] = summary_path
 
-        # Metrics JSON
-        json_path = os.path.join(output_dir, f"{self.name}_metrics.json")
-        with open(json_path, "w") as f:
-            json.dump(self.to_dict(), f, indent=2, default=str)
-        paths["json"] = json_path
-
-        logger.info("Benchmark saved: %s, %s, %s",
-                     stopwatch_path, summary_path, json_path)
+        logger.info("Benchmark saved: %s, %s", stopwatch_path, summary_path)
 
         # Optional S3 upload
         if self.s3_bucket:
             paths["s3_keys"] = self._upload_to_s3(
-                stopwatch_path, summary_path, json_path)
+                stopwatch_path, summary_path)
 
         return paths
 

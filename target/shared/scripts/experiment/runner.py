@@ -279,6 +279,7 @@ def run_experiment_matrix(
     seed: int = 42,
     s3_bucket: Optional[str] = None,
     s3_prefix: Optional[str] = None,
+    runs: int = 1,
 ) -> list[ExperimentResult]:
     """Run a matrix of experiments and save results.
 
@@ -292,6 +293,7 @@ def run_experiment_matrix(
         tasks: Custom task list. If None, uses DEFAULT_TASKS.
         sampling_strategy: How to select tasks: "stratified" (default), "sequential", "random".
         seed: Random seed for reproducible sampling (default: 42).
+        runs: Number of runs per configuration for std dev (default: 1).
 
     Returns:
         List of ExperimentResult objects
@@ -307,7 +309,6 @@ def run_experiment_matrix(
 
     os.makedirs(output_dir, exist_ok=True)
     results = []
-    run_id = str(uuid.uuid4())[:8]
 
     # context_backend kwargs — only set if explicitly provided (otherwise ExperimentConfig
     # reads from CONTEXT_BACKEND env var)
@@ -344,44 +345,60 @@ def run_experiment_matrix(
                 **cb_kwargs,
             ))
 
-    logger.info("Running %d experiments (run_id=%s)", len(configs), run_id)
+    total_experiments = len(configs) * runs
+    logger.info("Running %d configs x %d runs = %d total experiments", len(configs), runs, total_experiments)
 
-    for i, config in enumerate(configs):
-        logger.info("Experiment %d/%d: %s", i + 1, len(configs), config.name)
-        try:
-            ExperimentBenchmark.clear()
-            result = run_experiment(
-                config, tasks=tasks,
-                s3_bucket=s3_bucket, s3_prefix=s3_prefix,
-                output_dir=output_dir,
-            )
-            results.append(result)
+    for run_num in range(1, runs + 1):
+        run_id = str(uuid.uuid4())[:8]
+        # Each run writes to its own subdirectory so the aggregator
+        # finds multiple summary CSVs per experiment name
+        run_output_dir = os.path.join(output_dir, f"run_{run_num}") if runs > 1 else output_dir
+        os.makedirs(run_output_dir, exist_ok=True)
 
-            # Write individual result
-            result_path = os.path.join(output_dir, f"{run_id}_{config.name}.json")
-            with open(result_path, "w") as f:
-                json.dump(asdict(result), f, indent=2, default=str)
+        if runs > 1:
+            logger.info("=== Run %d/%d (run_id=%s) ===", run_num, runs, run_id)
 
-        except Exception as e:
-            logger.error("Experiment %s failed: %s", config.name, e)
-            results.append(ExperimentResult(
-                config=asdict(config),
-                workflow_result={"error": str(e)},
-                wall_clock_ms=0,
-            ))
+        for i, config in enumerate(configs):
+            exp_num = (run_num - 1) * len(configs) + i + 1
+            logger.info("Experiment %d/%d: %s (run %d/%d)",
+                         exp_num, total_experiments, config.name, run_num, runs)
+            try:
+                ExperimentBenchmark.clear()
+                result = run_experiment(
+                    config, tasks=tasks,
+                    s3_bucket=s3_bucket, s3_prefix=s3_prefix,
+                    output_dir=run_output_dir,
+                )
+                results.append(result)
 
-    # Write summary
-    summary_path = os.path.join(output_dir, f"{run_id}_summary.json")
-    summary = {
-        "run_id": run_id,
-        "total_experiments": len(results),
-        "successful": sum(1 for r in results if "error" not in r.workflow_result),
-        "results": [asdict(r) for r in results],
-    }
-    with open(summary_path, "w") as f:
-        json.dump(summary, f, indent=2, default=str)
+                # Write individual result
+                result_path = os.path.join(run_output_dir, f"{run_id}_{config.name}.json")
+                with open(result_path, "w") as f:
+                    json.dump(asdict(result), f, indent=2, default=str)
 
-    logger.info("All experiments complete. Summary: %s", summary_path)
+            except Exception as e:
+                logger.error("Experiment %s failed: %s", config.name, e)
+                results.append(ExperimentResult(
+                    config=asdict(config),
+                    workflow_result={"error": str(e)},
+                    wall_clock_ms=0,
+                ))
+
+        # Write per-run summary
+        run_results = results[-(len(configs)):]
+        summary_path = os.path.join(run_output_dir, f"{run_id}_summary.json")
+        summary = {
+            "run_id": run_id,
+            "run_number": run_num,
+            "total_runs": runs,
+            "total_experiments": len(run_results),
+            "successful": sum(1 for r in run_results if "error" not in r.workflow_result),
+            "results": [asdict(r) for r in run_results],
+        }
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2, default=str)
+
+    logger.info("All experiments complete. %d runs x %d configs = %d total", runs, len(configs), total_experiments)
     return results
 
 
@@ -415,6 +432,8 @@ if __name__ == "__main__":
                         help="S3 bucket for result upload (omit for local-only)")
     parser.add_argument("--s3-prefix", type=str, default="experiments",
                         help="S3 key prefix for results (default: experiments)")
+    parser.add_argument("--runs", type=int, default=1,
+                        help="Number of runs per config for std dev (default: 1)")
 
     # cosmic-ai: generate tasks from real astronomical inference
     cosmic = parser.add_argument_group("cosmic-ai", "Generate tasks from SDSS inference")
@@ -470,4 +489,5 @@ if __name__ == "__main__":
         seed=args.seed,
         s3_bucket=args.s3_bucket,
         s3_prefix=args.s3_prefix,
+        runs=args.runs,
     )
