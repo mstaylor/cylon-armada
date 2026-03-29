@@ -21,15 +21,21 @@ locals {
   }
 
   lambda_env = {
-    BEDROCK_LLM_MODEL_ID       = var.bedrock_llm_model_id
-    BEDROCK_EMBEDDING_MODEL_ID = var.bedrock_embedding_model_id
+    BEDROCK_LLM_MODEL_ID        = var.bedrock_llm_model_id
+    BEDROCK_EMBEDDING_MODEL_ID   = var.bedrock_embedding_model_id
     BEDROCK_EMBEDDING_DIMENSIONS = tostring(var.bedrock_embedding_dimensions)
-    SIMILARITY_THRESHOLD       = tostring(var.similarity_threshold)
-    CONTEXT_BACKEND            = var.context_backend
-    REDIS_HOST                 = var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address : var.redis_host
-    REDIS_PORT                 = tostring(var.redis_port)
-    DYNAMO_TABLE_NAME          = aws_dynamodb_table.context_store.name
-    AWS_DEFAULT_REGION         = var.aws_region
+    SIMILARITY_THRESHOLD         = tostring(var.similarity_threshold)
+    CONTEXT_BACKEND              = var.context_backend
+    REDIS_HOST                   = var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address : var.redis_host
+    REDIS_PORT                   = tostring(var.redis_port)
+    DYNAMO_TABLE_NAME            = aws_dynamodb_table.context_store.name
+    AWS_DEFAULT_REGION           = var.aws_region
+  }
+
+  # Template variables for Step Functions ASL files
+  asl_vars = {
+    AWS_REGION = var.aws_region
+    ACCOUNT_ID = var.account_id
   }
 }
 
@@ -217,16 +223,25 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 }
 
 # ---------------------------------------------------------------------------
-# Lambda Functions
+# Lambda Functions — Python (dedicated per cylon architecture)
+#
+# Same image, different CMD override per function:
+#   armada_init      — embeds tasks, builds per-task payloads
+#   armada_executor  — routes a single task (similarity search + LLM)
+#   armada_aggregate — collects Map results, computes cost summary
 # ---------------------------------------------------------------------------
 
-resource "aws_lambda_function" "python_worker" {
-  function_name = "${var.project_name}-worker"
+resource "aws_lambda_function" "python_init" {
+  function_name = "${var.project_name}-init"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
   image_uri     = var.python_image_uri
   memory_size   = var.python_memory_mb
   timeout       = var.lambda_timeout
+
+  image_config {
+    command = ["armada_init.handler"]
+  }
 
   environment {
     variables = local.lambda_env
@@ -243,13 +258,129 @@ resource "aws_lambda_function" "python_worker" {
   tags = local.common_tags
 }
 
-resource "aws_lambda_function" "nodejs_worker" {
-  function_name = "${var.project_name}-worker-node"
+resource "aws_lambda_function" "python_executor" {
+  function_name = "${var.project_name}-executor"
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = var.python_image_uri
+  memory_size   = var.python_memory_mb
+  timeout       = var.lambda_timeout
+
+  image_config {
+    command = ["armada_executor.handler"]
+  }
+
+  environment {
+    variables = local.lambda_env
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_function" "python_aggregate" {
+  function_name = "${var.project_name}-aggregate"
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = var.python_image_uri
+  memory_size   = var.python_memory_mb
+  timeout       = var.lambda_timeout
+
+  image_config {
+    command = ["armada_aggregate.handler"]
+  }
+
+  environment {
+    variables = local.lambda_env
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# Lambda Functions — Node.js (dedicated per cylon architecture)
+# ---------------------------------------------------------------------------
+
+resource "aws_lambda_function" "nodejs_init" {
+  function_name = "${var.project_name}-init-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
   image_uri     = var.nodejs_image_uri
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
+
+  image_config {
+    command = ["armada_init.handler"]
+  }
+
+  environment {
+    variables = local.lambda_env
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_function" "nodejs_executor" {
+  function_name = "${var.project_name}-executor-node"
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = var.nodejs_image_uri
+  memory_size   = var.nodejs_memory_mb
+  timeout       = var.lambda_timeout
+
+  image_config {
+    command = ["armada_executor.handler"]
+  }
+
+  environment {
+    variables = local.lambda_env
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_function" "nodejs_aggregate" {
+  function_name = "${var.project_name}-aggregate-node"
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = var.nodejs_image_uri
+  memory_size   = var.nodejs_memory_mb
+  timeout       = var.lambda_timeout
+
+  image_config {
+    command = ["armada_aggregate.handler"]
+  }
 
   environment {
     variables = local.lambda_env
@@ -299,8 +430,12 @@ resource "aws_iam_role_policy" "step_functions_policy" {
         "lambda:InvokeFunction",
       ]
       Resource = [
-        aws_lambda_function.python_worker.arn,
-        aws_lambda_function.nodejs_worker.arn,
+        aws_lambda_function.python_init.arn,
+        aws_lambda_function.python_executor.arn,
+        aws_lambda_function.python_aggregate.arn,
+        aws_lambda_function.nodejs_init.arn,
+        aws_lambda_function.nodejs_executor.arn,
+        aws_lambda_function.nodejs_aggregate.arn,
       ]
     }]
   })
@@ -315,9 +450,7 @@ resource "aws_sfn_state_machine" "python_workflow" {
   role_arn = aws_iam_role.step_functions_execution.arn
   type     = "EXPRESS"
 
-  definition = templatefile("${path.module}/../step_functions/workflow.asl.json", {
-    ACCOUNT_ID = var.account_id
-  })
+  definition = templatefile("${path.module}/../step_functions/workflow.asl.json", local.asl_vars)
 
   tags = local.common_tags
 }
@@ -327,9 +460,7 @@ resource "aws_sfn_state_machine" "nodejs_workflow" {
   role_arn = aws_iam_role.step_functions_execution.arn
   type     = "EXPRESS"
 
-  definition = templatefile("${path.module}/../step_functions/workflow_nodejs.asl.json", {
-    ACCOUNT_ID = var.account_id
-  })
+  definition = templatefile("${path.module}/../step_functions/workflow_nodejs.asl.json", local.asl_vars)
 
   tags = local.common_tags
 }
@@ -339,9 +470,7 @@ resource "aws_sfn_state_machine" "model_parallel_workflow" {
   role_arn = aws_iam_role.step_functions_execution.arn
   type     = "EXPRESS"
 
-  definition = templatefile("${path.module}/../step_functions/workflow_model_parallel.asl.json", {
-    ACCOUNT_ID = var.account_id
-  })
+  definition = templatefile("${path.module}/../step_functions/workflow_model_parallel.asl.json", local.asl_vars)
 
   tags = local.common_tags
 }
