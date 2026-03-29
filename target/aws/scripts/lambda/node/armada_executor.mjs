@@ -52,10 +52,10 @@ export async function handler(event) {
     const queryEmbedding = b64ToNdArray(event.embedding_b64);
 
     // Similarity search
-    StopWatch.start('search');
+    StopWatch.start('search_latency');
     const storedEmbeddings = await getAllEmbeddings(workflowId);
     const matches = cosineSimilaritySearch(wasm, queryEmbedding, storedEmbeddings, threshold);
-    StopWatch.stop('search');
+    StopWatch.stop('search_latency');
 
     if (matches.length > 0) {
         // Cache hit
@@ -82,7 +82,7 @@ export async function handler(event) {
             cost_usd:              0,
             avoided_cost_usd:      avoidedCost,
             total_latency_ms:      StopWatch.getMs('route_total'),
-            search_latency_ms:     StopWatch.getMs('search'),
+            search_latency_ms:     StopWatch.getMs('search_latency'),
             avoided_input_tokens:  avoidedInput,
             avoided_output_tokens: avoidedOutput,
             cost_summary:          costTracker.getSummary(),
@@ -93,13 +93,13 @@ export async function handler(event) {
     }
 
     // Cache miss — invoke LLM
-    StopWatch.start('llm_call');
+    StopWatch.start('llm_latency');
     const llmResult = await invokeLLM(taskDescription);
-    StopWatch.stop('llm_call');
+    StopWatch.stop('llm_latency');
     const callCost = costTracker.recordLlmCall(llmResult.model_id, llmResult.input_tokens, llmResult.output_tokens);
 
     // Store new context
-    StopWatch.start('store_context');
+    StopWatch.start('store_latency');
     const contextId = crypto.randomUUID();
     await storeContext(contextId, workflowId, taskDescription, queryEmbedding, llmResult.response, {
         model_id:      llmResult.model_id,
@@ -107,7 +107,7 @@ export async function handler(event) {
         output_tokens: llmResult.output_tokens,
         cost_usd:      callCost,
     });
-    StopWatch.stop('store_context');
+    StopWatch.stop('store_latency');
     StopWatch.stop('route_total');
 
     return {
@@ -119,9 +119,9 @@ export async function handler(event) {
         output_tokens:     llmResult.output_tokens,
         cost_usd:          callCost,
         total_latency_ms:  StopWatch.getMs('route_total'),
-        search_latency_ms: StopWatch.getMs('search'),
+        search_latency_ms: StopWatch.getMs('search_latency'),
         llm_latency_ms:    llmResult.latency_ms,
-        store_latency_ms:  StopWatch.getMs('store_context'),
+        store_latency_ms:  StopWatch.getMs('store_latency'),
         model_id:          llmResult.model_id,
         cost_summary:      costTracker.getSummary(),
         task_description:  taskDescription,
