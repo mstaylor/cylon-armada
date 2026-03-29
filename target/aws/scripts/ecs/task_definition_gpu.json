@@ -1,0 +1,43 @@
+{
+  "family": "cylon-armada-gpu",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["EC2"],
+  "cpu": "4096",
+  "memory": "15360",
+  "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/cylon-armada-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/cylon-armada-lambda-role",
+  "containerDefinitions": [
+    {
+      "name": "armada",
+      "image": "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/cylon-armada-gpu:latest",
+      "essential": true,
+      "command": ["python", "-m", "awslambdaric", "armada_executor.handler"],
+      "resourceRequirements": [
+        {
+          "type": "GPU",
+          "value": "1"
+        }
+      ],
+      "environment": [
+        { "name": "REDIS_HOST", "value": "${REDIS_HOST}" },
+        { "name": "REDIS_PORT", "value": "6379" },
+        { "name": "CONTEXT_BACKEND", "value": "cylon" },
+        { "name": "BEDROCK_LLM_MODEL_ID", "value": "amazon.nova-lite-v1:0" },
+        { "name": "BEDROCK_EMBEDDING_MODEL_ID", "value": "amazon.titan-embed-text-v2:0" },
+        { "name": "BEDROCK_EMBEDDING_DIMENSIONS", "value": "256" },
+        { "name": "SIMILARITY_THRESHOLD", "value": "0.80" },
+        { "name": "AWS_DEFAULT_REGION", "value": "${AWS_REGION}" },
+        { "name": "SHARED_SCRIPTS_PATH", "value": "/cylon-armada/scripts" },
+        { "name": "NVIDIA_VISIBLE_DEVICES", "value": "all" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cylon-armada-gpu",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "gpu"
+        }
+      }
+    }
+  ]
+}

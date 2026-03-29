@@ -147,7 +147,7 @@ python target/shared/scripts/experiment/runner.py \
 ```
 
 Checklist:
-- [ ] Result JSON files created (`*_summary.csv`, `*_stopwatch.csv`, `*_metrics.json`)
+- [ ] Result files created (`*_summary.csv`, `*_stopwatch.csv`)
 - [ ] `savings_pct` > 0 for reuse runs
 - [ ] `savings_pct` = 0 for baseline runs
 - [ ] Stratified sampling selected tasks from different categories
@@ -236,21 +236,37 @@ node run_experiment.mjs \
 
 ### Output Files
 
-Each experiment produces three files (matching Cylon's scaling.py pattern):
+Each experiment produces two files (matching Cylon's scaling.py pattern):
 
 | File | Content | Used By |
 |------|---------|---------|
 | `*_stopwatch.csv` | cloudmesh benchmark (system info + timings) | Full audit trail |
 | `*_summary.csv` | Data-only CSV (timings + metrics, no machine info) | Results pipeline aggregator |
-| `*_metrics.json` | All timings + metrics as JSON | Quick inspection, Jupyter notebooks |
 
-Both Python and Node.js produce identical CSV formats for cross-path comparison.
+Both Python and Node.js produce identical CSV column names for cross-path comparison.
+
+### Multiple Runs (Standard Deviation)
+
+Use `--runs N` to repeat each configuration N times. Each run writes to a
+separate subdirectory (`run_1/`, `run_2/`, ...). The results pipeline
+aggregator computes mean and std dev across runs automatically.
+
+```bash
+# 3 runs per config for std dev
+python target/shared/scripts/experiment/runner.py \
+    --context-backend redis \
+    --tasks 4 8 --thresholds 0.8 --dimensions 256 \
+    --runs 3 \
+    --output target/shared/scripts/experiment/results/multi_run
+```
 
 ---
 
 ## Stage 2: AWS Deployment
 
 ### 2.1 Build and Push Docker Images
+
+One image per runtime — each Lambda function uses a different CMD override.
 
 ```bash
 aws ecr get-login-password --region us-east-1 | \
@@ -265,9 +281,16 @@ docker push $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-python:late
 docker build -t cylon-armada-nodejs -f docker/Dockerfile.nodejs .
 docker tag cylon-armada-nodejs $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-nodejs:latest
 docker push $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-nodejs:latest
+
+# Docker Hub (for Rivanna / Singularity)
+docker tag cylon-armada-python docker.io/$DOCKER_USER/cylon-armada-python:latest
+docker push docker.io/$DOCKER_USER/cylon-armada-python:latest
 ```
 
 ### 2.2 Deploy Infrastructure
+
+Terraform creates 6 dedicated Lambda functions (3 per runtime), 3 Step Functions
+state machines, ECR repos, S3 bucket, DynamoDB table, and optional ElastiCache.
 
 ```bash
 cd target/aws/scripts/terraform
@@ -275,33 +298,38 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars with your values
 
 terraform init
-terraform plan
+terraform plan    # validate without deploying
 terraform apply
 
 terraform output -json > ../../deployment_outputs.json
 ```
 
-### 2.3 Upload Scripts to S3
+#### Lambda Architecture (per cylon paper pattern)
+
+Each runtime deploys 3 Lambda functions from the same Docker image:
+
+| Function | Python CMD | Node.js CMD | Role |
+|----------|-----------|-------------|------|
+| `cylon-armada-init` | `armada_init.handler` | `armada_init.handler` | Embed tasks, build Map payloads |
+| `cylon-armada-executor` | `armada_executor.handler` | `armada_executor.handler` | Route single task (similarity + LLM) |
+| `cylon-armada-aggregate` | `armada_aggregate.handler` | `armada_aggregate.handler` | Collect results, compute cost summary |
+
+The Step Functions state machine flows: `ArmadaInit` → `ProcessTasks` (Map, MaxConcurrency=1000) → `AggregateResults`.
+
+### 2.3 Verify Deployment
 
 ```bash
-aws s3 sync target/shared/scripts/ s3://cylon-armada-scripts/target/shared/scripts/ \
-    --exclude "*.pyc" --exclude "__pycache__/*" --exclude "*.so"
-```
-
-### 2.4 Verify Deployment
-
-```bash
-# Test Python Lambda
+# Test Python init Lambda
 aws lambda invoke \
-    --function-name cylon-armada-worker \
-    --payload '{"S3_BUCKET":"cylon-armada-scripts","S3_OBJECT_NAME":"target/shared/scripts","S3_OBJECT_TYPE":"folder","SCRIPT":"/tmp/target/shared/scripts/run_action.py","ACTION":"prepare_tasks","action_payload":{"workflow_id":"test","tasks":["Hello world"],"config":{}}}' \
-    /tmp/lambda_test.json && cat /tmp/lambda_test.json
+    --function-name cylon-armada-init \
+    --payload '{"workflow_id":"test","tasks":["Hello world"],"config":{}}' \
+    /tmp/init_test.json && cat /tmp/init_test.json
 
-# Test Node.js Lambda
+# Test Node.js init Lambda
 aws lambda invoke \
-    --function-name cylon-armada-worker-node \
-    --payload '{"action":"simd_benchmark","action_payload":{"dim":256,"n":100,"iterations":10}}' \
-    /tmp/node_test.json && cat /tmp/node_test.json
+    --function-name cylon-armada-init-node \
+    --payload '{"workflow_id":"test","tasks":["Hello world"],"config":{}}' \
+    /tmp/init_node_test.json && cat /tmp/init_node_test.json
 ```
 
 ---
@@ -391,10 +419,16 @@ python target/shared/scripts/experiment/runner.py \
 
 ### 3.4 Run on AWS (Step Functions)
 
+The Step Functions workflow follows the cylon paper architecture:
+`ArmadaInit` (embed tasks) → `ProcessTasks` (Map: route each task) → `AggregateResults`.
+
+Infrastructure config (Redis, DynamoDB, Bedrock models) is set via Lambda
+environment variables — only the workflow payload (tasks + thresholds) is
+passed through Step Functions.
+
 ```bash
 PYTHON_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw python_workflow_arn)
 NODEJS_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw nodejs_workflow_arn)
-REDIS_HOST=$(terraform -chdir=target/aws/scripts/terraform output -raw redis_endpoint)
 
 # Run a scenario via Step Functions (Python path)
 aws stepfunctions start-sync-execution \
@@ -406,16 +440,27 @@ print(json.dumps({
     'workflow_id': 'exp-hydrology-th08-d256',
     'tasks': tasks,
     'config': {
-        'llm_model_id': 'anthropic.claude-3-haiku-20240307-v1:0',
-        'embedding_model_id': 'amazon.titan-embed-text-v2:0',
-        'embedding_dimensions': '256',
         'similarity_threshold': '0.80',
-        'redis_host': '$REDIS_HOST',
-        'redis_port': '6379'
-        # To enable DynamoDB: add 'dynamo_table': 'cylon-armada-context-store'
+        'embedding_dimensions': '256'
     }
 }))
 ")" --query 'output' --output text > target/shared/scripts/experiment/results/aws_hydrology.json
+
+# Node.js path
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $NODEJS_SFN \
+    --input "$(python -c "
+import json
+tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:16]
+print(json.dumps({
+    'workflow_id': 'exp-hydrology-node-th08',
+    'tasks': tasks,
+    'config': {
+        'similarity_threshold': '0.80',
+        'embedding_dimensions': '256'
+    }
+}))
+")" --query 'output' --output text > target/shared/scripts/experiment/results/aws_hydrology_node.json
 ```
 
 ### 3.5 Per-Scenario Checklist
@@ -433,67 +478,190 @@ For each scenario:
 
 ## Stage 4: Results Analysis
 
-### 4.1 Collect Results
+### 4.1 Results Pipeline
+
+The results pipeline follows the cylon paper pattern: download → aggregate → charts → notebook.
+It parses `_summary.csv` files, groups by experiment name, computes cross-run mean and
+standard deviation (N-1), and generates publication-quality charts.
 
 ```bash
-python -c "
-import json, glob
-results = []
-for f in sorted(glob.glob('target/shared/scripts/experiment/results/*_summary.json')):
-    results.append(json.load(open(f)))
-json.dump(results, open('target/shared/scripts/experiment/results/all_summaries.json', 'w'), indent=2)
-print(f'Collected {len(results)} experiment summaries')
-"
+cd target/shared/scripts
+
+# Full pipeline from local results
+python -m results.pipeline \
+    --local-dir experiment/results/ \
+    --output-dir experiment/output/ \
+    --chart-format svg
+
+# Individual steps
+python -m results.pipeline --local-dir experiment/results/ --step aggregate
+python -m results.pipeline --local-dir experiment/results/ --step charts
+python -m results.pipeline --local-dir experiment/results/ --step notebook
+
+# Download from S3 first (AWS experiments)
+python -m results.pipeline \
+    --config configs/experiment_config.yaml \
+    --step download --step aggregate --step charts
 ```
+
+#### Pipeline outputs
+
+| File | Content |
+|------|---------|
+| `aggregated_results.csv` | One row per config: `{metric}_mean`, `{metric}_std` |
+| `cost_savings.svg` | Reuse vs. baseline cost bar chart |
+| `reuse_rate.svg` | Reuse rate by threshold and context backend |
+| `latency_breakdown.svg` | Stacked bar: search vs. LLM latency |
+| `cost_scaling.svg` | Cost vs. task count per platform |
+| `infrastructure_comparison.svg` | Cost and latency across platforms |
+| `threshold_sensitivity.svg` | Reuse rate and savings vs. threshold |
+| `simd_comparison.svg` | Search latency by SIMD backend |
+| `dimension_impact.svg` | Search latency and reuse vs. embedding dimensions |
+| `context_reuse_results.ipynb` | Interactive Jupyter notebook with all charts |
 
 ### 4.2 Key Metrics
 
-| Metric | JSON Path | Unit |
+| Metric | CSV Column | Unit |
 |--------|-----------|------|
-| Total cost | `cost_summary.total_cost` | USD |
-| Baseline cost | `cost_summary.baseline_cost` | USD |
-| Savings % | `cost_summary.savings_pct` | % |
-| Reuse rate | `reuse_stats.reuse_rate` | % |
-| Cache hits | `reuse_stats.cache_hits` | count |
-| LLM calls | `reuse_stats.llm_calls` | count |
-| Avg latency | `latency.avg_per_task_ms` | ms |
-| Wall clock | `wall_clock_ms` | ms |
+| Total cost | `total_cost_mean` / `_std` | USD |
+| Baseline cost | `baseline_cost_mean` / `_std` | USD |
+| Savings % | `savings_pct_mean` / `_std` | % |
+| Reuse rate | `reuse_rate_mean` / `_std` | % |
+| Cache hits | `cache_hits_mean` / `_std` | count |
+| LLM calls | `llm_calls_mean` / `_std` | count |
+| Total latency | `total_ms_mean` / `_std` | seconds |
+| Search latency | `search_latency_ms_mean` / `_std` | seconds |
+| LLM latency | `llm_latency_ms_mean` / `_std` | seconds |
 
-### 4.3 Visualizations (Jupyter Notebooks)
-
-Create in `target/shared/scripts/experiment/analysis/`:
-
-1. **Cost reduction curves** — savings % vs similarity threshold, one line per dimension
-2. **Reuse rate by domain** — bar chart: astronomy, hydrology, epidemiology, seismology
-3. **Latency distributions** — box plots for Path A1 vs A2 vs B
-4. **Path comparison** — scatter: cost vs latency for all 3 paths
-5. **Dimension sweep** — reuse quality vs embedding dimension at fixed threshold
-6. **Scaling** — workflow time vs task count (4, 8, 16, 32, 48)
-7. **Cross-domain isolation** — heatmap of similarity scores between domains
-8. **Cost breakdown** — stacked bar: embedding + LLM + avoided cost per scenario
-
-### 4.4 Success Criteria Validation
+### 4.3 Success Criteria Validation
 
 | Metric | Target | Check |
 |--------|--------|-------|
-| Cost reduction | 60-80% | `savings_pct` across all scenarios |
+| Cost reduction | 60-80% | `savings_pct_mean` across all scenarios |
 | Reuse quality | >0.80 ROUGE-L | Compare reused vs baseline responses |
-| Search latency | <20ms / 1000 contexts | Latency from results |
+| Search latency | <20ms / 1000 contexts | `search_latency_ms_mean` |
 | SIMD speedup | >2x vs numpy | Path A1/A2 vs NUMPY comparison |
 | All 5 scenarios | Complete | All result files present |
+| Statistical rigor | 3+ runs per config | `num_runs` ≥ 3 in aggregated CSV |
 
 ---
 
 ## Cost Estimation
 
-| Component | Per Run | × 270 Runs | Total |
-|-----------|---------|-----------|-------|
-| Titan V2 embeddings | ~$0.001 | $0.27 | $0.27 |
-| Claude Haiku LLM | ~$0.01 | $2.70 | $2.70 |
-| Lambda compute | ~$0.002 | $0.54 | $0.54 |
-| DynamoDB (optional) | ~$0.001 | $0.27 | $0.27 |
-| ElastiCache | $0.017/hr | ~4 hrs | $0.07 |
-| **Total** | | | **~$3.85** |
+With 3 runs per config for standard deviation:
+
+| Component | Per Run | × 270 Configs × 3 Runs | Total |
+|-----------|---------|------------------------|-------|
+| Titan V2 embeddings | ~$0.001 | $0.81 | $0.81 |
+| Nova Lite LLM | ~$0.01 | $8.10 | $8.10 |
+| Lambda compute | ~$0.002 | $1.62 | $1.62 |
+| DynamoDB (optional) | ~$0.001 | $0.81 | $0.81 |
+| ElastiCache | $0.017/hr | ~12 hrs | $0.20 |
+| **Total (Lambda only)** | | | **~$11.54** |
+
+Additional infrastructure costs (per experiment batch):
+
+| Infrastructure | Instance | Est. Cost |
+|----------------|----------|-----------|
+| ECS Fargate | 0.25 vCPU / 512MB | ~$0.01/run |
+| ECS EC2 (GPU) | g4dn.xlarge (T4) | ~$0.53/hr |
+| Rivanna HPC | GPU partition (A100) | Allocation-based |
+
+---
+
+## Stage 5: Multi-Infrastructure Experiments
+
+The same container image runs across all infrastructure targets — only the
+orchestration layer changes.
+
+### Infrastructure Overview
+
+| Platform | Orchestration | Container Source | GPU |
+|----------|--------------|------------------|-----|
+| AWS Lambda | Step Functions Map | ECR | No |
+| AWS Fargate | ECS Task / Step Functions `ecs:RunTask` | ECR | No |
+| AWS ECS EC2 | ECS Task on GPU instance (g4dn.xlarge) | ECR | NVIDIA T4 |
+| Rivanna HPC | SLURM job array | Docker Hub → Singularity | NVIDIA A100/V100 |
+
+### 5.1 ECS Fargate Deployment
+
+Fargate uses the same Python/Node.js image from ECR — no GPU, serverless compute.
+
+```bash
+# Register task definition
+aws ecs register-task-definition \
+    --cli-input-json file://target/aws/scripts/ecs/task_definition_fargate.json
+
+# Run a task
+aws ecs run-task \
+    --cluster cylon-armada \
+    --task-definition cylon-armada-fargate \
+    --launch-type FARGATE \
+    --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_ID],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
+    --overrides '{"containerOverrides":[{"name":"armada","command":["armada_executor.handler"],"environment":[{"name":"WORKFLOW_ID","value":"exp-fargate-001"}]}]}'
+```
+
+### 5.2 ECS EC2 GPU Deployment
+
+Uses `Dockerfile.gpu` with CUDA runtime for GPU-accelerated Cylon SIMD.
+Deploy on `g4dn.xlarge` (NVIDIA T4, 16GB VRAM) or `g5.xlarge` (NVIDIA A10G, 24GB).
+
+```bash
+# Build GPU image
+docker build -t cylon-armada-gpu -f docker/Dockerfile.gpu .
+docker tag cylon-armada-gpu $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-gpu:latest
+docker push $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-gpu:latest
+
+# Register GPU task definition
+aws ecs register-task-definition \
+    --cli-input-json file://target/aws/scripts/ecs/task_definition_gpu.json
+
+# Run on GPU instance
+aws ecs run-task \
+    --cluster cylon-armada-gpu \
+    --task-definition cylon-armada-gpu \
+    --launch-type EC2 \
+    --overrides '{"containerOverrides":[{"name":"armada","command":["armada_executor.handler"]}]}'
+```
+
+### 5.3 Rivanna HPC Deployment
+
+Rivanna uses Singularity/Apptainer containers built from the Docker Hub image.
+
+```bash
+# On Rivanna — pull and convert Docker image to Singularity
+module load apptainer
+apptainer pull cylon-armada.sif docker://docker.io/$DOCKER_USER/cylon-armada-python:latest
+
+# Submit experiment job array
+sbatch target/rivanna/scripts/run_experiment.slurm
+
+# Submit GPU experiment
+sbatch target/rivanna/scripts/run_experiment_gpu.slurm
+```
+
+#### SLURM Job Structure
+
+```
+sbatch run_experiment.slurm
+  └─ SLURM array index → rank
+     └─ apptainer exec cylon-armada.sif python -m armada_executor ...
+```
+
+Each SLURM array task runs one `armada_executor` instance inside the
+Singularity container. A coordinator job runs `armada_init` first,
+writes task payloads to shared storage, then the array tasks process
+them in parallel.
+
+### 5.4 Experiment Matrix by Infrastructure
+
+| Variable | Lambda | Fargate | ECS GPU | Rivanna |
+|----------|--------|---------|---------|---------|
+| Node counts | 1-1000 (concurrent) | 1-10 | 1-4 | 1-32 |
+| Task counts | 4, 8, 16, 32, 48 | 4, 8, 16, 32, 48 | 4, 8, 16, 32, 48 | 4, 8, 16, 32, 48 |
+| SIMD backends | NUMPY, CYTHON | NUMPY, CYTHON | NUMPY, CYTHON, GPU | NUMPY, CYTHON, GPU |
+| Context backends | redis, cylon | redis, cylon | redis, cylon | redis, cylon |
+| Runs per config | 3-5 | 3-5 | 3-5 | 3-5 |
 
 ---
 
