@@ -85,12 +85,20 @@ def _platform_name(platform: str) -> str:
 # Chart: Cost Savings — Reuse vs. Baseline
 # ---------------------------------------------------------------------------
 
+def _cylon_reuse(df: pd.DataFrame) -> pd.DataFrame:
+    """Return cylon context-reuse rows only (excludes baseline and LlamaIndex)."""
+    mask = (df["baseline"] == False)
+    if "system" in df.columns:
+        mask = mask & (df["system"].fillna("cylon") == "cylon")
+    return df[mask].copy()
+
+
 def chart_cost_savings(df: pd.DataFrame, config) -> None:
     """Bar chart comparing total cost (reuse) vs. baseline cost.
 
     Groups by task_count, shows savings_pct as annotation.
     """
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         logger.warning("No reuse data for cost savings chart")
         return
@@ -142,7 +150,7 @@ def chart_cost_savings(df: pd.DataFrame, config) -> None:
 
 def chart_reuse_rate(df: pd.DataFrame, config) -> None:
     """Grouped bar chart of reuse rate by threshold and context backend."""
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         return
 
@@ -184,7 +192,7 @@ def chart_reuse_rate(df: pd.DataFrame, config) -> None:
 
 def chart_latency_breakdown(df: pd.DataFrame, config) -> None:
     """Stacked bar chart of latency breakdown: search vs. LLM."""
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         return
 
@@ -221,7 +229,7 @@ def chart_latency_breakdown(df: pd.DataFrame, config) -> None:
 
 def chart_cost_scaling(df: pd.DataFrame, config) -> None:
     """Line chart of cost vs. task count, one line per platform."""
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         return
 
@@ -263,7 +271,7 @@ def chart_cost_scaling(df: pd.DataFrame, config) -> None:
 
 def chart_infrastructure_comparison(df: pd.DataFrame, config) -> None:
     """Grouped bar chart comparing platforms on cost and latency."""
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         return
 
@@ -320,7 +328,7 @@ def chart_infrastructure_comparison(df: pd.DataFrame, config) -> None:
 
 def chart_threshold_sensitivity(df: pd.DataFrame, config) -> None:
     """Line chart: reuse_rate and savings_pct vs. similarity_threshold."""
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         return
 
@@ -362,7 +370,7 @@ def chart_threshold_sensitivity(df: pd.DataFrame, config) -> None:
 
 def chart_simd_comparison(df: pd.DataFrame, config) -> None:
     """Bar chart comparing search latency across SIMD backends."""
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         return
 
@@ -399,7 +407,7 @@ def chart_simd_comparison(df: pd.DataFrame, config) -> None:
 
 def chart_dimension_impact(df: pd.DataFrame, config) -> None:
     """Line chart: search latency and reuse rate vs. embedding dimensions."""
-    reuse_df = df[df["baseline"] == False].copy()
+    reuse_df = _cylon_reuse(df)
     if reuse_df.empty:
         return
 
@@ -436,6 +444,76 @@ def chart_dimension_impact(df: pd.DataFrame, config) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Chart: LlamaIndex Baseline Comparison
+# ---------------------------------------------------------------------------
+
+def chart_llamaindex_comparison(df: pd.DataFrame, config) -> None:
+    """Bar chart comparing cylon context-reuse vs. LlamaIndex RAG baseline.
+
+    Shows total cost side-by-side per task count.
+    Only generated when LlamaIndex rows are present in the data.
+    """
+    if "system" not in df.columns:
+        return
+
+    cylon_df = df[(df["baseline"] == False) & (df["system"].fillna("cylon") == "cylon")].copy()
+    llama_df = df[df["system"] == "llamaindex"].copy()
+
+    if llama_df.empty:
+        logger.info("Skipping LlamaIndex comparison chart (no llamaindex rows)")
+        return
+
+    task_counts = sorted(
+        set(cylon_df["task_count"].dropna().unique()) |
+        set(llama_df["task_count"].dropna().unique())
+    )
+    x = np.arange(len(task_counts))
+    width = 0.25
+
+    cylon_costs, cylon_errs = [], []
+    llama_costs, llama_errs = [], []
+    baseline_costs, baseline_errs = [], []
+
+    baseline_df = df[df["baseline"] == True].copy() if "baseline" in df.columns else pd.DataFrame()
+
+    for tc in task_counts:
+        c = cylon_df[cylon_df["task_count"] == tc]
+        cylon_costs.append(c["total_cost_mean"].mean() if not c.empty else 0)
+        cylon_errs.append(c["total_cost_std"].mean() if not c.empty else 0)
+
+        l = llama_df[llama_df["task_count"] == tc]
+        llama_costs.append(l["total_cost_mean"].mean() if not l.empty else 0)
+        llama_errs.append(l["total_cost_std"].mean() if not l.empty else 0)
+
+        if not baseline_df.empty:
+            b = baseline_df[baseline_df["task_count"] == tc]
+            baseline_costs.append(b["total_cost_mean"].mean() if not b.empty else 0)
+            baseline_errs.append(b["total_cost_std"].mean() if not b.empty else 0)
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+
+    if baseline_costs:
+        ax.bar(x - width, baseline_costs, width, yerr=baseline_errs,
+               label="Cylon baseline (no reuse)", color="#d62728", alpha=0.8, capsize=3)
+
+    ax.bar(x, cylon_costs, width, yerr=cylon_errs,
+           label="Cylon (context reuse)", color="#2ca02c", alpha=0.8, capsize=3)
+    ax.bar(x + width, llama_costs, width, yerr=llama_errs,
+           label="LlamaIndex RAG (always LLM)", color="#ff7f0e", alpha=0.8, capsize=3)
+
+    ax.set_xlabel("Task Count", fontsize=FONT_SIZE)
+    ax.set_ylabel("Total Cost (USD)", fontsize=FONT_SIZE)
+    ax.set_title("Cost Comparison: Cylon Context Reuse vs. LlamaIndex RAG Baseline",
+                 fontsize=TITLE_SIZE)
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(int(t)) for t in task_counts], fontsize=TICK_SIZE)
+    ax.legend(fontsize=LEGEND_SIZE)
+    ax.tick_params(axis="y", labelsize=TICK_SIZE)
+
+    _save_chart(fig, config, "llamaindex_comparison")
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -455,5 +533,6 @@ def generate_all_charts(
     chart_threshold_sensitivity(df, config)
     chart_simd_comparison(df, config)
     chart_dimension_impact(df, config)
+    chart_llamaindex_comparison(df, config)
 
     logger.info("All charts generated in %s", config.output_dir)

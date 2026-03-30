@@ -59,6 +59,7 @@ def _extract_config_from_name(experiment_name: str) -> Dict:
     """
     result = {"experiment_name": experiment_name}
     result["baseline"] = experiment_name.startswith("baseline_")
+    result["system"] = "llamaindex" if experiment_name.startswith("llamaindex_") else "cylon"
 
     m = re.search(r"_t(\d+)_", experiment_name)
     if m:
@@ -158,7 +159,7 @@ def aggregate_runs(
             # Also grab direct params if present in CSV
             for col in ["task_count", "similarity_threshold",
                          "embedding_dimensions", "backend",
-                         "context_backend", "baseline"]:
+                         "context_backend", "baseline", "system"]:
                 if col in row and col not in config_info:
                     config_info[col] = row[col]
 
