@@ -59,6 +59,7 @@ PARAM_COLUMNS = [
     "backend",         # SIMD backend: NUMPY, CYTHON_BATCH, PYCYLON
     "context_backend", # Context store: cylon, redis
     "baseline",
+    "system",          # "cylon" | "llamaindex"
 ]
 
 

@@ -23,7 +23,7 @@ Step-by-step guide for executing Phase 1 experiments.
 conda activate cylon_dev
 
 # Verify dependencies
-python -c "import boto3, redis, numpy, langchain_aws; print('Python deps OK')"
+python -c "import boto3, redis, numpy, langchain_aws, llama_index; print('Python deps OK')"
 
 # Build Cython SIMD extension (Path A2)
 cd python/simd
@@ -355,9 +355,9 @@ Same seed + same strategy = identical task selection across runs. Baseline and r
 
 ### 3.2 Experiment Matrix
 
-Each scenario runs a parameter sweep across Python and Node.js paths:
+Each scenario runs a parameter sweep across Python and Node.js paths, plus an optional LlamaIndex baseline.
 
-**Python (Path A)**
+**Python (Path A — cylon-armada)**
 
 | Variable | Values |
 |----------|--------|
@@ -369,7 +369,7 @@ Each scenario runs a parameter sweep across Python and Node.js paths:
 
 Per scenario: 2 × 3 × 3 × 3 × 2 = **108 configurations**
 
-**Node.js (Path B)**
+**Node.js (Path B — cylon-armada)**
 
 | Variable | Values |
 |----------|--------|
@@ -379,6 +379,32 @@ Per scenario: 2 × 3 × 3 × 3 × 2 = **108 configurations**
 | Baseline | yes, no |
 
 Per scenario: 2 × 3 × 3 × 2 = **36 configurations**
+
+**LlamaIndex baseline (comparator — `--include-llamaindex`)**
+
+| Variable | Values |
+|----------|--------|
+| System | llamaindex |
+| Task counts | same as cylon runs |
+| Embedding dimensions | 256, 1024 |
+| Reuse rate | always 0% (LLM called for every task) |
+
+One config per (task_count, dimension) pair — no threshold or SIMD backend dimensions since LlamaIndex always calls the LLM. The `system` column in the aggregated CSV distinguishes `cylon` from `llamaindex` rows for direct cost and latency comparison.
+
+> **Why LlamaIndex is Python-only (no Node.js/WASM equivalent)**
+>
+> Although a LlamaIndex JS package exists (`llamaindex` on npm), it cannot be
+> used as a comparator for Path B. LlamaIndex JS implements its own pure-JS
+> `VectorStoreIndex` with no hook to substitute an external WASM search engine.
+> Plugging in `cylon-wasm` would require replacing LlamaIndex's entire vector
+> store layer — effectively rebuilding `context_handler.mjs`.
+>
+> For Path B the equivalent baseline is the existing `baseline` mode
+> (`system=cylon`, `threshold=1.0`): all tasks call the LLM, reuse rate = 0%,
+> identical cost profile to LlamaIndex. The Node.js path's primary performance
+> claim is the WASM SIMD128 search itself — no existing framework including
+> LlamaIndex JS uses it, making the WASM vs pure-JS comparison (cylon WASM
+> vs cylon NUMPY fallback) the result of interest on that path.
 
 ### 3.3 Run All Scenarios (Local)
 
@@ -395,6 +421,17 @@ target/shared/scripts/experiment/examples/run_scenario.sh hydrology --backend cy
 target/shared/scripts/experiment/examples/run_scenario.sh epidemiology
 target/shared/scripts/experiment/examples/run_scenario.sh seismology
 target/shared/scripts/experiment/examples/run_scenario.sh mixed_scientific
+
+# With LlamaIndex baseline for comparison
+python target/shared/scripts/experiment/runner.py \
+    --context-backend redis \
+    --tasks-file target/shared/scripts/experiment/scenarios/hydrology.json \
+    --tasks 4 8 16 32 \
+    --thresholds 0.80 \
+    --dimensions 256 \
+    --include-llamaindex \
+    --runs 3 \
+    --output target/shared/scripts/experiment/results/hydrology_comparison
 
 # With custom parameters
 target/shared/scripts/experiment/examples/run_scenario.sh hydrology \
@@ -470,8 +507,10 @@ For each scenario:
 - [ ] Clear context store before each run
 - [ ] Run baseline (threshold=1.0) first
 - [ ] Run reuse experiment with same tasks (same seed)
+- [ ] Run LlamaIndex baseline with `--include-llamaindex` (same tasks, same seed)
 - [ ] Verify result JSON has all expected fields
 - [ ] Check `reuse_rate` is within expected range for the scenario
+- [ ] Check LlamaIndex `reuse_rate` = 0% and `total_cost` > cylon reuse `total_cost`
 - [ ] Save raw results to `target/shared/scripts/experiment/results/`
 
 ---
@@ -543,6 +582,8 @@ python -m results.pipeline \
 | SIMD speedup | >2x vs numpy | Path A1/A2 vs NUMPY comparison |
 | All 5 scenarios | Complete | All result files present |
 | Statistical rigor | 3+ runs per config | `num_runs` ≥ 3 in aggregated CSV |
+| LlamaIndex comparison | cylon cost < llamaindex cost | Filter `system` column: cylon `total_cost_mean` < llamaindex `total_cost_mean` at all task counts |
+| LlamaIndex reuse | llamaindex `reuse_rate` = 0% | Confirms baseline has no zero-cost path |
 
 ---
 

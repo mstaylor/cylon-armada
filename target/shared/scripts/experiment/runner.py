@@ -37,6 +37,7 @@ from coordinator.agent_coordinator import AgentCoordinator
 from context.router import SIMDBackend
 from cost.bedrock_pricing import BedrockConfig
 from experiment.benchmark import ExperimentBenchmark
+from baselines.llamaindex_baseline import run_llamaindex_baseline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -162,6 +163,7 @@ class ExperimentConfig:
     backend: str = "NUMPY"
     context_backend: str = os.environ.get("CONTEXT_BACKEND", "cylon")
     baseline: bool = False
+    system: str = "cylon"   # "cylon" | "llamaindex"
     sampling_strategy: str = "stratified"  # "stratified", "sequential", "random"
     seed: int = 42
     llm_model_id: str = "amazon.nova-lite-v1:0"
@@ -223,20 +225,26 @@ def run_experiment(
     backend = SIMDBackend[config.backend]
 
     logger.info(
-        "Running experiment: %s | tasks=%d threshold=%.2f dims=%d backend=%s baseline=%s",
+        "Running experiment: %s | tasks=%d threshold=%.2f dims=%d backend=%s baseline=%s system=%s",
         config.name, len(task_list), config.similarity_threshold,
-        config.embedding_dimensions, config.backend, config.baseline,
+        config.embedding_dimensions, config.backend, config.baseline, config.system,
     )
 
     bench.start("total")
-    result = coordinator.run_local(
-        tasks=task_list,
-        backend=backend,
-        dynamo_endpoint_url=config.dynamo_endpoint_url,
-        redis_host=config.redis_host,
-        redis_port=config.redis_port,
-        baseline=config.baseline,
-    )
+    if config.system == "llamaindex":
+        result = run_llamaindex_baseline(
+            tasks=task_list,
+            config=bedrock_config,
+        )
+    else:
+        result = coordinator.run_local(
+            tasks=task_list,
+            backend=backend,
+            dynamo_endpoint_url=config.dynamo_endpoint_url,
+            redis_host=config.redis_host,
+            redis_port=config.redis_port,
+            baseline=config.baseline,
+        )
     bench.stop("total")
 
     wall_clock_ms = bench.elapsed_ms("total")
@@ -255,6 +263,7 @@ def run_experiment(
     bench.record("embedding_dimensions", config.embedding_dimensions)
     bench.record("backend", config.backend)
     bench.record("baseline", config.baseline)
+    bench.record("system", config.system)
 
     # Save benchmark files (locally + optional S3)
     bench.save(output_dir)
@@ -274,6 +283,7 @@ def run_experiment_matrix(
     context_backend: Optional[str] = None,
     output_dir: str = "target/shared/scripts/experiment/results",
     include_baseline: bool = True,
+    include_llamaindex: bool = False,
     tasks: Optional[list[str]] = None,
     sampling_strategy: str = "stratified",
     seed: int = 42,
@@ -289,7 +299,8 @@ def run_experiment_matrix(
         dimensions: List of embedding dimensions (default: [256, 1024])
         backends: List of SIMD backends (default: ["NUMPY"])
         output_dir: Directory for result JSON files
-        include_baseline: Whether to include a baseline (no reuse) run per config
+        include_baseline: Whether to include a no-reuse cylon baseline per config.
+        include_llamaindex: Whether to include a LlamaIndex RAG baseline per config.
         tasks: Custom task list. If None, uses DEFAULT_TASKS.
         sampling_strategy: How to select tasks: "stratified" (default), "sequential", "random".
         seed: Random seed for reproducible sampling (default: 42).
@@ -325,6 +336,7 @@ def run_experiment_matrix(
             embedding_dimensions=dim,
             backend=be,
             baseline=False,
+            system="cylon",
             sampling_strategy=sampling_strategy,
             seed=seed,
             **cb_kwargs,
@@ -340,6 +352,23 @@ def run_experiment_matrix(
                 embedding_dimensions=dim,
                 backend=be,
                 baseline=True,
+                system="cylon",
+                sampling_strategy=sampling_strategy,
+                seed=seed,
+                **cb_kwargs,
+            ))
+
+        # LlamaIndex RAG baseline — same task count and dimensions, no SIMD backend
+        # Every task calls the LLM; demonstrates cylon-armada's cost advantage
+        if include_llamaindex:
+            configs.append(ExperimentConfig(
+                name=f"llamaindex_t{tc}_d{dim}",
+                task_count=tc,
+                similarity_threshold=0.0,   # unused for LlamaIndex
+                embedding_dimensions=dim,
+                backend="NUMPY",            # unused for LlamaIndex
+                baseline=False,
+                system="llamaindex",
                 sampling_strategy=sampling_strategy,
                 seed=seed,
                 **cb_kwargs,
@@ -421,6 +450,8 @@ if __name__ == "__main__":
                         help="Output directory")
     parser.add_argument("--no-baseline", action="store_true",
                         help="Skip baseline runs")
+    parser.add_argument("--include-llamaindex", action="store_true",
+                        help="Include LlamaIndex RAG baseline for comparison")
     parser.add_argument("--tasks-file", type=str, default=None,
                         help="Path to JSON file with custom tasks (list of strings)")
     parser.add_argument("--sampling", type=str, default="stratified",
@@ -484,6 +515,7 @@ if __name__ == "__main__":
         context_backend=args.context_backend,
         output_dir=args.output,
         include_baseline=not args.no_baseline,
+        include_llamaindex=args.include_llamaindex,
         tasks=custom_tasks,
         sampling_strategy=args.sampling,
         seed=args.seed,
