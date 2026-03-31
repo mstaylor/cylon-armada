@@ -327,7 +327,7 @@ Each scenario runs three system configurations for comparison: cylon-armada with
 - [x] **Phase 1** — Proof-of-concept (context store, similarity engine, 3 execution paths, cosmic-ai, Step Functions, model parallelism)
 - [x] **Phase 2** — Deployment (Terraform IaC, 6 dedicated Lambda functions, ECS Fargate + GPU, Rivanna SLURM, results pipeline, LlamaIndex baseline comparator)
 - [ ] **Phase 3** — Multi-agent orchestration (cognitive diversity, custom swarm implementation via Cylon communicator)
-- [ ] **Phase 4** — Large-scale experiments (100K+ tasks, publication-quality results, GPU benchmarks on Rivanna A100)
+- [ ] **Phase 4** — Large-scale experiments (100K+ tasks, publication-quality results, GPU benchmarks on Rivanna A100); RuVector (`@ruvector/core`) as a 4th context backend for Path B — HNSW approximate search vs cylon-wasm exact linear scan at scale (N > 10K contexts)
 - [ ] **Phase 5** — Thesis and publications
 
 ## Related Projects

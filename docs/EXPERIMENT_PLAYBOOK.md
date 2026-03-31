@@ -675,6 +675,26 @@ them in parallel.
 | Context backends | redis, cylon | redis, cylon | redis, cylon | redis, cylon |
 | Runs per config | 3-5 | 3-5 | 3-5 | 3-5 |
 
+### Phase 4: RuVector Backend (Node.js Path B, Large-Scale)
+
+RuVector (`@ruvector/core`, NAPI-RS) is planned as a 4th context backend for Phase 4
+large-scale experiments. It provides HNSW approximate nearest neighbor search with
+SimSIMD acceleration (AVX-512/NEON) — a fundamentally different search architecture
+from cylon-wasm's exact linear scan.
+
+**Why Phase 4 and not phase 1 or 2:**
+- At current experiment scales (4-48 tasks), linear scan and HNSW show identical
+  latency — there is no data to differentiate them
+- The benefit appears at N > 10K contexts, where HNSW's O(log n) complexity
+  significantly outperforms linear O(n) scan
+- RuVector has no Python SDK (CLI/subprocess only), so it applies to Path B only
+
+**Research question it answers:**
+At large context stores, does HNSW approximate search (RuVector) maintain the
+cylon-armada reuse rate while reducing search latency vs cylon-wasm exact scan?
+The reuse decision logic, Step Functions orchestration, and cost tracking remain
+unchanged — only the search backend is swapped.
+
 ---
 
 ## Troubleshooting
