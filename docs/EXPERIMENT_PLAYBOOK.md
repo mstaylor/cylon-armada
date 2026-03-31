@@ -287,36 +287,7 @@ docker tag cylon-armada-python docker.io/$DOCKER_USER/cylon-armada-python:latest
 docker push docker.io/$DOCKER_USER/cylon-armada-python:latest
 ```
 
-### 2.2 Deploy Infrastructure
-
-Terraform creates 6 dedicated Lambda functions (3 per runtime), 3 Step Functions
-state machines, ECR repos, S3 bucket, DynamoDB table, and optional ElastiCache.
-
-```bash
-cd target/aws/scripts/terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
-
-terraform init
-terraform plan    # validate without deploying
-terraform apply
-
-terraform output -json > ../../deployment_outputs.json
-```
-
-#### Lambda Architecture (per cylon paper pattern)
-
-Each runtime deploys 3 Lambda functions from the same Docker image:
-
-| Function | Python CMD | Node.js CMD | Role |
-|----------|-----------|-------------|------|
-| `cylon-armada-init` | `armada_init.handler` | `armada_init.handler` | Embed tasks, build Map payloads |
-| `cylon-armada-executor` | `armada_executor.handler` | `armada_executor.handler` | Route single task (similarity + LLM) |
-| `cylon-armada-aggregate` | `armada_aggregate.handler` | `armada_aggregate.handler` | Collect results, compute cost summary |
-
-The Step Functions state machine flows: `ArmadaInit` → `ProcessTasks` (Map, MaxConcurrency=1000) → `AggregateResults`.
-
-### 2.3 Verify Deployment
+### 2.2 Verify Deployment
 
 ```bash
 # Test Python init Lambda
