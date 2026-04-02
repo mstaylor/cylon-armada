@@ -15,15 +15,29 @@ variable "account_id" {
   type        = string
 }
 
-# Lambda configuration
-variable "python_image_uri" {
-  description = "ECR image URI for Python Lambda (Path A1/A2)"
+# ---------------------------------------------------------------------------
+# ECR (existing repository — not created by Terraform)
+# ---------------------------------------------------------------------------
+
+variable "ecr_repository_name" {
+  description = "Name of the existing ECR repository for cylon-armada images"
   type        = string
 }
 
-variable "nodejs_image_uri" {
-  description = "ECR image URI for Node.js Lambda (Path B)"
+# ---------------------------------------------------------------------------
+# Lambda configuration
+# ---------------------------------------------------------------------------
+
+variable "python_image_tag" {
+  description = "ECR image tag for the Python Lambda image"
   type        = string
+  default     = "python-latest"
+}
+
+variable "nodejs_image_tag" {
+  description = "ECR image tag for the Node.js Lambda image"
+  type        = string
+  default     = "nodejs-latest"
 }
 
 variable "python_memory_mb" {
@@ -44,9 +58,84 @@ variable "lambda_timeout" {
   default     = 300
 }
 
+# ---------------------------------------------------------------------------
+# ECS — existing clusters (data sources, not created by Terraform)
+# ---------------------------------------------------------------------------
+
+variable "ecs_ec2_cluster_name" {
+  description = "Name of the existing ECS EC2 cluster"
+  type        = string
+  default     = "CylonEC2Experiments"
+}
+
+variable "ecs_fargate_cluster_name" {
+  description = "Name of the existing ECS Fargate cluster"
+  type        = string
+  default     = "CylonFargateExperiments"
+}
+
+# ---------------------------------------------------------------------------
+# ECS task definition
+# ---------------------------------------------------------------------------
+
+variable "ecs_container_name" {
+  description = "Container name inside the ECS task definition"
+  type        = string
+  default     = "cylon-armada"
+}
+
+variable "ecs_python_cpu" {
+  description = "CPU units for the Python ECS task (1024 = 1 vCPU)"
+  type        = number
+  default     = 4096
+}
+
+variable "ecs_python_memory_mb" {
+  description = "Memory for the Python ECS task (MB)"
+  type        = number
+  default     = 8192
+}
+
+variable "ecs_image_tag" {
+  description = "ECR image tag for the ECS Python runner image"
+  type        = string
+  default     = "python-latest"
+}
+
+variable "ecs_log_retention_days" {
+  description = "CloudWatch log retention for ECS tasks (days)"
+  type        = number
+  default     = 7
+}
+
+# ---------------------------------------------------------------------------
+# ECS networking (awsvpc mode — required for Fargate and EC2+awsvpc)
+# ---------------------------------------------------------------------------
+
+variable "ecs_task_subnet_ids" {
+  description = "Subnet IDs for ECS tasks (awsvpc network mode)"
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_security_group_ids" {
+  description = "Security group IDs for ECS tasks"
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_assign_public_ip" {
+  description = "Assign public IP to Fargate tasks (ENABLED or DISABLED)"
+  type        = string
+  default     = "ENABLED"
+}
+
+# ---------------------------------------------------------------------------
 # Redis / ElastiCache
+# ---------------------------------------------------------------------------
+
 variable "redis_host" {
-  description = "Redis host (ElastiCache endpoint or existing)"
+  description = "Redis host (ElastiCache endpoint or existing instance)"
   type        = string
   default     = ""
 }
@@ -69,7 +158,10 @@ variable "elasticache_node_type" {
   default     = "cache.t3.micro"
 }
 
-# Networking
+# ---------------------------------------------------------------------------
+# Networking (Lambda VPC / ElastiCache)
+# ---------------------------------------------------------------------------
+
 variable "vpc_id" {
   description = "VPC ID for Lambda and ElastiCache"
   type        = string
@@ -77,7 +169,7 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Subnet IDs for Lambda and ElastiCache"
+  description = "Subnet IDs for Lambda VPC config and ElastiCache"
   type        = list(string)
   default     = []
 }
@@ -88,21 +180,53 @@ variable "security_group_ids" {
   default     = []
 }
 
+# ---------------------------------------------------------------------------
 # S3
+# ---------------------------------------------------------------------------
+
 variable "scripts_bucket_name" {
-  description = "S3 bucket for Lambda scripts"
+  description = "S3 bucket for Lambda/ECS hot-reload scripts"
   type        = string
   default     = "cylon-armada-scripts"
 }
 
+variable "results_bucket_name" {
+  description = "Existing S3 bucket for experiment results"
+  type        = string
+}
+
+variable "results_prefix_lambda" {
+  description = "S3 key prefix for Lambda experiment results"
+  type        = string
+  default     = "results/lambda/"
+}
+
+variable "results_prefix_ecs_fargate" {
+  description = "S3 key prefix for ECS Fargate experiment results"
+  type        = string
+  default     = "results/ecs-fargate/"
+}
+
+variable "results_prefix_ecs_ec2" {
+  description = "S3 key prefix for ECS EC2 experiment results"
+  type        = string
+  default     = "results/ecs-ec2/"
+}
+
+# ---------------------------------------------------------------------------
 # Step Functions
+# ---------------------------------------------------------------------------
+
 variable "step_functions_max_concurrency" {
-  description = "Max concurrent Lambda workers in Map state"
+  description = "Max concurrent Lambda workers in the Map state"
   type        = number
   default     = 10
 }
 
-# Bedrock defaults (passed as Lambda env vars)
+# ---------------------------------------------------------------------------
+# Bedrock defaults (injected as env vars into Lambda and ECS tasks)
+# ---------------------------------------------------------------------------
+
 variable "bedrock_llm_model_id" {
   description = "Default Bedrock LLM model ID"
   type        = string

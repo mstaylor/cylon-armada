@@ -266,21 +266,25 @@ python target/shared/scripts/experiment/runner.py \
 
 ### 2.1 Build and Push Docker Images
 
-One image per runtime — each Lambda function uses a different CMD override.
+All Lambda functions and the ECS runner share a **single ECR repository** — each image is
+differentiated by tag. Lambda functions use a CMD override per function; ECS tasks run
+`armada_ecs_runner.py` directly. Task definitions are created by `terraform apply` (not manually).
 
 ```bash
+ECR_REPO=$(terraform -chdir=target/aws/scripts/terraform output -raw ecr_repository_url)
+
 aws ecr get-login-password --region us-east-1 | \
-    docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+    docker login --username AWS --password-stdin $ECR_REPO
 
-# Python (Path A1/A2)
+# Python image — Lambda (Path A1/A2) + ECS runner
 docker build -t cylon-armada-python -f docker/Dockerfile.python .
-docker tag cylon-armada-python $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-python:latest
-docker push $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-python:latest
+docker tag cylon-armada-python $ECR_REPO:python-latest
+docker push $ECR_REPO:python-latest
 
-# Node.js (Path B)
+# Node.js image — Lambda (Path B)
 docker build -t cylon-armada-nodejs -f docker/Dockerfile.nodejs .
-docker tag cylon-armada-nodejs $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-nodejs:latest
-docker push $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-nodejs:latest
+docker tag cylon-armada-nodejs $ECR_REPO:nodejs-latest
+docker push $ECR_REPO:nodejs-latest
 
 # Docker Hub (for Rivanna / Singularity)
 docker tag cylon-armada-python docker.io/$DOCKER_USER/cylon-armada-python:latest
@@ -301,6 +305,11 @@ aws lambda invoke \
     --function-name cylon-armada-init-node \
     --payload '{"workflow_id":"test","tasks":["Hello world"],"config":{}}' \
     /tmp/init_node_test.json && cat /tmp/init_node_test.json
+
+# Verify ECS task definition is registered (created by terraform apply)
+aws ecs describe-task-definition \
+    --task-definition cylon-armada-python \
+    --query 'taskDefinition.{family:family,revision:revision,status:status}'
 ```
 
 ---
@@ -427,48 +436,95 @@ python target/shared/scripts/experiment/runner.py \
 
 ### 3.4 Run on AWS (Step Functions)
 
-The Step Functions workflow follows the cylon paper architecture:
-`ArmadaInit` (embed tasks) → `ProcessTasks` (Map: route each task) → `AggregateResults`.
-
-Infrastructure config (Redis, DynamoDB, Bedrock models) is set via Lambda
-environment variables — only the workflow payload (tasks + thresholds) is
-passed through Step Functions.
+All four execution paths are triggered via Step Functions. Fetch ARNs from Terraform outputs:
 
 ```bash
 PYTHON_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw python_workflow_arn)
 NODEJS_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw nodejs_workflow_arn)
+FARGATE_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw ecs_fargate_workflow_arn)
+EC2_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw ecs_ec2_workflow_arn)
+```
 
-# Run a scenario via Step Functions (Python path)
+#### Lambda — Python path (Map: one invocation per task)
+
+The Step Functions workflow follows the cylon paper architecture:
+`ArmadaInit` (embed tasks) → `ProcessTasks` (Map: route each task) → `AggregateResults`.
+
+```bash
 aws stepfunctions start-sync-execution \
     --state-machine-arn $PYTHON_SFN \
     --input "$(python -c "
 import json
 tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:16]
 print(json.dumps({
-    'workflow_id': 'exp-hydrology-th08-d256',
+    'workflow_id': 'exp-hydrology-lambda-th08-d256',
     'tasks': tasks,
-    'config': {
-        'similarity_threshold': '0.80',
-        'embedding_dimensions': '256'
-    }
+    'config': {'similarity_threshold': '0.80', 'embedding_dimensions': '256'}
 }))
-")" --query 'output' --output text > target/shared/scripts/experiment/results/aws_hydrology.json
+")" --query 'output' --output text > target/shared/scripts/experiment/results/aws_hydrology_lambda.json
+```
 
-# Node.js path
+#### Lambda — Node.js path
+
+```bash
 aws stepfunctions start-sync-execution \
     --state-machine-arn $NODEJS_SFN \
     --input "$(python -c "
 import json
 tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:16]
 print(json.dumps({
-    'workflow_id': 'exp-hydrology-node-th08',
+    'workflow_id': 'exp-hydrology-nodejs-th08',
     'tasks': tasks,
-    'config': {
-        'similarity_threshold': '0.80',
-        'embedding_dimensions': '256'
-    }
+    'config': {'similarity_threshold': '0.80', 'embedding_dimensions': '256'}
 }))
-")" --query 'output' --output text > target/shared/scripts/experiment/results/aws_hydrology_node.json
+")" --query 'output' --output text
+```
+
+#### ECS Fargate — weak scaling (world_size controls thread pool)
+
+The ECS workflow triggers a single Fargate task that runs the full experiment and writes
+results directly to S3. `scaling=weak` means each of the `world_size` threads processes
+an equal share of the task list.
+
+```bash
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $FARGATE_SFN \
+    --input "$(python -c "
+import json
+tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:16]
+print(json.dumps({
+    'workflow_id': 'exp-hydrology-fargate-weak-4',
+    'tasks': tasks,
+    'scaling': 'weak',
+    'world_size': 4,
+    's3_scripts_bucket': '',
+    's3_scripts_prefix': 'scripts/'
+}))
+")"
+```
+
+#### ECS EC2 — strong scaling
+
+`scaling=strong` keeps the total task list fixed while increasing `world_size` — measures
+speedup as more parallel threads process the same workload.
+
+```bash
+for world_size in 1 2 4 8; do
+    aws stepfunctions start-sync-execution \
+        --state-machine-arn $EC2_SFN \
+        --input "$(python -c "
+import json
+tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:32]
+print(json.dumps({
+    'workflow_id': 'exp-hydrology-ec2-strong-${world_size}',
+    'tasks': tasks,
+    'scaling': 'strong',
+    'world_size': ${world_size},
+    's3_scripts_bucket': '',
+    's3_scripts_prefix': 'scripts/'
+}))
+")"
+done
 ```
 
 ### 3.5 Per-Scenario Checklist
@@ -597,44 +653,89 @@ orchestration layer changes.
 
 ### 5.1 ECS Fargate Deployment
 
-Fargate uses the same Python/Node.js image from ECR — no GPU, serverless compute.
+The ECS task definition (`cylon-armada-python`) is registered by `terraform apply` against
+the `CylonFargateExperiments` cluster. Experiments are triggered via Step Functions, which
+injects per-run config as environment variable overrides and waits for task completion.
 
 ```bash
-# Register task definition
-aws ecs register-task-definition \
-    --cli-input-json file://target/aws/scripts/ecs/task_definition_fargate.json
+FARGATE_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw ecs_fargate_workflow_arn)
 
-# Run a task
-aws ecs run-task \
-    --cluster cylon-armada \
-    --task-definition cylon-armada-fargate \
-    --launch-type FARGATE \
-    --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_ID],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
-    --overrides '{"containerOverrides":[{"name":"armada","command":["armada_executor.handler"],"environment":[{"name":"WORKFLOW_ID","value":"exp-fargate-001"}]}]}'
+# Weak scaling — world_size scales with task count
+for world_size in 1 2 4 8; do
+    aws stepfunctions start-sync-execution \
+        --state-machine-arn $FARGATE_SFN \
+        --name "fargate-weak-w${world_size}-$(date +%s)" \
+        --input "$(python -c "
+import json
+tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks']
+print(json.dumps({
+    'workflow_id': 'exp-fargate-weak-w${world_size}',
+    'tasks': tasks[:world_size * 4],
+    'scaling': 'weak',
+    'world_size': ${world_size},
+    's3_scripts_bucket': '',
+    's3_scripts_prefix': 'scripts/'
+}))
+")"
+done
+
+# Strong scaling — fixed 32 tasks, increasing parallelism
+for world_size in 1 2 4 8; do
+    aws stepfunctions start-sync-execution \
+        --state-machine-arn $FARGATE_SFN \
+        --name "fargate-strong-w${world_size}-$(date +%s)" \
+        --input "$(python -c "
+import json
+tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:32]
+print(json.dumps({
+    'workflow_id': 'exp-fargate-strong-w${world_size}',
+    'tasks': tasks,
+    'scaling': 'strong',
+    'world_size': ${world_size},
+    's3_scripts_bucket': '',
+    's3_scripts_prefix': 'scripts/'
+}))
+")"
+done
 ```
 
-### 5.2 ECS EC2 GPU Deployment
+Results land in S3 under `results/ecs-fargate/<workflow_id>/`.
 
-Uses `Dockerfile.gpu` with CUDA runtime for GPU-accelerated Cylon SIMD.
-Deploy on `g4dn.xlarge` (NVIDIA T4, 16GB VRAM) or `g5.xlarge` (NVIDIA A10G, 24GB).
+### 5.2 ECS EC2 Deployment
+
+The same `cylon-armada-python` task definition runs on `CylonEC2Experiments` with
+`LaunchType: EC2`. For GPU experiments, build and push the GPU image first.
 
 ```bash
-# Build GPU image
+ECR_REPO=$(terraform -chdir=target/aws/scripts/terraform output -raw ecr_repository_url)
+EC2_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw ecs_ec2_workflow_arn)
+
+# (Optional) GPU image for CUDA-accelerated SIMD
 docker build -t cylon-armada-gpu -f docker/Dockerfile.gpu .
-docker tag cylon-armada-gpu $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-gpu:latest
-docker push $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-gpu:latest
+docker tag cylon-armada-gpu $ECR_REPO:gpu-latest
+docker push $ECR_REPO:gpu-latest
 
-# Register GPU task definition
-aws ecs register-task-definition \
-    --cli-input-json file://target/aws/scripts/ecs/task_definition_gpu.json
-
-# Run on GPU instance
-aws ecs run-task \
-    --cluster cylon-armada-gpu \
-    --task-definition cylon-armada-gpu \
-    --launch-type EC2 \
-    --overrides '{"containerOverrides":[{"name":"armada","command":["armada_executor.handler"]}]}'
+# Strong scaling — sweep world_size, fixed task list
+for world_size in 1 2 4 8 16; do
+    aws stepfunctions start-sync-execution \
+        --state-machine-arn $EC2_SFN \
+        --name "ec2-strong-w${world_size}-$(date +%s)" \
+        --input "$(python -c "
+import json
+tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:32]
+print(json.dumps({
+    'workflow_id': 'exp-ec2-strong-w${world_size}',
+    'tasks': tasks,
+    'scaling': 'strong',
+    'world_size': ${world_size},
+    's3_scripts_bucket': '',
+    's3_scripts_prefix': 'scripts/'
+}))
+")"
+done
 ```
+
+Results land in S3 under `results/ecs-ec2/<workflow_id>/`.
 
 ### 5.3 Rivanna HPC Deployment
 
@@ -667,13 +768,27 @@ them in parallel.
 
 ### 5.4 Experiment Matrix by Infrastructure
 
-| Variable | Lambda | Fargate | ECS GPU | Rivanna |
-|----------|--------|---------|---------|---------|
-| Node counts | 1-1000 (concurrent) | 1-10 | 1-4 | 1-32 |
+| Variable | Lambda | ECS Fargate | ECS EC2 | Rivanna |
+|----------|--------|-------------|---------|---------|
+| Scaling modes | N/A (Map-parallel) | weak, strong | weak, strong | weak, strong |
+| World sizes | 1-1000 (Map concurrency) | 1, 2, 4, 8 | 1, 2, 4, 8, 16 | 1, 2, 4, 8, 16, 32 |
 | Task counts | 4, 8, 16, 32, 48 | 4, 8, 16, 32, 48 | 4, 8, 16, 32, 48 | 4, 8, 16, 32, 48 |
 | SIMD backends | NUMPY, CYTHON | NUMPY, CYTHON | NUMPY, CYTHON, GPU | NUMPY, CYTHON, GPU |
 | Context backends | redis, cylon | redis, cylon | redis, cylon | redis, cylon |
+| Orchestration | Step Functions Map | Step Functions `ecs:runTask.sync` | Step Functions `ecs:runTask.sync` | SLURM job array |
+| Results destination | Step Functions output | S3 `results/ecs-fargate/` | S3 `results/ecs-ec2/` | S3 `results/rivanna/` |
 | Runs per config | 3-5 | 3-5 | 3-5 | 3-5 |
+
+#### ECS scaling checklist
+
+For each `(platform, scaling_mode, world_size)` combination:
+
+- [ ] Run with `scaling=weak` — verify total tasks = world_size × tasks_per_worker
+- [ ] Run with `scaling=strong` — verify all world_size threads processed same task list
+- [ ] Check `throughput_tasks_per_sec` increases with world_size (weak) or stays flat (strong ideal)
+- [ ] Check `speedup = time(world_size=1) / time(world_size=N)` approaches N for strong scaling
+- [ ] Verify `reuse_rate` is consistent with Lambda path at same threshold
+- [ ] Confirm results in S3 under correct prefix before next run
 
 ### Phase 4: RuVector Backend (Node.js Path B, Large-Scale)
 
@@ -708,3 +823,8 @@ unchanged — only the search backend is swapped.
 | Empty search results | Context store empty | Run baseline first, check workflow_id matches across prepare/route calls |
 | Contexts not reused across Lambda invocations | Redis persistence off | Ensure `REDIS_HOST` is set and `persist_to_redis=True` (default) |
 | Stratified sampling returns fewer tasks than requested | Deduplication on small task lists | Use `--sampling sequential` or increase task pool |
+| ECS task fails immediately | Missing IAM permissions | Check `cylon-armada-ecs-task-role` has Bedrock + S3 + DynamoDB permissions |
+| ECS task stuck in PENDING | No EC2 capacity in cluster | Check cluster has running instances; for Fargate verify subnet has capacity |
+| Step Functions ECS timeout | Task ran longer than SFN Express limit (5 min) | Switch to STANDARD workflow type or reduce world_size/task count |
+| ECS results not in S3 | `RESULTS_BUCKET` or `RESULTS_PREFIX` env var wrong | Check task definition env vars and ContainerOverrides in CloudWatch logs |
+| Strong scaling shows no speedup | Redis contention or single-threaded GIL | Use separate `ContextManager` per thread (already done in runner); check Redis connection pool |

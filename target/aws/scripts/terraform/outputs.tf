@@ -1,5 +1,14 @@
 # ---------------------------------------------------------------------------
-# Python Lambda ARNs
+# ECR
+# ---------------------------------------------------------------------------
+
+output "ecr_repository_url" {
+  description = "ECR repository URL (existing, referenced by Terraform)"
+  value       = data.aws_ecr_repository.main.repository_url
+}
+
+# ---------------------------------------------------------------------------
+# Lambda ARNs — Python
 # ---------------------------------------------------------------------------
 
 output "python_init_arn" {
@@ -18,7 +27,7 @@ output "python_aggregate_arn" {
 }
 
 # ---------------------------------------------------------------------------
-# Node.js Lambda ARNs
+# Lambda ARNs — Node.js
 # ---------------------------------------------------------------------------
 
 output "nodejs_init_arn" {
@@ -37,22 +46,60 @@ output "nodejs_aggregate_arn" {
 }
 
 # ---------------------------------------------------------------------------
-# Step Functions
+# ECS
+# ---------------------------------------------------------------------------
+
+output "ecs_task_definition_arn" {
+  description = "ARN of the cylon-armada Python ECS task definition"
+  value       = aws_ecs_task_definition.python_armada.arn
+}
+
+output "ecs_task_role_arn" {
+  description = "ARN of the ECS task IAM role"
+  value       = aws_iam_role.ecs_task.arn
+}
+
+output "ecs_execution_role_arn" {
+  description = "ARN of the ECS task execution IAM role"
+  value       = aws_iam_role.ecs_execution.arn
+}
+
+output "ecs_log_group" {
+  description = "CloudWatch log group name for ECS tasks"
+  value       = aws_cloudwatch_log_group.ecs_python.name
+}
+
+# ---------------------------------------------------------------------------
+# Step Functions — Lambda workflows
 # ---------------------------------------------------------------------------
 
 output "python_workflow_arn" {
-  description = "ARN of the Python Step Functions state machine"
+  description = "ARN of the Python Lambda Step Functions state machine"
   value       = aws_sfn_state_machine.python_workflow.arn
 }
 
 output "nodejs_workflow_arn" {
-  description = "ARN of the Node.js Step Functions state machine"
+  description = "ARN of the Node.js Lambda Step Functions state machine"
   value       = aws_sfn_state_machine.nodejs_workflow.arn
 }
 
 output "model_parallel_workflow_arn" {
   description = "ARN of the model parallel Step Functions state machine"
   value       = aws_sfn_state_machine.model_parallel_workflow.arn
+}
+
+# ---------------------------------------------------------------------------
+# Step Functions — ECS workflows
+# ---------------------------------------------------------------------------
+
+output "ecs_fargate_workflow_arn" {
+  description = "ARN of the ECS Fargate Step Functions state machine"
+  value       = aws_sfn_state_machine.ecs_fargate_workflow.arn
+}
+
+output "ecs_ec2_workflow_arn" {
+  description = "ARN of the ECS EC2 Step Functions state machine"
+  value       = aws_sfn_state_machine.ecs_ec2_workflow.arn
 }
 
 # ---------------------------------------------------------------------------
@@ -70,22 +117,13 @@ output "dynamodb_table_arn" {
 }
 
 output "scripts_bucket" {
-  description = "S3 bucket for Lambda scripts"
+  description = "S3 bucket for Lambda/ECS hot-reload scripts"
   value       = aws_s3_bucket.scripts.bucket
 }
 
-# ---------------------------------------------------------------------------
-# Container registries
-# ---------------------------------------------------------------------------
-
-output "ecr_python_url" {
-  description = "ECR repository URL for Python image"
-  value       = aws_ecr_repository.python.repository_url
-}
-
-output "ecr_nodejs_url" {
-  description = "ECR repository URL for Node.js image"
-  value       = aws_ecr_repository.nodejs.repository_url
+output "results_bucket" {
+  description = "S3 bucket for experiment results (existing)"
+  value       = data.aws_s3_bucket.results.bucket
 }
 
 # ---------------------------------------------------------------------------
@@ -93,8 +131,8 @@ output "ecr_nodejs_url" {
 # ---------------------------------------------------------------------------
 
 output "redis_endpoint" {
-  description = "Redis endpoint (if ElastiCache was created)"
-  value       = var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address : var.redis_host
+  description = "Redis endpoint (ElastiCache if created, otherwise var.redis_host)"
+  value       = local.redis_endpoint
 }
 
 output "lambda_execution_role_arn" {

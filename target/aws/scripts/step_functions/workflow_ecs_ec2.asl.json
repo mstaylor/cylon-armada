@@ -1,0 +1,84 @@
+{
+  "Comment": "Context-Based Cost Optimization — ECS EC2 path. A single EC2-backed ECS task runs the full experiment (init + execute + aggregate) and writes results to S3. Weak and strong scaling are controlled via SCALING and WORLD_SIZE env var overrides.",
+  "StartAt": "RunECSTask",
+  "States": {
+    "RunECSTask": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "Cluster": "${ECS_EC2_CLUSTER}",
+        "TaskDefinition": "${PYTHON_TASK_DEF}",
+        "LaunchType": "EC2",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": ${SUBNET_IDS},
+            "SecurityGroups": ${SECURITY_GROUP_IDS},
+            "AssignPublicIp": "DISABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "${CONTAINER_NAME}",
+              "Environment": [
+                {
+                  "Name": "WORKFLOW_ID",
+                  "Value.$": "$.workflow_id"
+                },
+                {
+                  "Name": "TASKS_JSON",
+                  "Value.$": "States.JsonToString($.tasks)"
+                },
+                {
+                  "Name": "SCALING",
+                  "Value.$": "$.scaling"
+                },
+                {
+                  "Name": "WORLD_SIZE",
+                  "Value.$": "States.Format('{}', $.world_size)"
+                },
+                {
+                  "Name": "RESULTS_PREFIX",
+                  "Value.$": "States.Format('${RESULTS_PREFIX_EC2}{}/', $.workflow_id)"
+                },
+                {
+                  "Name": "S3_SCRIPTS_BUCKET",
+                  "Value.$": "States.JsonToString($.s3_scripts_bucket)"
+                },
+                {
+                  "Name": "S3_SCRIPTS_PREFIX",
+                  "Value.$": "States.JsonToString($.s3_scripts_prefix)"
+                },
+                {
+                  "Name": "COMPUTE_PLATFORM",
+                  "Value": "ecs-ec2"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["ECS.AmazonECSException", "States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ExperimentFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "End": true
+    },
+    "ExperimentFailed": {
+      "Type": "Fail",
+      "Error": "ECSTaskFailed",
+      "Cause": "ECS EC2 task exited with non-zero status. Check CloudWatch logs."
+    }
+  }
+}

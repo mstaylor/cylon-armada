@@ -20,56 +20,85 @@ locals {
     ManagedBy   = "terraform"
   }
 
+  redis_endpoint = var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address : var.redis_host
+
+  # Env vars shared by all Lambda functions
   lambda_env = {
-    BEDROCK_LLM_MODEL_ID        = var.bedrock_llm_model_id
+    BEDROCK_LLM_MODEL_ID         = var.bedrock_llm_model_id
     BEDROCK_EMBEDDING_MODEL_ID   = var.bedrock_embedding_model_id
     BEDROCK_EMBEDDING_DIMENSIONS = tostring(var.bedrock_embedding_dimensions)
     SIMILARITY_THRESHOLD         = tostring(var.similarity_threshold)
     CONTEXT_BACKEND              = var.context_backend
-    REDIS_HOST                   = var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address : var.redis_host
+    REDIS_HOST                   = local.redis_endpoint
     REDIS_PORT                   = tostring(var.redis_port)
     DYNAMO_TABLE_NAME            = aws_dynamodb_table.context_store.name
     AWS_DEFAULT_REGION           = var.aws_region
   }
 
-  # Template variables for Step Functions ASL files
+  # Env vars shared by all ECS tasks (static; dynamic fields injected per-run
+  # via Step Functions ContainerOverrides)
+  ecs_env = [
+    { name = "BEDROCK_LLM_MODEL_ID",         value = var.bedrock_llm_model_id },
+    { name = "BEDROCK_EMBEDDING_MODEL_ID",    value = var.bedrock_embedding_model_id },
+    { name = "BEDROCK_EMBEDDING_DIMENSIONS",  value = tostring(var.bedrock_embedding_dimensions) },
+    { name = "SIMILARITY_THRESHOLD",          value = tostring(var.similarity_threshold) },
+    { name = "CONTEXT_BACKEND",               value = var.context_backend },
+    { name = "REDIS_HOST",                    value = local.redis_endpoint },
+    { name = "REDIS_PORT",                    value = tostring(var.redis_port) },
+    { name = "DYNAMO_TABLE_NAME",             value = aws_dynamodb_table.context_store.name },
+    { name = "RESULTS_BUCKET",                value = var.results_bucket_name },
+    { name = "AWS_DEFAULT_REGION",            value = var.aws_region },
+  ]
+
+  # Template variables for Lambda Step Functions ASL files
   asl_vars = {
     AWS_REGION = var.aws_region
     ACCOUNT_ID = var.account_id
   }
-}
 
-# ---------------------------------------------------------------------------
-# ECR Repositories
-# ---------------------------------------------------------------------------
-
-resource "aws_ecr_repository" "python" {
-  name                 = "${var.project_name}-python"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = false
+  # Template variables for ECS Step Functions ASL files
+  ecs_asl_vars = {
+    AWS_REGION            = var.aws_region
+    ACCOUNT_ID            = var.account_id
+    ECS_FARGATE_CLUSTER   = data.aws_ecs_cluster.fargate.arn
+    ECS_EC2_CLUSTER       = data.aws_ecs_cluster.ec2.arn
+    PYTHON_TASK_DEF       = aws_ecs_task_definition.python_armada.arn
+    CONTAINER_NAME        = var.ecs_container_name
+    SUBNET_IDS            = jsonencode(var.ecs_task_subnet_ids)
+    SECURITY_GROUP_IDS    = jsonencode(var.ecs_security_group_ids)
+    ASSIGN_PUBLIC_IP      = var.ecs_assign_public_ip
+    RESULTS_PREFIX_FARGATE = var.results_prefix_ecs_fargate
+    RESULTS_PREFIX_EC2    = var.results_prefix_ecs_ec2
   }
-
-  tags = local.common_tags
-}
-
-resource "aws_ecr_repository" "nodejs" {
-  name                 = "${var.project_name}-nodejs"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = false
-  }
-
-  tags = local.common_tags
 }
 
 # ---------------------------------------------------------------------------
-# S3 Bucket (Lambda scripts)
+# ECR — reference existing repository (not created by Terraform)
 # ---------------------------------------------------------------------------
+
+data "aws_ecr_repository" "main" {
+  name = var.ecr_repository_name
+}
+
+# ---------------------------------------------------------------------------
+# ECS — reference existing clusters (not created by Terraform)
+# ---------------------------------------------------------------------------
+
+data "aws_ecs_cluster" "fargate" {
+  cluster_name = var.ecs_fargate_cluster_name
+}
+
+data "aws_ecs_cluster" "ec2" {
+  cluster_name = var.ecs_ec2_cluster_name
+}
+
+# ---------------------------------------------------------------------------
+# S3 — reference existing results bucket; create scripts bucket
+# ---------------------------------------------------------------------------
+
+data "aws_s3_bucket" "results" {
+  bucket = var.results_bucket_name
+}
 
 resource "aws_s3_bucket" "scripts" {
   bucket        = var.scripts_bucket_name
@@ -150,11 +179,9 @@ resource "aws_iam_role" "lambda_execution" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
 
@@ -169,30 +196,20 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ]
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:*:*:*"
       },
       {
-        Effect = "Allow"
-        Action = [
-          "bedrock:InvokeModel",
-        ]
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
         Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
       },
       {
         Effect = "Allow"
         Action = [
-          "dynamodb:PutItem",
-          "dynamodb:GetItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:Query",
-          "dynamodb:Scan",
+          "dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
         ]
         Resource = [
           aws_dynamodb_table.context_store.arn,
@@ -201,11 +218,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
       },
       {
         Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:PutObject",
-        ]
+        Action = ["s3:GetObject", "s3:ListBucket", "s3:PutObject"]
         Resource = [
           aws_s3_bucket.scripts.arn,
           "${aws_s3_bucket.scripts.arn}/*",
@@ -215,7 +228,6 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
-# VPC access (if configured)
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   count      = length(var.subnet_ids) > 0 ? 1 : 0
   role       = aws_iam_role.lambda_execution.name
@@ -223,19 +235,159 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 }
 
 # ---------------------------------------------------------------------------
-# Lambda Functions — Python (dedicated per cylon architecture)
+# IAM Role — ECS task execution (ECR pull + CloudWatch logs)
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_role" "ecs_execution" {
+  name = "${var.project_name}-ecs-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_execution_managed" {
+  role       = aws_iam_role.ecs_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# ---------------------------------------------------------------------------
+# IAM Role — ECS task role (what the container can do at runtime)
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_role" "ecs_task" {
+  name = "${var.project_name}-ecs-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "ecs_task_policy" {
+  name = "${var.project_name}-ecs-task-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
+        Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource = [
+          # Results bucket (existing)
+          data.aws_s3_bucket.results.arn,
+          "${data.aws_s3_bucket.results.arn}/*",
+          # Scripts bucket (hot-reload)
+          aws_s3_bucket.scripts.arn,
+          "${aws_s3_bucket.scripts.arn}/*",
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
+        ]
+        Resource = [
+          aws_dynamodb_table.context_store.arn,
+          "${aws_dynamodb_table.context_store.arn}/index/*",
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+    ]
+  })
+}
+
+# ---------------------------------------------------------------------------
+# CloudWatch Log Group — ECS tasks
+# ---------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_group" "ecs_python" {
+  name              = "/ecs/${var.project_name}-python"
+  retention_in_days = var.ecs_log_retention_days
+  tags              = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# ECS Task Definition — Python armada runner
 #
-# Same image, different CMD override per function:
-#   armada_init      — embeds tasks, builds per-task payloads
-#   armada_executor  — routes a single task (similarity search + LLM)
-#   armada_aggregate — collects Map results, computes cost summary
+# Supports both FARGATE and EC2 launch types (awsvpc network mode).
+# Static env vars baked in; per-run config injected via Step Functions
+# ContainerOverrides (WORKFLOW_ID, TASKS_JSON, SCALING, WORLD_SIZE, etc.)
+# ---------------------------------------------------------------------------
+
+resource "aws_ecs_task_definition" "python_armada" {
+  family                   = "${var.project_name}-python"
+  requires_compatibilities = ["FARGATE", "EC2"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.ecs_python_cpu)
+  memory                   = tostring(var.ecs_python_memory_mb)
+  task_role_arn            = aws_iam_role.ecs_task.arn
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+
+  container_definitions = jsonencode([{
+    name      = var.ecs_container_name
+    image     = "${data.aws_ecr_repository.main.repository_url}:${var.ecs_image_tag}"
+    essential = true
+
+    # Entry point for ECS experiments — reads per-run config from env vars
+    command = ["python", "armada_ecs_runner.py"]
+
+    environment = local.ecs_env
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.ecs_python.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs"
+      }
+    }
+  }])
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# Lambda Functions — Python (init / executor / aggregate)
+#
+# All three use the same image with different CMD overrides,
+# following the cylon paper's dedicated-per-function pattern.
 # ---------------------------------------------------------------------------
 
 resource "aws_lambda_function" "python_init" {
   function_name = "${var.project_name}-init"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = var.python_image_uri
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
   memory_size   = var.python_memory_mb
   timeout       = var.lambda_timeout
 
@@ -262,7 +414,7 @@ resource "aws_lambda_function" "python_executor" {
   function_name = "${var.project_name}-executor"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = var.python_image_uri
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
   memory_size   = var.python_memory_mb
   timeout       = var.lambda_timeout
 
@@ -289,7 +441,7 @@ resource "aws_lambda_function" "python_aggregate" {
   function_name = "${var.project_name}-aggregate"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = var.python_image_uri
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
   memory_size   = var.python_memory_mb
   timeout       = var.lambda_timeout
 
@@ -313,14 +465,14 @@ resource "aws_lambda_function" "python_aggregate" {
 }
 
 # ---------------------------------------------------------------------------
-# Lambda Functions — Node.js (dedicated per cylon architecture)
+# Lambda Functions — Node.js (init / executor / aggregate)
 # ---------------------------------------------------------------------------
 
 resource "aws_lambda_function" "nodejs_init" {
   function_name = "${var.project_name}-init-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = var.nodejs_image_uri
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
 
@@ -347,7 +499,7 @@ resource "aws_lambda_function" "nodejs_executor" {
   function_name = "${var.project_name}-executor-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = var.nodejs_image_uri
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
 
@@ -374,7 +526,7 @@ resource "aws_lambda_function" "nodejs_aggregate" {
   function_name = "${var.project_name}-aggregate-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = var.nodejs_image_uri
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
 
@@ -407,11 +559,9 @@ resource "aws_iam_role" "step_functions_execution" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "states.amazonaws.com"
-      }
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "states.amazonaws.com" }
     }]
   })
 
@@ -424,25 +574,63 @@ resource "aws_iam_role_policy" "step_functions_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "lambda:InvokeFunction",
-      ]
-      Resource = [
-        aws_lambda_function.python_init.arn,
-        aws_lambda_function.python_executor.arn,
-        aws_lambda_function.python_aggregate.arn,
-        aws_lambda_function.nodejs_init.arn,
-        aws_lambda_function.nodejs_executor.arn,
-        aws_lambda_function.nodejs_aggregate.arn,
-      ]
-    }]
+    Statement = [
+      # Invoke Lambda functions (all six)
+      {
+        Effect = "Allow"
+        Action = ["lambda:InvokeFunction"]
+        Resource = [
+          aws_lambda_function.python_init.arn,
+          aws_lambda_function.python_executor.arn,
+          aws_lambda_function.python_aggregate.arn,
+          aws_lambda_function.nodejs_init.arn,
+          aws_lambda_function.nodejs_executor.arn,
+          aws_lambda_function.nodejs_aggregate.arn,
+        ]
+      },
+      # Run and monitor ECS tasks (used by ecs:runTask.sync)
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:RunTask",
+          "ecs:StopTask",
+          "ecs:DescribeTasks",
+        ]
+        Resource = ["*"]
+      },
+      # Pass IAM roles to ECS (required for runTask)
+      {
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
+        Resource = [
+          aws_iam_role.ecs_task.arn,
+          aws_iam_role.ecs_execution.arn,
+        ]
+      },
+      # EventBridge integration for ecs:runTask.sync callback
+      {
+        Effect = "Allow"
+        Action = [
+          "events:PutTargets",
+          "events:PutRule",
+          "events:DescribeRule",
+        ]
+        Resource = ["arn:aws:events:${var.aws_region}:${var.account_id}:rule/StepFunctionsGetEventsForECSTaskRule"]
+      },
+      # CloudWatch logs for Express workflows
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
+                    "logs:DeleteLogDelivery", "logs:ListLogDeliveries", "logs:PutResourcePolicy",
+                    "logs:DescribeResourcePolicies", "logs:DescribeLogGroups"]
+        Resource = ["*"]
+      },
+    ]
   })
 }
 
 # ---------------------------------------------------------------------------
-# Step Functions State Machines
+# Step Functions State Machines — Lambda workflows
 # ---------------------------------------------------------------------------
 
 resource "aws_sfn_state_machine" "python_workflow" {
@@ -471,6 +659,35 @@ resource "aws_sfn_state_machine" "model_parallel_workflow" {
   type     = "EXPRESS"
 
   definition = templatefile("${path.module}/../step_functions/workflow_model_parallel.asl.json", local.asl_vars)
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# Step Functions State Machines — ECS workflows
+#
+# Each workflow triggers a single ECS task (ecs:runTask.sync) that runs
+# the full experiment — init, execute, aggregate — inside the container.
+# Per-run config (workflow_id, tasks, scaling, world_size, etc.) is
+# injected via ContainerOverrides at execution time.
+# ---------------------------------------------------------------------------
+
+resource "aws_sfn_state_machine" "ecs_fargate_workflow" {
+  name     = "${var.project_name}-ecs-fargate-workflow"
+  role_arn = aws_iam_role.step_functions_execution.arn
+  type     = "EXPRESS"
+
+  definition = templatefile("${path.module}/../step_functions/workflow_ecs_fargate.asl.json", local.ecs_asl_vars)
+
+  tags = local.common_tags
+}
+
+resource "aws_sfn_state_machine" "ecs_ec2_workflow" {
+  name     = "${var.project_name}-ecs-ec2-workflow"
+  role_arn = aws_iam_role.step_functions_execution.arn
+  type     = "EXPRESS"
+
+  definition = templatefile("${path.module}/../step_functions/workflow_ecs_ec2.asl.json", local.ecs_asl_vars)
 
   tags = local.common_tags
 }
