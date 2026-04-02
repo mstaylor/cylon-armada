@@ -48,8 +48,13 @@ RUN npm install --production
 # ONNX model (optional — can also be loaded from S3 at runtime)
 # ---------------------------------------------------------------------------
 
+# ONNX model directory — created empty by default.
+# To bake a model into the image at build time, place it in docker/models/
+# and pass: --build-arg ONNX_MODEL_DIR=docker/models
+# Otherwise the model is loaded from S3 at runtime via ONNX_MODEL_S3_URI.
 ARG ONNX_MODEL_DIR=
-COPY ${ONNX_MODEL_DIR:-/dev/null} /app/models/
+RUN mkdir -p /app/models
+COPY docker/models/ /app/models/
 ENV ONNX_MODEL_PATH=/app/models/astromae.onnx
 
 # ---------------------------------------------------------------------------
