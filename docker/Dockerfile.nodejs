@@ -24,6 +24,8 @@ RUN cd /cylon/rust/cylon-wasm && \
     wasm-pack build --target nodejs --release
 
 # Build cylon-armada-wasm (from this repo's rust/ directory)
+# Must mirror the relative layout: cylon-armada-wasm depends on ../cylon-armada
+COPY rust/cylon-armada/ /cylon-armada/
 COPY rust/cylon-armada-wasm/ /cylon-armada-wasm/
 RUN cd /cylon-armada-wasm && \
     wasm-pack build --target nodejs --release
