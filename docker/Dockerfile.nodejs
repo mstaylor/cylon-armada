@@ -2,7 +2,7 @@
 # Stage 1: WASM builder
 # Installs Rust + wasm-pack, builds cylon-wasm and cylon-armada-wasm from source.
 # =============================================================================
-FROM rust:1.75-slim AS wasm-builder
+FROM rust:1.85-slim AS wasm-builder
 
 RUN apt-get update -y && \
     apt-get install -y curl git pkg-config libssl-dev && \
