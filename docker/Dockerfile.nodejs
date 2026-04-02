@@ -27,13 +27,11 @@ RUN apt-get update -y && \
 #   cd /path/to/cylon-armada && docker build -f docker/Dockerfile.nodejs -t cylon-armada-nodejs .
 # ---------------------------------------------------------------------------
 
-# cylon-wasm must be staged before building (outside this repo's build context):
-#   cp -r /home/parallels/cylon/rust/cylon-wasm/pkg/ docker/wasm/cylon-wasm/
+# Both WASM packages must be staged into docker/wasm/ before building:
+#   cp -r /home/parallels/cylon/rust/cylon-wasm/pkg/       docker/wasm/cylon-wasm/
+#   cp -r rust/cylon-armada-wasm/pkg/                       docker/wasm/cylon-armada-wasm/
 COPY docker/wasm/cylon-wasm/ /app/cylon-wasm/
-
-# cylon-armada-wasm is built in-repo via: wasm-pack build --target nodejs --release
-#   in rust/cylon-armada-wasm/
-COPY rust/cylon-armada-wasm/pkg/ /app/cylon-armada-wasm/
+COPY docker/wasm/cylon-armada-wasm/ /app/cylon-armada-wasm/
 
 ENV CYLON_WASM_PATH=/app/cylon-wasm/cylon_wasm_bg.wasm
 ENV CYLON_WASM_BINDINGS=/app/cylon-wasm/cylon_wasm.js
