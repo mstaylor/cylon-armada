@@ -20,7 +20,7 @@ ENV CYLON_PREFIX=/cylon/install
 ENV CYLON_ARMADA_PREFIX=/cylon-armada/install
 
 ARG EXPOSE_ENV=33000
-ENV EXPOSE_ENV $EXPOSE_ENV
+ENV EXPOSE_ENV=${EXPOSE_ENV}
 
 ADD https://google.com cache_bust
 
@@ -180,6 +180,8 @@ COPY target/shared/scripts/ /cylon-armada/scripts/
 COPY target/aws/scripts/lambda/python/armada_init.py /cylon-armada/armada_init.py
 COPY target/aws/scripts/lambda/python/armada_executor.py /cylon-armada/armada_executor.py
 COPY target/aws/scripts/lambda/python/armada_aggregate.py /cylon-armada/armada_aggregate.py
+COPY target/aws/scripts/lambda/python/armada_ecs_runner.py /cylon-armada/armada_ecs_runner.py
+COPY target/aws/scripts/lambda/python/s3_loader.py /cylon-armada/s3_loader.py
 COPY cpp/ /cylon-armada/cpp/
 COPY python/ /cylon-armada/python/
 
@@ -230,7 +232,7 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 
 EXPOSE $EXPOSE_ENV
 
-ENV PYTHONPATH="$CYLON_PREFIX/lib:/cylon-armada/scripts:/cylon-armada/python:$PYTHONPATH"
+ENV PYTHONPATH="${CYLON_PREFIX}/lib:/cylon-armada/scripts:/cylon-armada/python"
 ENV LD_LIBRARY_PATH="${GCYLON_BUILD}/lib:${CYLON_PREFIX}/lib:${CYLON_ARMADA_PREFIX}/lib:${CONDA_PREFIX}/lib:${UCX_HOME}/install/lib:${UCC_HOME}/install/lib:/usr/local/lib:/usr/local/cuda/lib64"
 ENV SHARED_SCRIPTS_PATH="/cylon-armada/scripts"
 ENV NVIDIA_VISIBLE_DEVICES=all
@@ -245,5 +247,7 @@ WORKDIR /cylon-armada
 #   armada_init.handler      — embed tasks, build Map payloads
 #   armada_executor.handler  — route single task (GPU SIMD)
 #   armada_aggregate.handler — collect results
-ENTRYPOINT [ "/cylon/target/aws/scripts/lambda/runCyloninLambda.sh" ]
-CMD [ "python", "-m", "awslambdaric", "armada_executor.handler" ]
+# ECS EC2 default: run the full experiment runner
+# Lambda override (via image_config.command in Terraform):
+#   ["python", "-m", "awslambdaric", "armada_executor.handler"]
+CMD [ "python", "armada_ecs_runner.py" ]
