@@ -46,8 +46,7 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-L
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate cylon_dev" >> ~/.bashrc && \
     echo "export LD_LIBRARY_PATH=$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib" >> ~/.bashrc && \
-    /opt/conda/bin/conda install -n base conda-libmamba-solver -y && \
-    /opt/conda/bin/conda config --set solver libmamba
+    /opt/conda/bin/conda install -n base conda-forge::mamba -y
 
 # ---------------------------------------------------------------------------
 # Cylon source
@@ -58,7 +57,7 @@ RUN cd $CYLON_HOME && git checkout -b ${CYLON_BRANCH} origin/${CYLON_BRANCH}
 
 SHELL ["/bin/bash", "--login", "-c"]
 
-RUN conda env create -f $CYLON_HOME/conda/environments/cylon_NoUCX.yml
+RUN mamba env create -f $CYLON_HOME/conda/environments/cylon_NoUCX.yml
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
