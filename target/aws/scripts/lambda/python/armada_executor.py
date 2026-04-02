@@ -17,6 +17,8 @@ Task payload (each item from armada_init's body array):
         "workflow_id": "...",
         "rank": 0,
         "world_size": 4,
+        "s3_scripts_bucket": "<optional>",
+        "s3_scripts_prefix": "scripts/",
         "config": {
             "llm_model_id": "...",
             "embedding_model_id": "...",
@@ -43,38 +45,12 @@ Returns:
     }
 """
 
-import base64
 import logging
 import os
 import sys
 
-import numpy as np
-
-_SHARED_SCRIPTS = os.environ.get(
-    "SHARED_SCRIPTS_PATH",
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "shared", "scripts"),
-)
-if _SHARED_SCRIPTS not in sys.path:
-    sys.path.insert(0, os.path.abspath(_SHARED_SCRIPTS))
-
-from context.manager import ContextManager  # noqa: E402
-from context.router import ContextRouter, SIMDBackend  # noqa: E402
-from chain.executor import ChainExecutor  # noqa: E402
-from cost.bedrock_pricing import BedrockConfig, BedrockCostTracker  # noqa: E402
-
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-
-
-def _resolve_backend() -> SIMDBackend:
-    """Resolve SIMD backend from environment."""
-    raw = os.environ.get("SIMD_BACKEND", "numpy").lower()
-    mapping = {
-        "pycylon": SIMDBackend.PYCYLON,
-        "cython": SIMDBackend.CYTHON_BATCH,
-        "numpy": SIMDBackend.NUMPY,
-    }
-    return mapping.get(raw, SIMDBackend.NUMPY)
 
 
 def handler(event, context):
@@ -87,6 +63,32 @@ def handler(event, context):
     'event' is one item from armada_init's body array, passed directly
     by the Step Functions Map state via $$.Map.Item.Value.
     """
+    # --- S3 script loading (optional) -----------------------------------
+    # S3 coordinates were propagated from armada_init into this payload.
+    s3_scripts_bucket = event.get("s3_scripts_bucket", "")
+    s3_scripts_prefix = event.get("s3_scripts_prefix", "scripts/")
+
+    if s3_scripts_bucket:
+        import s3_loader
+        ok = s3_loader.load_scripts(s3_scripts_bucket, s3_scripts_prefix)
+        if not ok:
+            logger.warning("armada_executor: S3 script load failed — falling back to baked-in scripts")
+
+    # --- Shared script imports (lazy so S3 path is on sys.path first) ---
+    _shared = os.environ.get(
+        "SHARED_SCRIPTS_PATH",
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "shared", "scripts"),
+    )
+    if _shared not in sys.path:
+        sys.path.insert(0, os.path.abspath(_shared))
+
+    import numpy as np
+    from context.manager import ContextManager  # noqa: E402
+    from context.router import ContextRouter, SIMDBackend  # noqa: E402
+    from chain.executor import ChainExecutor  # noqa: E402
+    from cost.bedrock_pricing import BedrockConfig, BedrockCostTracker  # noqa: E402
+
+    # --- Main logic -----------------------------------------------------
     task_description = event["task_description"]
     workflow_id = event["workflow_id"]
     rank = event.get("rank", 0)
@@ -98,6 +100,7 @@ def handler(event, context):
     )
 
     # Decode embedding from base64 (encoded by armada_init)
+    import base64
     embedding = np.frombuffer(
         base64.b64decode(event["embedding_b64"]), dtype=np.float32
     )
@@ -124,9 +127,16 @@ def handler(event, context):
         backend=context_backend,
     )
 
+    # Resolve SIMD backend from environment
+    raw = os.environ.get("SIMD_BACKEND", "numpy").lower()
+    backend = {
+        "pycylon": SIMDBackend.PYCYLON,
+        "cython": SIMDBackend.CYTHON_BATCH,
+        "numpy": SIMDBackend.NUMPY,
+    }.get(raw, SIMDBackend.NUMPY)
+
     chain_executor = ChainExecutor(config=config)
     cost_tracker = BedrockCostTracker.create(region=config.region)
-    backend = _resolve_backend()
     router = ContextRouter(context_manager, config=config, backend=backend)
 
     result = router.route(

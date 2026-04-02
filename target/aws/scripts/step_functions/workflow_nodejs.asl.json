@@ -5,11 +5,6 @@
     "ArmadaInit": {
       "Type": "Task",
       "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-init-node",
-      "Parameters": {
-        "workflow_id.$": "$.workflow_id",
-        "tasks.$": "$.tasks",
-        "config.$": "$.config"
-      },
       "ResultPath": "$.init_output",
       "Retry": [
         {
@@ -52,7 +47,9 @@
       "Parameters": {
         "workflow_id.$": "$.workflow_id",
         "task_results.$": "$.task_results",
-        "prepare_cost.$": "$.init_output.prepare_cost"
+        "prepare_cost.$": "$.init_output.prepare_cost",
+        "s3_scripts_bucket.$": "$.init_output.s3_scripts_bucket",
+        "s3_scripts_prefix.$": "$.init_output.s3_scripts_prefix"
       },
       "Retry": [
         {
