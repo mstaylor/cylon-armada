@@ -22,19 +22,12 @@ from libc.stdint cimport int64_t, uint8_t
 
 from pycylon.common.status cimport CStatus
 from pycylon.ctx.context cimport CCylonContext, CylonContext
-from context.context_table cimport (
-    CContextMetadata,
-    CContextTable,
-    CSearchResult,
-)
 from pycylon.api.lib cimport pycylon_unwrap_context
 from pyarrow.lib cimport CRecordBatch, pyarrow_wrap_batch
 
-IF CYTHON_REDIS:
-    from context.context_table cimport CSaveToRedis, CLoadFromRedis
-
-IF CYTHON_FMI:
-    from context.context_table cimport CSaveToS3, CLoadFromS3
+# CContextMetadata, CContextTable, CSearchResult, CSaveToRedis, CLoadFromRedis,
+# CSaveToS3, CLoadFromS3 are declared in context_table.pxd (same package) and
+# are automatically visible here — no cimport needed.
 
 
 cdef class ContextTable:
