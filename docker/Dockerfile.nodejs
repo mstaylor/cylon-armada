@@ -5,11 +5,12 @@
 FROM rust:1.85-slim AS wasm-builder
 
 RUN apt-get update -y && \
-    apt-get install -y curl git pkg-config libssl-dev && \
+    apt-get install -y curl git pkg-config libssl-dev clang && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install wasm-pack
+# Install wasm-pack and add the wasm32 target
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+RUN rustup target add wasm32-unknown-unknown
 
 # Build cylon-wasm (from the cylon repo)
 ARG CYLON_BRANCH=cylon-context-support
