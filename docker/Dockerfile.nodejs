@@ -6,7 +6,11 @@ FROM rust:1.85-slim AS wasm-builder
 
 RUN apt-get update -y && \
     apt-get install -y curl git pkg-config libssl-dev clang && \
+    clang --version && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# zstd-sys cross-compiles C for wasm32 using clang — must be explicit
+ENV CC_wasm32_unknown_unknown=clang
 
 # Install wasm-pack and add the wasm32 target
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
