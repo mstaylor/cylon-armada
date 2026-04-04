@@ -32,10 +32,8 @@ logger = logging.getLogger(__name__)
 def parse_summary_csv(filepath: str) -> Optional[Dict]:
     """Parse a single summary CSV file.
 
-    Expected format (from ExperimentBenchmark._write_summary_csv):
-        experiment_name,total_ms,total_cost,baseline_cost,savings_pct,
-        reuse_rate,cache_hits,llm_calls,task_count,similarity_threshold,
-        embedding_dimensions,backend,baseline
+    All platforms (Lambda, ECS, Rivanna, local) write normalized column
+    names — total_cost, total_ms, etc. — so no translation is needed here.
 
     Returns a dict with all columns, or None if unparseable.
     """
@@ -54,12 +52,41 @@ def parse_summary_csv(filepath: str) -> Optional[Dict]:
 def _extract_config_from_name(experiment_name: str) -> Dict:
     """Parse experiment parameters from the naming convention.
 
-    Names like: reuse_t4_th0.8_d256_redis_NUMPY
-                baseline_t4_d256_cylon_NUMPY
+    Lambda/local names:
+        reuse_t4_th0.8_d256_redis_NUMPY
+        baseline_t4_d256_cylon_NUMPY
+        llamaindex_t4_d256
+
+    ECS/Rivanna names (produced by armada_ecs_runner / armada_aggregate):
+        ecs-fargate_weak_ws4
+        ecs-ec2_strong_ws8
+        lambda_weak_ws1
+        rivanna_strong_ws16
     """
     result = {"experiment_name": experiment_name}
+
+    # --- ECS / Rivanna / Lambda scaling naming --------------------------
+    # Pattern: {platform}_{scaling}_ws{world_size}
+    ecs_m = re.match(
+        r"^(ecs[-_]fargate|ecs[-_]ec2|ecs|lambda|rivanna)_(weak|strong)_ws(\d+)",
+        experiment_name,
+    )
+    if ecs_m:
+        platform_raw = ecs_m.group(1).replace("_", "-")
+        result["platform"]   = platform_raw
+        result["scaling"]    = ecs_m.group(2)
+        result["world_size"] = int(ecs_m.group(3))
+        result["baseline"]   = False
+        result["system"]     = "cylon"
+        # task_count may appear in summary CSV data; no further regex needed
+        return result
+
+    # --- Lambda / local naming ------------------------------------------
     result["baseline"] = experiment_name.startswith("baseline_")
     result["system"] = "llamaindex" if experiment_name.startswith("llamaindex_") else "cylon"
+    result["platform"] = "local"
+    result["scaling"]  = "weak"
+    result["world_size"] = 1
 
     m = re.search(r"_t(\d+)_", experiment_name)
     if m:

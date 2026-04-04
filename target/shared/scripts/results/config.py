@@ -19,11 +19,16 @@ logger = logging.getLogger(__name__)
 # Column definitions — cylon-armada metrics
 # ---------------------------------------------------------------------------
 
-# Timing columns (milliseconds in raw data, converted to seconds in output)
+# Timing columns (milliseconds in raw data, converted to seconds in output).
+# All platforms write these names — ECS/Rivanna/Lambda all normalized.
 TIMING_COLUMNS = [
-    "total_ms",
+    "total_ms",           # wall-clock time of the full experiment
     "search_latency_ms",
     "llm_latency_ms",
+    "avg_latency_ms",     # mean per-task latency
+    "p50_latency_ms",
+    "p95_latency_ms",
+    "p99_latency_ms",
 ]
 
 # Cost columns (USD, no unit conversion)
@@ -33,26 +38,34 @@ COST_COLUMNS = [
     "savings_pct",
 ]
 
-# Reuse / hit-rate columns (counts and percentages, no unit conversion)
+# Reuse / hit-rate columns (counts, rates, throughput)
 REUSE_COLUMNS = [
     "reuse_rate",
     "cache_hits",
     "llm_calls",
+    "throughput_tasks_per_sec",  # ECS/Rivanna: tasks per second
 ]
 
 # All metric columns to aggregate (compute mean/std across runs)
 METRIC_COLUMNS = TIMING_COLUMNS + COST_COLUMNS + REUSE_COLUMNS
 
-# Columns that are in milliseconds and should be converted to seconds
+# Columns that are in milliseconds and should be converted to seconds in output
 MS_TO_S_COLUMNS = [
     "total_ms",
     "search_latency_ms",
     "llm_latency_ms",
+    "avg_latency_ms",
+    "p50_latency_ms",
+    "p95_latency_ms",
+    "p99_latency_ms",
 ]
 
 # Experiment parameter columns (used for grouping, not aggregated)
 PARAM_COLUMNS = [
     "experiment_name",
+    "platform",               # lambda, ecs-fargate, ecs-ec2, rivanna, local
+    "scaling",                # weak, strong
+    "world_size",             # number of concurrent workers
     "task_count",
     "similarity_threshold",
     "embedding_dimensions",

@@ -45,9 +45,13 @@
       "Type": "Task",
       "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-aggregate",
       "Parameters": {
-        "workflow_id.$": "$.workflow_id",
-        "task_results.$": "$.task_results",
-        "prepare_cost.$": "$.init_output.prepare_cost",
+        "workflow_id.$":      "$.workflow_id",
+        "task_results.$":     "$.task_results",
+        "scaling.$":          "$.init_output.scaling",
+        "world_size.$":       "$.init_output.world_size",
+        "results_s3_dir.$":   "$.init_output.results_s3_dir",
+        "experiment_name.$":  "$.init_output.experiment_name",
+        "prepare_cost.$":     "$.init_output.prepare_cost",
         "s3_scripts_bucket.$": "$.init_output.s3_scripts_bucket",
         "s3_scripts_prefix.$": "$.init_output.s3_scripts_prefix"
       },

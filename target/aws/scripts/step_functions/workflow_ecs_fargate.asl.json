@@ -38,8 +38,12 @@
                   "Value.$": "States.Format('{}', $.world_size)"
                 },
                 {
-                  "Name": "RESULTS_PREFIX",
-                  "Value.$": "States.Format('${RESULTS_PREFIX_FARGATE}{}/', $.workflow_id)"
+                  "Name": "RESULTS_DIR",
+                  "Value.$": "$.results_dir"
+                },
+                {
+                  "Name": "EXPERIMENT_NAME",
+                  "Value.$": "$.experiment_name"
                 },
                 {
                   "Name": "S3_SCRIPTS_BUCKET",

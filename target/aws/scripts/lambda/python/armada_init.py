@@ -31,9 +31,13 @@ Event payload:
     {
         "workflow_id": "<optional — generated if absent>",
         "tasks": ["task description 1", "task description 2", ...],
+        "scaling": "weak",               # optional: "weak" | "strong" | "w" | "s"
+        "world_size": 1,                 # optional: number of concurrent workers
+        "results_s3_dir": "results/lambda/{scaling}/",  # optional; {scaling}/{world_size} substituted
+        "experiment_name": "lambda_{scaling}_ws{world_size}",  # optional; same substitutions
         "s3_scripts_bucket": "<optional>",   # enables S3 script loading
         "s3_scripts_prefix": "scripts/",     # optional, default "scripts/"
-        "config": {                           # optional overrides
+        "config": {                          # optional overrides
             "llm_model_id": "...",
             "embedding_model_id": "...",
             "embedding_dimensions": 256,
@@ -46,6 +50,10 @@ Returns:
         "statusCode": 200,
         "body": [ <task_payload>, ... ],   # Map state iterates this
         "workflow_id": "...",
+        "scaling": "weak",
+        "world_size": 1,
+        "results_s3_dir": "results/lambda/weak/",
+        "experiment_name": "lambda_weak_ws1",
         "prepare_cost": { ... },
         "prepare_latency_ms": ...
     }
@@ -66,6 +74,17 @@ def handler(event, context):
     workflow payload, fans out into per-task payloads, returns the
     array in 'body' for Step Functions Map iteration.
     """
+    # --- Scaling / result naming (cylon_init.py pattern) ----------------
+    # Accept "w"/"s" abbreviations as well as full words.
+    raw_scaling = str(event.get("scaling", "weak")).strip().lower()
+    scaling = "strong" if raw_scaling.startswith("s") else "weak"
+    world_size = int(event.get("world_size", 1))
+
+    raw_results_s3_dir  = event.get("results_s3_dir",  "results/lambda/{scaling}/")
+    raw_experiment_name = event.get("experiment_name", "lambda_{scaling}_ws{world_size}")
+    results_s3_dir  = raw_results_s3_dir.format(scaling=scaling, world_size=world_size)
+    experiment_name = raw_experiment_name.format(scaling=scaling, world_size=world_size)
+
     # --- S3 script loading (optional) -----------------------------------
     # Read S3 coordinates from the event payload (cylon_init.py pattern).
     # If present, download the shared scripts folder before importing them.
@@ -97,21 +116,28 @@ def handler(event, context):
 
     result = coordinator.prepare_tasks(event)
 
-    # Propagate S3 script coordinates into every per-task payload so
-    # armada_executor and armada_aggregate can load the same scripts.
-    for payload in result["task_payloads"]:
+    # Propagate S3 script coordinates and scaling metadata into every
+    # per-task payload so armada_executor and armada_aggregate can use them.
+    for i, payload in enumerate(result["task_payloads"]):
         if s3_scripts_bucket:
             payload["s3_scripts_bucket"] = s3_scripts_bucket
             payload["s3_scripts_prefix"] = s3_scripts_prefix
+        payload["scaling"]         = scaling
+        payload["world_size"]      = world_size
+        payload["rank"]            = i
+        payload["results_s3_dir"]  = results_s3_dir
+        payload["experiment_name"] = experiment_name
 
     return {
         "statusCode": 200,
         "body": result["task_payloads"],
         "workflow_id": result["workflow_id"],
+        "scaling":         scaling,
+        "world_size":      world_size,
+        "results_s3_dir":  results_s3_dir,
+        "experiment_name": experiment_name,
         "prepare_cost": result["prepare_cost"],
         "prepare_latency_ms": result["prepare_latency_ms"],
-        # Echo S3 script coords so AggregateResults can forward them to
-        # armada_aggregate without an extra path in the execution input.
         "s3_scripts_bucket": s3_scripts_bucket,
         "s3_scripts_prefix": s3_scripts_prefix,
     }

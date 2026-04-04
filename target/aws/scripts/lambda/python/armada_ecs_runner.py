@@ -1,36 +1,43 @@
-"""armada_ecs_runner — ECS entry point for cylon-armada experiments.
+"""armada_ecs_runner — ECS / Rivanna entry point for cylon-armada experiments.
 
 Mirrors the original cylon experiment pattern: reads all configuration
 from environment variables (injected per-run by Step Functions
-ContainerOverrides), runs the full experiment, writes results to S3,
-and exits with code 0 on success.
+ContainerOverrides or Slurm --export), runs the full experiment, writes
+results to S3, and exits with code 0 on success.
 
 Scaling modes (set via SCALING env var):
-    weak:   each worker thread processes WORLD_SIZE tasks independently.
-            Total tasks = len(tasks). Measures throughput as parallelism
-            increases — workload grows proportionally with world_size.
-    strong: fixed task list divided evenly across WORLD_SIZE worker threads.
-            Measures speedup — same total work done faster with more workers.
+    weak:   each worker thread gets its own equal slice of the task list.
+            Total work grows proportionally with world_size — measures
+            throughput at scale.
+    strong: all worker threads process the same fixed task list.
+            Same total work done faster with more workers — measures speedup.
+
+File naming follows the cylon_init.py pattern: RESULTS_DIR and
+EXPERIMENT_NAME are format strings that accept {scaling} and {world_size}
+substitutions, giving the Step Functions caller full control over the
+output location and file naming convention.
 
 Results written to S3:
-    s3://<RESULTS_BUCKET>/<RESULTS_PREFIX>/
-        stopwatch.csv      — per-task timing rows (matches experiment pipeline format)
-        metrics.json       — aggregate metrics (reuse_rate, cost, latency percentiles)
-        summary.csv        — one-row summary for the results aggregator
+    s3://<RESULTS_BUCKET>/<RESULTS_DIR>/<EXPERIMENT_NAME>_stopwatch.csv
+    s3://<RESULTS_BUCKET>/<RESULTS_DIR>/<EXPERIMENT_NAME>_metrics.json
+    s3://<RESULTS_BUCKET>/<RESULTS_DIR>/<EXPERIMENT_NAME>_summary.csv
 
-Environment variables (static — from ECS task definition):
+Environment variables (static — from ECS task definition or Slurm environment):
     REDIS_HOST, REDIS_PORT, DYNAMO_TABLE_NAME, RESULTS_BUCKET
     BEDROCK_LLM_MODEL_ID, BEDROCK_EMBEDDING_MODEL_ID
     BEDROCK_EMBEDDING_DIMENSIONS, SIMILARITY_THRESHOLD
     CONTEXT_BACKEND, AWS_DEFAULT_REGION
 
-Environment variables (dynamic — injected per-run by Step Functions):
+Environment variables (dynamic — injected per-run by Step Functions or sbatch --export):
     WORKFLOW_ID          unique identifier for this run
     TASKS_JSON           JSON array of task description strings
     SCALING              "weak" or "strong"
     WORLD_SIZE           number of parallel worker threads
-    RESULTS_PREFIX       S3 key prefix, e.g. "results/ecs-fargate/run-001/"
-    COMPUTE_PLATFORM     "ecs-fargate" or "ecs-ec2" (metadata only)
+    RESULTS_DIR          S3 key directory prefix; supports {scaling} placeholder
+                         e.g. "results/ecs-fargate/{scaling}/"
+    EXPERIMENT_NAME      File name stem; supports {scaling} and {world_size}
+                         e.g. "ecs_fargate_{scaling}_ws{world_size}"
+    COMPUTE_PLATFORM     "ecs-fargate", "ecs-ec2", or "rivanna" (metadata only)
     S3_SCRIPTS_BUCKET    optional — bucket for hot-loaded scripts
     S3_SCRIPTS_PREFIX    optional — prefix for hot-loaded scripts
 """
@@ -103,10 +110,18 @@ def _write_results_to_s3(
     platform: str,
     total_elapsed_ms: float,
     results_bucket: str,
-    results_prefix: str,
+    results_dir: str,
+    experiment_name: str,
 ) -> None:
-    """Write stopwatch CSV, metrics JSON, and summary CSV to S3."""
+    """Write stopwatch CSV, metrics JSON, and summary CSV to S3.
+
+    Files are written as:
+        s3://{results_bucket}/{results_dir}/{experiment_name}_stopwatch.csv
+        s3://{results_bucket}/{results_dir}/{experiment_name}_metrics.json
+        s3://{results_bucket}/{results_dir}/{experiment_name}_summary.csv
+    """
     s3 = boto3.client("s3")
+    dir_prefix = results_dir.rstrip("/") + "/" if results_dir else ""
 
     cache_hits = sum(1 for r in results if r.get("source") == "cache")
     llm_calls = len(results) - cache_hits
@@ -146,51 +161,56 @@ def _write_results_to_s3(
         writer.writerows(stopwatch_rows)
     s3.put_object(
         Bucket=results_bucket,
-        Key=f"{results_prefix}stopwatch.csv",
+        Key=f"{dir_prefix}{experiment_name}_stopwatch.csv",
         Body=buf.getvalue().encode(),
         ContentType="text/csv",
     )
 
     # --- metrics.json ---------------------------------------------------
     metrics = {
-        "workflow_id":       workflow_id,
-        "platform":          platform,
-        "scaling":           scaling,
-        "world_size":        world_size,
-        "total_tasks":       len(results),
-        "cache_hits":        cache_hits,
-        "llm_calls":         llm_calls,
-        "reuse_rate":        reuse_rate,
-        "total_cost_usd":    total_cost,
-        "avg_latency_ms":    avg_latency,
-        "p50_latency_ms":    p50,
-        "p95_latency_ms":    p95,
-        "p99_latency_ms":    p99,
-        "total_elapsed_ms":  total_elapsed_ms,
+        "workflow_id":              workflow_id,
+        "platform":                 platform,
+        "scaling":                  scaling,
+        "world_size":               world_size,
+        "task_count":               len(results),
+        "cache_hits":               cache_hits,
+        "llm_calls":                llm_calls,
+        "reuse_rate":               reuse_rate,
+        "total_cost":               total_cost,
+        "baseline_cost":            0.0,
+        "savings_pct":              0.0,
+        "total_ms":                 total_elapsed_ms,
+        "avg_latency_ms":           avg_latency,
+        "p50_latency_ms":           p50,
+        "p95_latency_ms":           p95,
+        "p99_latency_ms":           p99,
         "throughput_tasks_per_sec": throughput,
     }
     s3.put_object(
         Bucket=results_bucket,
-        Key=f"{results_prefix}metrics.json",
+        Key=f"{dir_prefix}{experiment_name}_metrics.json",
         Body=json.dumps(metrics, indent=2).encode(),
         ContentType="application/json",
     )
 
     # --- summary.csv (one row — for the results aggregator) -------------
+    summary = dict(metrics)
+    summary["experiment_name"] = experiment_name
+
     summary_buf = io.StringIO()
-    writer = csv.DictWriter(summary_buf, fieldnames=list(metrics.keys()))
+    writer = csv.DictWriter(summary_buf, fieldnames=list(summary.keys()))
     writer.writeheader()
-    writer.writerow(metrics)
+    writer.writerow(summary)
     s3.put_object(
         Bucket=results_bucket,
-        Key=f"{results_prefix}summary.csv",
+        Key=f"{dir_prefix}{experiment_name}_summary.csv",
         Body=summary_buf.getvalue().encode(),
         ContentType="text/csv",
     )
 
     logger.info(
-        "Results written to s3://%s/%s (tasks=%d reuse=%.1f%% cost=$%.4f elapsed=%.0fms)",
-        results_bucket, results_prefix, len(results),
+        "Results written to s3://%s/%s%s_* (tasks=%d reuse=%.1f%% cost=$%.4f elapsed=%.0fms)",
+        results_bucket, dir_prefix, experiment_name, len(results),
         reuse_rate * 100, total_cost, total_elapsed_ms,
     )
 
@@ -219,9 +239,21 @@ def main() -> None:
     platform    = os.environ.get("COMPUTE_PLATFORM", "ecs").strip()
 
     results_bucket = os.environ.get("RESULTS_BUCKET", "").strip()
-    results_prefix = os.environ.get("RESULTS_PREFIX", f"results/ecs/{workflow_id}/").strip()
-    if not results_prefix.endswith("/"):
-        results_prefix += "/"
+
+    # --- File naming (cylon_init.py pattern) ----------------------------
+    # RESULTS_DIR and EXPERIMENT_NAME are format strings — {scaling} and
+    # {world_size} are substituted at runtime, giving the caller full
+    # control over the output location without hardcoding values.
+    scaling_str = "strong" if scaling.startswith("s") else "weak"
+    scaling = scaling_str  # normalise "s"/"w" to full word
+
+    raw_results_dir     = os.environ.get("RESULTS_DIR", "results/{scaling}/").strip()
+    raw_experiment_name = os.environ.get(
+        "EXPERIMENT_NAME", f"{platform}_{{scaling}}_ws{{world_size}}"
+    ).strip()
+
+    results_dir     = raw_results_dir.format(scaling=scaling, world_size=world_size)
+    experiment_name = raw_experiment_name.format(scaling=scaling, world_size=world_size)
 
     tasks: List[str] = json.loads(tasks_json)
     if not tasks:
@@ -232,8 +264,10 @@ def main() -> None:
         sys.exit(1)
 
     logger.info(
-        "armada_ecs_runner: workflow=%s platform=%s scaling=%s world_size=%d tasks=%d",
+        "armada_ecs_runner: workflow=%s platform=%s scaling=%s world_size=%d tasks=%d "
+        "experiment=%s dir=%s",
         workflow_id, platform, scaling, world_size, len(tasks),
+        experiment_name, results_dir,
     )
 
     # ------------------------------------------------------------------ #
@@ -352,7 +386,8 @@ def main() -> None:
         platform=platform,
         total_elapsed_ms=total_elapsed_ms,
         results_bucket=results_bucket,
-        results_prefix=results_prefix,
+        results_dir=results_dir,
+        experiment_name=experiment_name,
     )
 
 
