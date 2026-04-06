@@ -9,6 +9,14 @@ Infrastructure config (Redis host/port, DynamoDB table) is read from
 Lambda environment variables so it stays out of Step Functions history
 and can be managed independently of workflow inputs.
 
+FMI integration (when world_size > 1 and FMI is configured):
+  - Context Broadcast: rank 0 serializes the context store and broadcasts
+    to all workers before routing. Cylon backend uses Arrow IPC (Redis-free);
+    Redis backend broadcasts (context_id, embedding_b64) pairs.
+  - Progressive Context Sync: after each new LLM call, the executing worker
+    broadcasts the new embedding to all peers so subsequent similar tasks in
+    the same run can reuse it without a Redis round-trip.
+
 Task payload (each item from armada_init's body array):
     {
         "task_description": "...",
@@ -17,6 +25,8 @@ Task payload (each item from armada_init's body array):
         "workflow_id": "...",
         "rank": 0,
         "world_size": 4,
+        "fmi_channel_type": "redis",   # "redis" | "direct" | "s3"
+        "fmi_hint": "fast",            # "fast" | "low_latency"
         "s3_scripts_bucket": "<optional>",
         "s3_scripts_prefix": "scripts/",
         "config": {
@@ -45,12 +55,101 @@ Returns:
     }
 """
 
+import base64
+import json
 import logging
 import os
 import sys
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+
+
+def _broadcast_context(fmi, context_manager, workflow_id, context_backend, rank, np):
+    """Broadcast context store from rank 0 to all workers via FMI.
+
+    Cylon backend: serializes the full ContextTable as Arrow IPC bytes.
+        Rank 0 calls to_ipc(), broadcasts raw bytes; all other ranks call
+        load_from_ipc(). This is Redis-free — no ElastiCache required for
+        the Cylon context backend when FMI is available.
+
+    Redis backend: rank 0 fetches (context_id, embedding_b64) pairs and
+        broadcasts as JSON. All workers pre-populate their in-memory cache,
+        avoiding N independent Redis embedding lookups per worker.
+    """
+    if context_backend == "cylon":
+        ipc_data = context_manager.to_ipc() if fmi.rank == 0 else b""
+        received = fmi.broadcast_bytes(ipc_data, root=0)
+        if fmi.rank != 0 and received:
+            try:
+                context_manager.load_from_ipc(received)
+                logger.info(
+                    "FMI: loaded ContextTable from Arrow IPC broadcast (rank=%d)", rank
+                )
+            except Exception as e:
+                logger.warning("FMI: ContextTable IPC load failed: %s", e)
+    else:
+        if fmi.rank == 0:
+            all_embeddings = context_manager.get_all_embeddings(workflow_id=workflow_id)
+            cache_data = [
+                (ctx_id, base64.b64encode(emb.tobytes()).decode("ascii"))
+                for ctx_id, emb in all_embeddings
+            ]
+        else:
+            cache_data = []
+
+        cache_data = fmi.broadcast_embeddings(cache_data, root=0)
+        for ctx_id, emb_b64 in cache_data:
+            emb = np.frombuffer(base64.b64decode(emb_b64), dtype=np.float32)
+            context_manager.cache_embedding(ctx_id, emb, workflow_id=workflow_id)
+
+        logger.info(
+            "FMI: pre-populated %d embeddings via broadcast (rank=%d)",
+            len(cache_data), rank,
+        )
+
+
+def _sync_new_embedding(fmi, context_manager, result, query_embedding, workflow_id, rank, np):
+    """Progressive context sync — push a newly-computed embedding to all peers.
+
+    Called immediately after a new LLM call completes. The executing worker
+    broadcasts the (context_id, embedding) pair so all peers can cache it
+    and reuse it for any subsequent similar tasks in the same Map execution.
+
+    This is a within-run optimization: it improves reuse rates when Map
+    workers process related tasks and one worker's LLM response is useful
+    to another. Without this, reuse across workers only happens in the
+    next workflow run after Redis/Cylon persistence has been written.
+    """
+    context_id = result.get("context_id", "")
+    if not context_id:
+        return
+
+    payload_bytes = json.dumps({
+        "context_id": context_id,
+        "embedding_b64": base64.b64encode(query_embedding.tobytes()).decode("ascii"),
+        "workflow_id": workflow_id,
+        "src_rank": rank,
+    }).encode("utf-8")
+
+    received = fmi.broadcast_bytes(payload_bytes, root=rank)
+
+    if fmi.rank != rank:
+        try:
+            data = json.loads(received.decode("utf-8"))
+            emb = np.frombuffer(
+                base64.b64decode(data["embedding_b64"]), dtype=np.float32
+            )
+            context_manager.cache_embedding(
+                data["context_id"], emb, workflow_id=data.get("workflow_id")
+            )
+            logger.info(
+                "FMI: progressive sync — cached new embedding from rank %d "
+                "(context_id=%s, local_rank=%d)",
+                data["src_rank"], data["context_id"], rank,
+            )
+        except Exception as e:
+            logger.warning("FMI: progressive sync receive failed: %s", e)
 
 
 def handler(event, context):
@@ -64,7 +163,6 @@ def handler(event, context):
     by the Step Functions Map state via $$.Map.Item.Value.
     """
     # --- S3 script loading (optional) -----------------------------------
-    # S3 coordinates were propagated from armada_init into this payload.
     s3_scripts_bucket = event.get("s3_scripts_bucket", "")
     s3_scripts_prefix = event.get("s3_scripts_prefix", "scripts/")
 
@@ -72,7 +170,9 @@ def handler(event, context):
         import s3_loader
         ok = s3_loader.load_scripts(s3_scripts_bucket, s3_scripts_prefix)
         if not ok:
-            logger.warning("armada_executor: S3 script load failed — falling back to baked-in scripts")
+            logger.warning(
+                "armada_executor: S3 script load failed — falling back to baked-in scripts"
+            )
 
     # --- Shared script imports (lazy so S3 path is on sys.path first) ---
     _shared = os.environ.get(
@@ -87,6 +187,7 @@ def handler(event, context):
     from context.router import ContextRouter, SIMDBackend  # noqa: E402
     from chain.executor import ChainExecutor  # noqa: E402
     from cost.bedrock_pricing import BedrockConfig, BedrockCostTracker  # noqa: E402
+    from communicator.fmi_bridge import FMIBridge  # noqa: E402
 
     # --- Main logic -----------------------------------------------------
     task_description = event["task_description"]
@@ -100,7 +201,6 @@ def handler(event, context):
     )
 
     # Decode embedding from base64 (encoded by armada_init)
-    import base64
     embedding = np.frombuffer(
         base64.b64decode(event["embedding_b64"]), dtype=np.float32
     )
@@ -127,12 +227,22 @@ def handler(event, context):
         backend=context_backend,
     )
 
+    # --- FMI Context Broadcast ------------------------------------------
+    # FMIBridge.from_payload reads rank, world_size, fmi_channel_type, and
+    # fmi_hint from the task payload. fmi.available is True only when the
+    # Cylon FMI library (fmilib) is present in the container — otherwise
+    # all FMI calls are no-ops and execution falls back to Redis-only paths.
+    fmi = FMIBridge.from_payload(event)
+
+    if fmi.available and world_size > 1:
+        _broadcast_context(fmi, context_manager, workflow_id, context_backend, rank, np)
+
     # Resolve SIMD backend from environment
     raw = os.environ.get("SIMD_BACKEND", "numpy").lower()
     backend = {
         "pycylon": SIMDBackend.PYCYLON,
-        "cython": SIMDBackend.CYTHON_BATCH,
-        "numpy": SIMDBackend.NUMPY,
+        "cython":  SIMDBackend.CYTHON_BATCH,
+        "numpy":   SIMDBackend.NUMPY,
     }.get(raw, SIMDBackend.NUMPY)
 
     chain_executor = ChainExecutor(config=config)
@@ -147,6 +257,18 @@ def handler(event, context):
         cost_tracker=cost_tracker,
         embedding_metadata=embedding_metadata,
     )
+
+    # --- Progressive Context Sync ---------------------------------------
+    # After a new LLM call, immediately broadcast the new embedding to all
+    # peer workers. Workers processing later tasks in the same Map batch
+    # can reuse it without waiting for the next workflow run.
+    if fmi.available and world_size > 1 and result.get("source") == "llm":
+        _sync_new_embedding(
+            fmi, context_manager, result, embedding, workflow_id, rank, np
+        )
+
+    if fmi.available and world_size > 1:
+        fmi.finalize()
 
     result["task_description"] = task_description
     result["rank"] = rank

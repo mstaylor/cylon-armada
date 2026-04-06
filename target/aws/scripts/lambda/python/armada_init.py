@@ -116,26 +116,34 @@ def handler(event, context):
 
     result = coordinator.prepare_tasks(event)
 
-    # Propagate S3 script coordinates and scaling metadata into every
-    # per-task payload so armada_executor and armada_aggregate can use them.
+    # FMI channel config — passed through from caller to every executor
+    fmi_channel_type = event.get("fmi_channel_type", "redis")
+    fmi_hint         = event.get("fmi_hint", "fast")
+
+    # Propagate S3 script coordinates, scaling metadata, and FMI config into
+    # every per-task payload so armada_executor and armada_aggregate can use them.
     for i, payload in enumerate(result["task_payloads"]):
         if s3_scripts_bucket:
             payload["s3_scripts_bucket"] = s3_scripts_bucket
             payload["s3_scripts_prefix"] = s3_scripts_prefix
-        payload["scaling"]         = scaling
-        payload["world_size"]      = world_size
-        payload["rank"]            = i
-        payload["results_s3_dir"]  = results_s3_dir
-        payload["experiment_name"] = experiment_name
+        payload["scaling"]          = scaling
+        payload["world_size"]       = world_size
+        payload["rank"]             = i
+        payload["results_s3_dir"]   = results_s3_dir
+        payload["experiment_name"]  = experiment_name
+        payload["fmi_channel_type"] = fmi_channel_type
+        payload["fmi_hint"]         = fmi_hint
 
     return {
         "statusCode": 200,
         "body": result["task_payloads"],
         "workflow_id": result["workflow_id"],
-        "scaling":         scaling,
-        "world_size":      world_size,
-        "results_s3_dir":  results_s3_dir,
-        "experiment_name": experiment_name,
+        "scaling":          scaling,
+        "world_size":       world_size,
+        "results_s3_dir":   results_s3_dir,
+        "experiment_name":  experiment_name,
+        "fmi_channel_type": fmi_channel_type,
+        "fmi_hint":         fmi_hint,
         "prepare_cost": result["prepare_cost"],
         "prepare_latency_ms": result["prepare_latency_ms"],
         "s3_scripts_bucket": s3_scripts_bucket,

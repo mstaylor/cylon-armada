@@ -140,11 +140,135 @@ def action_aggregate_results(payload):
     return coordinator.aggregate_results(payload)
 
 
+def action_model_parallel_stage(payload):
+    """Model parallelism — run one ONNX stage and exchange tensors via FMI.
+
+    Replaces Step Functions state passing for inter-stage tensor exchange,
+    removing the 256KB payload limit that constrains large batch inference.
+
+    Each Lambda receives its ONNX stage assignment (rank 0 = ViT, rank 1 =
+    Inception) via the payload, runs its subgraph, then all-gathers outputs
+    via FMI. Rank 0 runs the fusion stage once all outputs are collected.
+
+    Payload:
+        {
+            "rank": 0,             # 0 = ViT, 1 = Inception
+            "world_size": 2,       # number of parallel stages
+            "onnx_stage": 0,       # ONNX subgraph index to run
+            "onnx_s3_key": "...",  # S3 key of the ONNX partition
+            "input_b64": "...",    # base64 float32 input tensor
+            "input_shape": [...],  # tensor shape
+            "fusion_s3_key": "...", # S3 key of the fusion subgraph (rank 0 only)
+            "fmi_channel_type": "direct",  # TCPunch for low-latency tensor exchange
+            "fmi_hint": "low_latency",
+            "s3_bucket": "...",    # bucket for ONNX subgraph download
+            "batch_size": 32,
+        }
+
+    Returns (on rank 0 after fusion):
+        {
+            "prediction": [...],   # model output (e.g., redshift predictions)
+            "stage_latency_ms": { "vit": ..., "inception": ..., "fusion": ... },
+            "fmi_latency_ms": ..., # allgather time
+        }
+    """
+    import base64
+    import time
+
+    import numpy as np
+
+    fmi = FMIBridge.from_payload(payload)
+    if not fmi.available:
+        raise RuntimeError(
+            "FMI not available — model_parallel_stage requires Cylon FMI library"
+        )
+
+    rank = fmi.rank
+    onnx_stage = int(payload.get("onnx_stage", rank))
+    s3_bucket = payload.get("s3_bucket", "")
+    onnx_s3_key = payload.get("onnx_s3_key", "")
+    batch_size = int(payload.get("batch_size", 1))
+
+    # Decode input tensor
+    input_tensor = np.frombuffer(
+        base64.b64decode(payload["input_b64"]), dtype=np.float32
+    ).reshape(payload["input_shape"])
+
+    # Download and run ONNX subgraph for this stage
+    import onnxruntime as ort
+    import boto3
+    import io
+
+    stage_start = time.monotonic()
+
+    s3 = boto3.client("s3")
+    obj = s3.get_object(Bucket=s3_bucket, Key=onnx_s3_key)
+    onnx_bytes = obj["Body"].read()
+
+    sess = ort.InferenceSession(onnx_bytes, providers=["CPUExecutionProvider"])
+    input_name = sess.get_inputs()[0].name
+    output = sess.run(None, {input_name: input_tensor})[0]  # shape varies by stage
+
+    stage_latency_ms = (time.monotonic() - stage_start) * 1000
+    logger.info(
+        "Stage %d complete: output shape=%s latency=%.1fms",
+        onnx_stage, output.shape, stage_latency_ms,
+    )
+
+    # All-gather outputs from all stages via FMI direct channel
+    allgather_start = time.monotonic()
+    all_outputs = fmi.allgather_tensors(output)
+    fmi_latency_ms = (time.monotonic() - allgather_start) * 1000
+
+    logger.info(
+        "FMI allgather complete: %d tensors, latency=%.1fms",
+        len(all_outputs), fmi_latency_ms,
+    )
+
+    # Rank 0 runs the fusion stage with the concatenated outputs
+    result = {
+        "stage_latency_ms": {f"stage_{onnx_stage}": round(stage_latency_ms, 2)},
+        "fmi_latency_ms": round(fmi_latency_ms, 2),
+    }
+
+    if rank == 0:
+        fusion_s3_key = payload.get("fusion_s3_key", "")
+        if not fusion_s3_key:
+            raise ValueError("fusion_s3_key required on rank 0 for fusion stage")
+
+        fusion_start = time.monotonic()
+
+        obj = s3.get_object(Bucket=s3_bucket, Key=fusion_s3_key)
+        fusion_bytes = obj["Body"].read()
+
+        fusion_sess = ort.InferenceSession(
+            fusion_bytes, providers=["CPUExecutionProvider"]
+        )
+
+        # Concatenate all stage outputs along the feature dimension
+        concatenated = np.concatenate(all_outputs, axis=-1)
+        fusion_input_name = fusion_sess.get_inputs()[0].name
+        prediction = fusion_sess.run(None, {fusion_input_name: concatenated})[0]
+
+        fusion_latency_ms = (time.monotonic() - fusion_start) * 1000
+        logger.info(
+            "Fusion complete: prediction shape=%s latency=%.1fms",
+            prediction.shape, fusion_latency_ms,
+        )
+
+        result["prediction"] = prediction.tolist()
+        result["stage_latency_ms"]["fusion"] = round(fusion_latency_ms, 2)
+
+    fmi.finalize()
+    return result
+
+
 # Action dispatch table
 _ACTIONS = {
-    "prepare_tasks": action_prepare_tasks,
-    "route_task": action_route_task,
-    "aggregate_results": action_aggregate_results,
+    "prepare_tasks":        action_prepare_tasks,
+    "route_task":           action_route_task,
+    "aggregate_results":    action_aggregate_results,
+    "model_parallel_stage": action_model_parallel_stage,
 }
 
 

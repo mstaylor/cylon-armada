@@ -1698,3 +1698,201 @@ python runner.py --tasks-file scenarios/hydrology.json --tasks 32
 5. **Context store growth during experiments.** As experiments run, the context store accumulates entries from prior runs. Should each experiment start with a clean store, or should we test with a pre-populated store to simulate production conditions?
 
 6. **Lambda concurrency limits.** Running 32+ parallel Lambda workers may hit account concurrency limits. Verify reserved concurrency is available or request an increase.
+---
+
+## Phase 2: FMI Integration
+
+Extends the Phase 1 context reuse architecture with three FMI-based capabilities that build directly on the Cylon Communicator infrastructure validated in Phase 1.
+
+### Overview
+
+| # | Capability | File(s) Modified | FMI Operation | Benefit |
+|---|-----------|-----------------|---------------|---------|
+| 1 | Context Table Broadcast | `armada_executor.py` | `broadcast_bytes` (Arrow IPC) | Redis-free Cylon backend; one snapshot vs N reads |
+| 2 | Progressive Context Sync | `armada_executor.py` | `broadcast_bytes` (JSON embedding) | Within-run reuse across Map workers |
+| 3 | Model Parallelism Tensors | `run_action.py` | `allgather_tensors` | Removes 256KB Step Functions limit for AstroMAE |
+
+All three are guarded by `fmi.available` — they silently degrade to the existing Redis path in non-Cylon containers.
+
+---
+
+### Capability 1: Context Table Broadcast
+
+**Problem:** When using the Cylon backend (`CONTEXT_BACKEND=cylon`), each Lambda executor starts with an empty in-memory ContextTable. There is no cross-invocation context sharing unless each worker independently loads from Redis — which requires ElastiCache and N round-trips. For the Cylon backend, FMI enables a fundamentally different approach.
+
+**Solution:** Rank 0 serializes the full ContextTable as Arrow IPC bytes (`context_manager.to_ipc()`) and broadcasts to all workers via a single FMI call. Each worker reconstructs its local ContextTable from the received bytes (`context_manager.load_from_ipc()`).
+
+**Architecture:**
+
+```
+armada_init (rank 0)
+    │
+    │  seeds ContextTable from Redis or prior run
+    │
+    ▼
+FMI broadcast_bytes(ipc_data, root=0)
+    ├── rank 0: to_ipc() → Arrow IPC bytes → broadcast
+    ├── rank 1: receive bytes → load_from_ipc()
+    ├── rank 2: receive bytes → load_from_ipc()
+    └── rank N: receive bytes → load_from_ipc()
+         │
+         ▼
+    All workers start routing with identical ContextTable
+    (no Redis required for context read path)
+```
+
+**Key properties:**
+- Cylon backend only (`context_backend == "cylon"`)
+- Falls back to per-worker Redis load when `fmi.available == False`
+- Arrow IPC preserves zero-copy semantics — no embedding re-encoding
+- Channel type is configurable: `fmi_channel_type = "redis" | "direct" | "s3"`
+  - `"direct"` (TCPunch) is preferred for low latency when rendezvous server is reachable
+  - `"redis"` is the default fallback
+
+**Implementation:** `armada_executor.py:_broadcast_context()`
+
+**New payload fields (propagated by `armada_init`):**
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `fmi_channel_type` | `"redis"` | FMI channel: `"redis"`, `"direct"`, `"s3"` |
+| `fmi_hint` | `"fast"` | Performance hint: `"fast"` or `"low_latency"` |
+
+---
+
+### Capability 2: Progressive Context Sync
+
+**Problem:** Within a single Map execution, worker A may make an LLM call and store a new embedding. Worker B, processing a similar task moments later, cannot reuse it because persistence (Redis/DynamoDB write) is asynchronous and worker B's ContextTable snapshot was taken before the new entry existed.
+
+**Solution:** After each new LLM call, the executing worker immediately broadcasts the new `(context_id, embedding)` pair to all peers. Every peer calls `context_manager.cache_embedding()` to add it to their local context store. The next router.search() on a similar task will find it.
+
+**Architecture:**
+
+```
+Worker A: LLM call completes
+    │
+    │  result["source"] == "llm"
+    │  result["context_id"] = "abc-123"
+    │
+    ▼
+FMI broadcast_bytes({context_id, embedding_b64, workflow_id}, root=A)
+    ├── rank A: sends bytes
+    ├── rank B: receives → cache_embedding("abc-123", emb)
+    └── rank C: receives → cache_embedding("abc-123", emb)
+
+Worker B (later): router.search() finds "abc-123" → cache hit
+```
+
+**Key properties:**
+- Applies to both `cylon` and `redis` context backends
+- Only triggered when `result["source"] == "llm"` (new call, not cache hit)
+- The broadcast is point-to-point from the LLM-calling worker (`root=rank`) to all others
+- Requires `fmi.available and world_size > 1`
+- The sync is best-effort — if a worker has already routed its task by the time the broadcast arrives, no benefit is lost; the embedding is still cached for future runs
+
+**Implementation:** `armada_executor.py:_sync_new_embedding()`
+
+**Experiment hypothesis:** For task batches with >30% semantic overlap, progressive sync increases within-run reuse rate by 10-25% compared to the baseline (no FMI) at `world_size >= 4`.
+
+---
+
+### Capability 3: Model Parallelism Tensor Exchange
+
+**Problem:** AstroMAE ViT + Inception parallel branches produce intermediate tensors of shape `(B, 1096)` and `(B, 2120)` float32. At batch size 32, these are ~140KB and ~270KB respectively — already exceeding Step Functions' 256KB payload limit at batch_size=32 for the Inception branch. Larger batches are impossible via Step Functions state.
+
+**Solution:** Replace Step Functions state passing for tensor handoff with FMI `allgather_tensors()`. Each stage Lambda runs its ONNX subgraph, then all stages all-gather their outputs via FMI direct channel. Rank 0 receives all tensors and runs the fusion stage.
+
+**Architecture:**
+
+```
+Step Functions triggers parallel Lambda pair:
+    ├── Lambda 0 (rank=0): ONNX Stage 0 (ViT encoder)
+    └── Lambda 1 (rank=1): ONNX Stage 1 (Inception branch)
+
+Both complete independently:
+    Lambda 0: output shape (B, 1096) float32
+    Lambda 1: output shape (B, 2120) float32
+
+FMI allgather_tensors():
+    ├── rank 0 broadcasts its (B, 1096) tensor
+    ├── rank 1 broadcasts its (B, 2120) tensor
+    └── all ranks receive both tensors
+
+Lambda 0 (rank=0) runs fusion:
+    concatenate → (B, 3216)
+    ONNX Stage 2 (fusion) → (B, 1)   ← redshift prediction
+    return prediction to Step Functions
+```
+
+**FMI channel selection for tensors:**
+
+| Channel | Latency | Max Size | Recommendation |
+|---------|---------|----------|----------------|
+| `direct` (TCPunch) | <10ms | Practical | Primary for inter-stage tensors |
+| `redis` | 20-50ms | Redis value limit | Fallback; set `fmi_hint="low_latency"` |
+| `s3` | 100-500ms | Unlimited | Very large tensors (>100MB) or cold paths |
+
+**Payload fields for `model_parallel_stage` action:**
+
+| Field | Description |
+|-------|-------------|
+| `rank` | Stage assignment: 0 = ViT, 1 = Inception |
+| `world_size` | Always 2 for AstroMAE split |
+| `onnx_stage` | ONNX subgraph index (matches rank) |
+| `onnx_s3_key` | S3 key for this stage's ONNX partition |
+| `fusion_s3_key` | S3 key for fusion subgraph (rank 0 only) |
+| `input_b64` | Base64 float32 input tensor |
+| `input_shape` | Shape list, e.g. `[32, 224, 224, 1]` |
+| `fmi_channel_type` | `"direct"` recommended for tensors |
+| `fmi_hint` | `"low_latency"` recommended |
+| `s3_bucket` | Bucket for ONNX subgraph download |
+| `batch_size` | Inference batch size |
+
+**Implementation:** `run_action.py:action_model_parallel_stage()`
+
+**Memory savings vs. single-Lambda inference:**
+
+| Configuration | Per-Lambda Memory | Step Functions Limit Issue |
+|--------------|-------------------|---------------------------|
+| Single Lambda (full model) | ~550MB peak | No limit issue, but memory-bound |
+| 2-Lambda split (Phase 2) | ~350MB / ~200MB | Resolved by FMI — no state passing |
+| 3-Lambda split (future) | ~200MB / ~150MB / ~50MB | Fully eliminated |
+
+---
+
+### FMI Configuration Reference
+
+Environment variables read by `FMIBridge.from_env()` (ECS/Rivanna):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RANK` | `0` | Worker rank |
+| `WORLD_SIZE` | `1` | Total workers |
+| `FMI_CHANNEL_TYPE` | `"redis"` | Channel: `redis`, `direct`, `s3` |
+| `FMI_HINT` | `"fast"` | Performance: `fast`, `low_latency` |
+| `RENDEZVOUS_HOST` | — | Required for `direct` channel (TCPunch) |
+| `RENDEZVOUS_PORT` | — | Required for `direct` channel |
+| `REDIS_HOST` | `"localhost"` | Required for `redis` channel |
+| `REDIS_PORT` | `6379` | Required for `redis` channel |
+
+Payload fields read by `FMIBridge.from_payload()` (Lambda Map state):
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `rank` | `0` | Worker rank (set by `armada_init`) |
+| `world_size` | `1` | Total workers (set by `armada_init`) |
+| `fmi_channel_type` | `"redis"` | Caller-configurable channel type |
+| `fmi_hint` | `"fast"` | Caller-configurable hint |
+
+---
+
+### Fallback Behavior
+
+All three capabilities gracefully degrade when FMI is not available:
+
+| Scenario | Behavior |
+|----------|----------|
+| `fmi.available == False` (no Cylon FMI library) | All FMI calls are no-ops; Redis/in-memory paths used |
+| `world_size == 1` | No broadcast needed; single-worker execution unchanged |
+| FMI channel error | Logged as warning; routing continues without broadcast |
+| IPC deserialization failure | Logged as warning; ContextTable remains empty (cold start) |
