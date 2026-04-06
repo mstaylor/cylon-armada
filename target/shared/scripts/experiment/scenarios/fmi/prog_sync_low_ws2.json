@@ -1,0 +1,23 @@
+{
+  "workflow_id": "fmi-prog-sync-low-ws2",
+  "tasks": [
+    "Analyze the photometric redshift prediction z=0.45 for an elliptical galaxy with SDSS magnitudes u=22.1, g=20.9, r=20.3, i=19.7, z=19.1. Classify the galaxy type.",
+    "Model the flood risk for a 280 km² watershed with 1050 mm annual precipitation, 58% forest cover, and clay loam soils. Estimate the 100-year peak discharge.",
+    "Model the spread of a respiratory pathogen with R0=2.0, serial interval 3.5 days, in a city of 1.8 million. Predict peak timing and total infections.",
+    "Assess the seismic hazard for a site 20 km from an active fault with slip rate 6 mm/yr and Mmax=7.0. Estimate PGA for 10% exceedance in 50 years.",
+    "Compare the computational cost of SIMD-accelerated similarity search versus brute-force numpy for 1000 embeddings of dimension 1024.",
+    "Analyze the cold start latency for Python Lambda (pycylon + LangChain) versus Node.js Lambda (cylon-wasm + ONNX Runtime). What dominates initialization time?",
+    "Assess the cross-domain reuse rate: do hydrology tasks ever reuse epidemiology contexts? Measure false positive rates across scientific domains.",
+    "Benchmark the ONNX Runtime inference latency for AstroMAE on Lambda (Node.js) versus PyTorch inference on Lambda (Python) for batches of 32 and 128 images."
+  ],
+  "scaling": "weak",
+  "world_size": 2,
+  "fmi_channel_type": "redis",
+  "fmi_hint": "fast",
+  "results_s3_dir": "results/fmi/prog_sync_low/",
+  "experiment_name": "prog_sync_low_ws2",
+  "config": {
+    "similarity_threshold": "0.80",
+    "embedding_dimensions": "256"
+  }
+}

@@ -830,313 +830,295 @@ unchanged — only the search backend is swapped.
 | Strong scaling shows no speedup | Redis contention or single-threaded GIL | Use separate `ContextManager` per thread (already done in runner); check Redis connection pool |
 ---
 
+
+---
+
 ## Stage 6: FMI Integration Experiments
 
-These experiments validate the three Phase 2 FMI capabilities. All require a Cylon Lambda container with `fmilib` installed and a reachable rendezvous server (for `direct` channel experiments).
+These experiments validate the three Phase 2 FMI capabilities. Each AWS experiment has a dedicated JSON input file under `target/shared/scripts/experiment/scenarios/fmi/` — pass it directly to the CLI with `--input file://`.
 
 **Prerequisites:**
 ```bash
-# Verify rendezvous server is reachable
-RENDEZVOUS_HOST=$(terraform -chdir=target/aws/scripts/terraform output -raw rendezvous_host)
-RENDEZVOUS_PORT=$(terraform -chdir=target/aws/scripts/terraform output -raw rendezvous_port)
-curl -s http://$RENDEZVOUS_HOST:$RENDEZVOUS_PORT/health
+# Fetch ARNs
+PYTHON_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw python_workflow_arn)
+MODEL_PARALLEL_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw model_parallel_workflow_arn)
+ONNX_BUCKET=$(terraform -chdir=target/aws/scripts/terraform output -raw results_bucket)
 
-# Verify FMI is available in the container
-docker run --rm cylon-armada-python python -c \
-    "from communicator.fmi_bridge import FMIBridge; b = FMIBridge(1, 0); print('FMI available:', b.available)"
+# Verify rendezvous server (required for fmi_channel_type=direct experiments)
+RENDEZVOUS_HOST=$(terraform -chdir=target/aws/scripts/terraform output -raw rendezvous_host)
+curl -s http://$RENDEZVOUS_HOST:10000/health
+
+# Verify FMI is present in the deployed container
+aws lambda invoke \
+    --function-name cylon-armada-executor \
+    --payload '{"task_description":"test","embedding_b64":"","workflow_id":"fmi-check","rank":0,"world_size":1}' \
+    /tmp/fmi_check.json && grep -i "fmi" /tmp/fmi_check.json
+```
+
+Input files are in `target/shared/scripts/experiment/scenarios/fmi/`. Set `SCENARIOS` to that path for brevity:
+
+```bash
+SCENARIOS=target/shared/scripts/experiment/scenarios/fmi
 ```
 
 ---
 
 ### 6.1 Context Broadcast Experiments
 
-**Research question:** Does FMI Arrow IPC broadcast eliminate the need for Redis in the Cylon backend? Does it improve latency vs. N independent Redis reads at scale?
+**Research question:** Does FMI Arrow IPC broadcast eliminate Redis round-trips for the Cylon backend? Does the direct (TCPunch) channel reduce broadcast latency vs Redis at scale?
 
-**Experimental matrix:**
+#### 6.1.1 FMI broadcast — Redis channel
 
-| Variable | Values |
-|----------|--------|
-| Context backend | `cylon` (IPC broadcast), `redis` (per-worker load) |
-| FMI channel type | `redis`, `direct` |
-| World size | 1, 2, 4, 8, 16 |
-| Context store size | 0 (cold), 100, 500, 1000 contexts pre-loaded |
-| Tasks per worker | 4 (weak scaling) |
-
-**Run — FMI context broadcast (Cylon backend, redis channel):**
+One execution per world_size. Each file has the correct task count for weak scaling (ws1=4, ws2=8, ws4=16, ws8=32 tasks):
 
 ```bash
-for world_size in 1 2 4 8 16; do
-    aws stepfunctions start-sync-execution \
-        --state-machine-arn $PYTHON_SFN \
-        --name "fmi-broadcast-redis-w${world_size}-$(date +%s)" \
-        --input "$(python -c "
-import json
-tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks']
-# weak scaling: world_size * 4 tasks
-print(json.dumps({
-    'workflow_id': 'fmi-broadcast-redis-w${world_size}',
-    'tasks': tasks[:${world_size}*4],
-    'scaling': 'weak',
-    'world_size': ${world_size},
-    'fmi_channel_type': 'redis',
-    'fmi_hint': 'fast',
-    'results_s3_dir': 'results/fmi/broadcast_redis/',
-    'experiment_name': 'fmi_broadcast_redis_ws${world_size}',
-    'config': {'similarity_threshold': '0.80', 'embedding_dimensions': '256'},
-}))
-")"
-done
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "fmi-broadcast-redis-ws1-$(date +%s)" \
+    --input file://$SCENARIOS/broadcast_redis_ws1.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "fmi-broadcast-redis-ws2-$(date +%s)" \
+    --input file://$SCENARIOS/broadcast_redis_ws2.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "fmi-broadcast-redis-ws4-$(date +%s)" \
+    --input file://$SCENARIOS/broadcast_redis_ws4.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "fmi-broadcast-redis-ws8-$(date +%s)" \
+    --input file://$SCENARIOS/broadcast_redis_ws8.json
 ```
 
-**Run — FMI context broadcast (Cylon backend, direct TCPunch channel):**
+#### 6.1.2 FMI broadcast — Direct channel (TCPunch)
+
+Requires rendezvous server reachable from Lambda. Uses `fmi_channel_type: direct`, `fmi_hint: low_latency`:
 
 ```bash
-for world_size in 2 4 8; do
-    aws stepfunctions start-sync-execution \
-        --state-machine-arn $PYTHON_SFN \
-        --name "fmi-broadcast-direct-w${world_size}-$(date +%s)" \
-        --input "$(python -c "
-import json
-tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks']
-print(json.dumps({
-    'workflow_id': 'fmi-broadcast-direct-w${world_size}',
-    'tasks': tasks[:${world_size}*4],
-    'scaling': 'weak',
-    'world_size': ${world_size},
-    'fmi_channel_type': 'direct',
-    'fmi_hint': 'low_latency',
-    'results_s3_dir': 'results/fmi/broadcast_direct/',
-    'experiment_name': 'fmi_broadcast_direct_ws${world_size}',
-    'config': {'similarity_threshold': '0.80', 'embedding_dimensions': '256'},
-}))
-")"
-done
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "fmi-broadcast-direct-ws2-$(date +%s)" \
+    --input file://$SCENARIOS/broadcast_direct_ws2.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "fmi-broadcast-direct-ws4-$(date +%s)" \
+    --input file://$SCENARIOS/broadcast_direct_ws4.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "fmi-broadcast-direct-ws8-$(date +%s)" \
+    --input file://$SCENARIOS/broadcast_direct_ws8.json
 ```
 
-**Baseline — no FMI (Redis backend, per-worker load):**
+#### 6.1.3 Baseline — no FMI (world_size=1)
+
+The `broadcast_redis_ws1.json` file with `world_size: 1` is the natural baseline — no FMI broadcast is triggered at world_size=1. Run it 3 times for statistical consistency:
 
 ```bash
-for world_size in 1 2 4 8 16; do
+for run in 1 2 3; do
     aws stepfunctions start-sync-execution \
         --state-machine-arn $PYTHON_SFN \
-        --name "no-fmi-redis-w${world_size}-$(date +%s)" \
-        --input "$(python -c "
-import json
-tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks']
-print(json.dumps({
-    'workflow_id': 'no-fmi-redis-w${world_size}',
-    'tasks': tasks[:${world_size}*4],
-    'scaling': 'weak',
-    'world_size': ${world_size},
-    'results_s3_dir': 'results/fmi/no_fmi_redis/',
-    'experiment_name': 'no_fmi_redis_ws${world_size}',
-    'config': {'similarity_threshold': '0.80', 'embedding_dimensions': '256'},
-}))
-")"
+        --name "baseline-no-fmi-run${run}-$(date +%s)" \
+        --input file://$SCENARIOS/broadcast_redis_ws1.json
 done
 ```
 
 **Success criteria:**
 
-- [ ] `fmi_broadcast_*` results show `search_latency_ms` equivalent to or better than `no_fmi_redis_*` at world_size ≥ 4
-- [ ] `fmi_broadcast_direct_*` shows lower broadcast latency than `fmi_broadcast_redis_*`
-- [ ] `reuse_rate` is consistent between FMI and non-FMI runs (same threshold, same tasks)
-- [ ] No FMI-related errors in CloudWatch logs at any world_size
+- [ ] All executions succeed with no FMI errors in CloudWatch logs
+- [ ] `search_latency_ms` at ws4 and ws8 is ≤ ws1 baseline (broadcast amortized across workers)
+- [ ] `fmi_broadcast_direct_*` shows lower broadcast overhead than `fmi_broadcast_redis_*` at same world_size
+- [ ] `reuse_rate` is consistent across all world_sizes (same threshold, same tasks)
 
 ---
 
 ### 6.2 Progressive Context Sync Experiments
 
-**Research question:** Does broadcasting new embeddings immediately after LLM calls improve within-run reuse rates for semantically related task batches?
+**Research question:** Does broadcasting new embeddings immediately after LLM calls improve within-run reuse rates for related task batches?
 
-**Experimental matrix:**
+Two task sets:
+- **High overlap** (`prog_sync_high_*`): all hydrology tasks — semantically similar, expected high within-run reuse gain
+- **Low overlap** (`prog_sync_low_*`): cross-domain mixed_scientific tasks — low within-run reuse expected
 
-| Variable | Values |
-|----------|--------|
-| FMI progressive sync | enabled (Cylon FMI container), disabled (baseline) |
-| Task semantic overlap | low (~10%), medium (~40%), high (~70%) |
-| World size | 2, 4, 8 |
-| Similarity threshold | 0.75, 0.80, 0.85 |
-
-Task batches with controlled semantic overlap are created from `hydrology.json` (high overlap — watershed/streamflow tasks are semantically close) vs. `mixed_scientific.json` (low overlap — cross-domain tasks).
-
-**Run — progressive sync enabled (FMI available):**
+#### 6.2.1 Progressive sync — high semantic overlap
 
 ```bash
-for world_size in 2 4 8; do
-    aws stepfunctions start-sync-execution \
-        --state-machine-arn $PYTHON_SFN \
-        --name "prog-sync-high-w${world_size}-$(date +%s)" \
-        --input "$(python -c "
-import json
-# High-overlap scenario: all tasks from same domain
-tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:${world_size}*4]
-print(json.dumps({
-    'workflow_id': 'prog-sync-high-w${world_size}',
-    'tasks': tasks,
-    'scaling': 'weak',
-    'world_size': ${world_size},
-    'fmi_channel_type': 'redis',
-    'results_s3_dir': 'results/fmi/prog_sync_high/',
-    'experiment_name': 'prog_sync_high_ws${world_size}',
-    'config': {'similarity_threshold': '0.80', 'embedding_dimensions': '256'},
-}))
-")"
-done
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "prog-sync-high-ws2-$(date +%s)" \
+    --input file://$SCENARIOS/prog_sync_high_ws2.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "prog-sync-high-ws4-$(date +%s)" \
+    --input file://$SCENARIOS/prog_sync_high_ws4.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "prog-sync-high-ws8-$(date +%s)" \
+    --input file://$SCENARIOS/prog_sync_high_ws8.json
 ```
 
-**Baseline — no progressive sync (non-FMI container or world_size=1):**
+#### 6.2.2 Progressive sync — low semantic overlap
 
 ```bash
-for world_size in 2 4 8; do
-    aws stepfunctions start-sync-execution \
-        --state-machine-arn $PYTHON_SFN \
-        --name "no-sync-high-w${world_size}-$(date +%s)" \
-        --input "$(python -c "
-import json
-tasks = json.load(open('target/shared/scripts/experiment/scenarios/hydrology.json'))['tasks'][:${world_size}*4]
-print(json.dumps({
-    'workflow_id': 'no-sync-high-w${world_size}',
-    'tasks': tasks,
-    'scaling': 'weak',
-    'world_size': ${world_size},
-    'results_s3_dir': 'results/fmi/no_sync_high/',
-    'experiment_name': 'no_sync_high_ws${world_size}',
-    'config': {'similarity_threshold': '0.80', 'embedding_dimensions': '256'},
-}))
-")"
-done
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "prog-sync-low-ws2-$(date +%s)" \
+    --input file://$SCENARIOS/prog_sync_low_ws2.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "prog-sync-low-ws4-$(date +%s)" \
+    --input file://$SCENARIOS/prog_sync_low_ws4.json
+
+aws stepfunctions start-sync-execution \
+    --state-machine-arn $PYTHON_SFN \
+    --name "prog-sync-low-ws8-$(date +%s)" \
+    --input file://$SCENARIOS/prog_sync_low_ws8.json
 ```
 
-**Metric to compare:** `reuse_rate_mean` between `prog_sync_*` and `no_sync_*` at the same world_size and task overlap level.
+#### 6.2.3 Baselines (ws1, no FMI sync)
+
+Use the corresponding `prog_sync_high_ws2.json` files but compare against ws1 results (which have no sync by definition). The `broadcast_redis_ws1.json` file serves as the ws1 hydrology baseline; for low-overlap use `prog_sync_low_ws2.json` with `world_size` edited to 1, or run the low-overlap tasks sequentially via the local runner:
+
+```bash
+# Local low-overlap baseline (no FMI, no world_size parallelism)
+python target/shared/scripts/experiment/runner.py \
+    --context-backend redis \
+    --tasks-file target/shared/scripts/experiment/scenarios/mixed_scientific.json \
+    --tasks 8 16 32 \
+    --thresholds 0.80 \
+    --dimensions 256 \
+    --output target/shared/scripts/experiment/results/fmi/no_sync_low_baseline
+```
 
 **Success criteria:**
 
-- [ ] `prog_sync_high_*` shows `reuse_rate` > `no_sync_high_*` at world_size ≥ 4 with high-overlap tasks
-- [ ] `prog_sync_*` vs `no_sync_*` difference narrows for low-overlap (`mixed_scientific`) tasks
-- [ ] `total_ms` for `prog_sync_*` is within 15% of `no_sync_*` (sync overhead is acceptable)
-- [ ] No duplicate context entries caused by concurrent broadcasts
+- [ ] `prog_sync_high_ws4` and `ws8` show higher `reuse_rate` than `prog_sync_high_ws2` (more workers = more cross-worker reuse opportunities)
+- [ ] `prog_sync_high_*` `reuse_rate` > `prog_sync_low_*` `reuse_rate` at same world_size (confirms semantic overlap drives the benefit)
+- [ ] `total_ms` overhead for sync is < 15% of routing time (sync doesn't dominate latency)
+- [ ] No duplicate context_ids in aggregated stopwatch CSV
 
 ---
 
-### 6.3 Model Parallelism Experiments (AstroMAE)
+### 6.3 Model Parallelism Experiments (AstroMAE via FMI)
 
-**Research question:** Does FMI direct channel tensor exchange remove the Step Functions 256KB limit, enabling larger batch inference? What is the FMI latency overhead vs. single-Lambda inference?
+**Research question:** Does FMI `allgather_tensors` via direct channel remove the 256KB Step Functions payload limit, enabling batch_size ≥ 32 inference?
 
-**Prerequisites:**
+#### 6.3.1 Prerequisites — export and upload ONNX partitions
+
 ```bash
-# Export AstroMAE ONNX partitions
+# Export AstroMAE ONNX partitions (run once)
 python target/shared/scripts/cosmic_ai/export_onnx.py \
-    --model-path /path/to/astromae/model.pt \
+    --model-path /path/to/astromae_weights.pt \
     --output-dir /tmp/onnx_partitions \
-    --partition 3  # stage 0 (ViT), stage 1 (Inception), stage 2 (Fusion)
+    --partition 3
 
-# Upload ONNX partitions to S3
-ONNX_BUCKET=$(terraform -chdir=target/aws/scripts/terraform output -raw results_bucket)
+# Upload to S3
 aws s3 cp /tmp/onnx_partitions/stage_0.onnx s3://$ONNX_BUCKET/models/astromae/stage_0.onnx
 aws s3 cp /tmp/onnx_partitions/stage_1.onnx s3://$ONNX_BUCKET/models/astromae/stage_1.onnx
 aws s3 cp /tmp/onnx_partitions/stage_2.onnx s3://$ONNX_BUCKET/models/astromae/stage_2.onnx
 ```
 
-**Experimental matrix:**
+#### 6.3.2 Create input files per batch size
 
-| Variable | Values |
-|----------|--------|
-| Mode | single-Lambda (full model), 2-Lambda FMI split |
-| FMI channel | `redis`, `direct` |
-| Batch size | 1, 4, 8, 16, 32 |
-| Runs per config | 5 |
-
-**Run — 2-Lambda FMI parallel (direct channel):**
-
-The `workflow_model_parallel.asl.json` triggers a Parallel state with rank=0 (ViT) and rank=1 (Inception). Each Lambda runs `model_parallel_stage` via `run_action.py`.
+Create one input file per `(batch_size, channel_type)` configuration. The input tensor is a synthetic SDSS-like array; replace `input_b64` and `input_shape` with real data for production runs.
 
 ```bash
-MODEL_PARALLEL_SFN=$(terraform -chdir=target/aws/scripts/terraform output -raw model_parallel_workflow_arn)
-ONNX_BUCKET=$(terraform -chdir=target/aws/scripts/terraform output -raw results_bucket)
+# Helper: generate a base64-encoded random float32 tensor of given shape
+gen_tensor_b64() {
+    python3 -c "
+import base64, numpy as np, sys
+shape = [int(x) for x in sys.argv[1].split(',')]
+arr = np.random.randn(*shape).astype(np.float32)
+print(base64.b64encode(arr.tobytes()).decode())
+" "$1"
+}
+
+# Create input files for batch sizes 1, 4, 8, 16, 32
+mkdir -p $SCENARIOS/model_parallel
 
 for batch_size in 1 4 8 16 32; do
-    python -c "
-import json, base64, numpy as np
-# Synthetic SDSS-like input: (B, 224, 224, 1) image tensor
-x = np.random.randn(${batch_size}, 224, 224, 1).astype(np.float32)
-print(json.dumps({
-    'workflow_id': 'astromae-fmi-direct-b${batch_size}',
-    'fmi_config': {
-        'world_size': 2,
-        'fmi_channel_type': 'direct',
-        'fmi_hint': 'low_latency',
-    },
-    'onnx_config': {
-        's3_bucket': '$ONNX_BUCKET',
-        'stage_0_key': 'models/astromae/stage_0.onnx',
-        'stage_1_key': 'models/astromae/stage_1.onnx',
-        'fusion_key':  'models/astromae/stage_2.onnx',
-    },
-    'input_b64': base64.b64encode(x.tobytes()).decode(),
-    'input_shape': list(x.shape),
-    'batch_size': ${batch_size},
-}))
-" | xargs -d'\n' aws stepfunctions start-sync-execution \
-        --state-machine-arn $MODEL_PARALLEL_SFN \
-        --name "astromae-direct-b${batch_size}-$(date +%s)" \
-        --input
+    tensor_b64=$(gen_tensor_b64 "${batch_size},224,224,1")
+    cat > $SCENARIOS/model_parallel/astromae_direct_b${batch_size}.json << JSON
+{
+  "workflow_id": "astromae-fmi-direct-b${batch_size}",
+  "fmi_config": {
+    "world_size": 2,
+    "fmi_channel_type": "direct",
+    "fmi_hint": "low_latency"
+  },
+  "onnx_config": {
+    "s3_bucket": "$ONNX_BUCKET",
+    "stage_0_key": "models/astromae/stage_0.onnx",
+    "stage_1_key": "models/astromae/stage_1.onnx",
+    "fusion_key":  "models/astromae/stage_2.onnx"
+  },
+  "input_b64": "${tensor_b64}",
+  "input_shape": [${batch_size}, 224, 224, 1],
+  "batch_size": ${batch_size}
+}
+JSON
 done
 ```
 
-**Metric to collect:**
+#### 6.3.3 Run model parallelism experiments
 
-| Metric | Column in results | Description |
-|--------|------------------|-------------|
-| Stage 0 latency | `stage_latency_ms.stage_0` | ViT encoder time |
-| Stage 1 latency | `stage_latency_ms.stage_1` | Inception branch time |
-| FMI allgather latency | `fmi_latency_ms` | Tensor exchange time |
-| Fusion latency | `stage_latency_ms.fusion` | Fusion stage time |
-| Total end-to-end | sum of above | Compare to single-Lambda baseline |
+```bash
+# FMI direct channel — batch sweep
+for batch_size in 1 4 8 16 32; do
+    aws stepfunctions start-sync-execution \
+        --state-machine-arn $MODEL_PARALLEL_SFN \
+        --name "astromae-direct-b${batch_size}-$(date +%s)" \
+        --input file://$SCENARIOS/model_parallel/astromae_direct_b${batch_size}.json
+done
+```
 
 **Success criteria:**
 
-- [ ] `batch_size=32` succeeds with FMI (would exceed 256KB Step Functions limit without FMI)
-- [ ] `fmi_latency_ms` < 20ms for `direct` channel at all batch sizes
-- [ ] `fmi_latency_ms` < 100ms for `redis` channel at all batch sizes
-- [ ] Total FMI end-to-end latency ≤ 1.5× single-Lambda latency at batch_size=1 (parallelism overhead bounded)
-- [ ] ViT + Inception stages run concurrently (verify from CloudWatch timestamps)
-- [ ] Prediction output shape is `(B, 1)` for all batch sizes
+- [ ] `batch_size=32` succeeds (would exceed 256KB Step Functions limit without FMI)
+- [ ] `fmi_latency_ms` < 20ms for direct channel at all batch sizes
+- [ ] Prediction output field is present in result JSON with shape `[batch_size, 1]`
+- [ ] ViT and Inception stages complete in parallel (check CloudWatch timestamps — overlap expected)
+- [ ] Total end-to-end latency ≤ 1.5× single-Lambda baseline at batch_size=1
 
 ---
 
 ### 6.4 FMI Results Analysis
 
-FMI experiment results follow the same aggregation pipeline as Phase 1:
-
 ```bash
 cd target/shared/scripts
 
-# Aggregate FMI broadcast results
+# Aggregate all FMI results
 python -m results.pipeline \
     --local-dir experiment/results/fmi/ \
     --output-dir experiment/output/fmi/ \
     --chart-format svg
 
-# Compare FMI vs. no-FMI reuse rates
-python -c "
+# Quick comparison: FMI broadcast vs baseline reuse rate
+python3 -c "
 import pandas as pd
 df = pd.read_csv('experiment/output/fmi/aggregated_results.csv')
-fmi   = df[df['experiment_name'].str.startswith('fmi_broadcast')]
-nofmi = df[df['experiment_name'].str.startswith('no_fmi')]
-print('Reuse rate — FMI vs. no-FMI:')
-print(fmi[['world_size', 'reuse_rate_mean']].merge(
-    nofmi[['world_size', 'reuse_rate_mean']],
-    on='world_size', suffixes=('_fmi', '_nofmi')
-))
+broadcast = df[df['experiment_name'].str.startswith('fmi_broadcast')]
+baseline  = df[df['experiment_name'] == 'fmi_broadcast_redis_ws1']
+print(broadcast[['experiment_name','world_size','reuse_rate_mean','search_latency_ms_mean']]
+      .sort_values('world_size'))
+"
+
+# Progressive sync benefit: high vs low overlap
+python3 -c "
+import pandas as pd
+df = pd.read_csv('experiment/output/fmi/aggregated_results.csv')
+high = df[df['experiment_name'].str.startswith('prog_sync_high')]
+low  = df[df['experiment_name'].str.startswith('prog_sync_low')]
+print('High overlap reuse rate:')
+print(high[['world_size','reuse_rate_mean']].sort_values('world_size'))
+print('Low overlap reuse rate:')
+print(low[['world_size','reuse_rate_mean']].sort_values('world_size'))
 "
 ```
-
-**Key charts to generate:**
-
-| Chart | X axis | Y axis | Grouping |
-|-------|--------|--------|----------|
-| Broadcast latency vs. world_size | world_size | `search_latency_ms_mean` | FMI channel (redis vs. direct) |
-| Progressive sync benefit | semantic overlap | `reuse_rate_mean` | FMI sync on/off |
-| FMI tensor exchange latency | batch_size | `fmi_latency_ms` | channel type |
-| Total AstroMAE latency | batch_size | total latency (ms) | single-Lambda vs. 2-Lambda FMI |

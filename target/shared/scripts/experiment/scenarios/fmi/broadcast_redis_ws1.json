@@ -1,0 +1,19 @@
+{
+  "workflow_id": "fmi-broadcast-redis-ws1",
+  "tasks": [
+    "Analyze the flood risk for a watershed with drainage area 245 km², mean annual precipitation 1120 mm, land cover 65% forested, and soil type predominantly clay loam. Estimate the 100-year return period peak discharge.",
+    "Assess the flood hazard for a catchment of 238 km² receiving 1090 mm annual rainfall, with 62% forest cover and clay loam soils. Calculate the expected peak flow for a 100-year event.",
+    "Evaluate the hydrological response of a 312 km² watershed with 890 mm annual precipitation, 45% agricultural land use, and sandy loam soils. How does the land use affect runoff coefficient?",
+    "Analyze the runoff characteristics of a 298 km² catchment receiving 920 mm annual rainfall, with 48% cropland and sandy loam soil. Estimate the curve number and peak discharge."
+  ],
+  "scaling": "weak",
+  "world_size": 1,
+  "fmi_channel_type": "redis",
+  "fmi_hint": "fast",
+  "results_s3_dir": "results/fmi/broadcast_redis/",
+  "experiment_name": "fmi_broadcast_redis_ws1",
+  "config": {
+    "similarity_threshold": "0.80",
+    "embedding_dimensions": "256"
+  }
+}

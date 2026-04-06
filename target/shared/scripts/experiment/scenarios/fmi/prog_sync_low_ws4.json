@@ -1,0 +1,31 @@
+{
+  "workflow_id": "fmi-prog-sync-low-ws4",
+  "tasks": [
+    "Analyze the photometric redshift prediction z=0.45 for an elliptical galaxy with SDSS magnitudes u=22.1, g=20.9, r=20.3, i=19.7, z=19.1. Classify the galaxy type.",
+    "Model the flood risk for a 280 km² watershed with 1050 mm annual precipitation, 58% forest cover, and clay loam soils. Estimate the 100-year peak discharge.",
+    "Model the spread of a respiratory pathogen with R0=2.0, serial interval 3.5 days, in a city of 1.8 million. Predict peak timing and total infections.",
+    "Assess the seismic hazard for a site 20 km from an active fault with slip rate 6 mm/yr and Mmax=7.0. Estimate PGA for 10% exceedance in 50 years.",
+    "Compare the computational cost of SIMD-accelerated similarity search versus brute-force numpy for 1000 embeddings of dimension 1024.",
+    "Analyze the cold start latency for Python Lambda (pycylon + LangChain) versus Node.js Lambda (cylon-wasm + ONNX Runtime). What dominates initialization time?",
+    "Assess the cross-domain reuse rate: do hydrology tasks ever reuse epidemiology contexts? Measure false positive rates across scientific domains.",
+    "Benchmark the ONNX Runtime inference latency for AstroMAE on Lambda (Node.js) versus PyTorch inference on Lambda (Python) for batches of 32 and 128 images.",
+    "Evaluate the redshift estimate z=0.43 for a galaxy with magnitudes u=22.3, g=21.0, r=20.4, i=19.8, z=19.2. Is this consistent with an elliptical morphology?",
+    "Assess the flood hazard for a 265 km² catchment receiving 1080 mm rainfall, with 60% forested land and clay soils. Calculate the design flood for a 100-year event.",
+    "Analyze the epidemic trajectory for a disease with R0=2.1, generation time 3.2 days, in an urban population of 1.9 million under no interventions.",
+    "Evaluate the earthquake hazard at 16 km from a strike-slip fault slipping at 7 mm/yr with maximum credible magnitude 7.1. Calculate probabilistic ground motion.",
+    "Analyze the latency distribution for Cylon's cosine_similarity_f32 across batch sizes of 100, 500, 1000, and 5000 embeddings at 256 dimensions.",
+    "Evaluate the model parallelism overhead: single Lambda full inference versus 2-Lambda split (ViT + Inception) with FMI tensor exchange for AstroMAE.",
+    "Analyze the cache hit rate as a function of task ordering: sequential similar tasks versus randomized task order for a 32-task workflow.",
+    "Evaluate the consistency between Python and Node.js cost tracking: run the same 16-task workflow on both paths and compare cost summaries."
+  ],
+  "scaling": "weak",
+  "world_size": 4,
+  "fmi_channel_type": "redis",
+  "fmi_hint": "fast",
+  "results_s3_dir": "results/fmi/prog_sync_low/",
+  "experiment_name": "prog_sync_low_ws4",
+  "config": {
+    "similarity_threshold": "0.80",
+    "embedding_dimensions": "256"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "workflow_id": "fmi-broadcast-redis-ws4",
+  "tasks": [
+    "Analyze the flood risk for a watershed with drainage area 245 km², mean annual precipitation 1120 mm, land cover 65% forested, and soil type predominantly clay loam. Estimate the 100-year return period peak discharge.",
+    "Assess the flood hazard for a catchment of 238 km² receiving 1090 mm annual rainfall, with 62% forest cover and clay loam soils. Calculate the expected peak flow for a 100-year event.",
+    "Evaluate the hydrological response of a 312 km² watershed with 890 mm annual precipitation, 45% agricultural land use, and sandy loam soils. How does the land use affect runoff coefficient?",
+    "Analyze the runoff characteristics of a 298 km² catchment receiving 920 mm annual rainfall, with 48% cropland and sandy loam soil. Estimate the curve number and peak discharge.",
+    "Assess the streamflow regime for a mountainous watershed at elevation 1800-3200m, area 156 km², snowmelt-dominated with 1450 mm annual precipitation. Predict the timing and magnitude of spring peak flows.",
+    "Analyze the snowmelt hydrology of a high-elevation catchment (1750-3100m, 162 km²) receiving 1480 mm annual precipitation. How does the snow water equivalent affect the hydrograph?",
+    "Evaluate the drought vulnerability of a 520 km² semi-arid basin with 380 mm annual precipitation, 78% rangeland, and groundwater-dependent baseflow. What is the probability of consecutive dry years?",
+    "Assess the water stress for a 485 km² arid watershed receiving 410 mm annual rainfall, with 75% grassland and shallow groundwater table. Analyze the baseflow recession characteristics.",
+    "Analyze the water quality impacts of urbanization in a 89 km² watershed where impervious surface increased from 12% to 35% over 20 years. Estimate changes in nutrient loading and sediment transport.",
+    "Evaluate how urban expansion (impervious cover rising from 15% to 38%) in a 92 km² catchment affects stormwater quality, focusing on phosphorus and suspended sediment concentrations.",
+    "Assess the effectiveness of riparian buffer strips (30m width) for reducing nitrogen loading in an agricultural watershed with tile drainage and 180 kg/ha fertilizer application.",
+    "Analyze the nutrient removal efficiency of a 25m riparian zone in a catchment with intensive agriculture and subsurface drainage. What percentage of nitrate load is attenuated?",
+    "Model the impact of a 2°C temperature increase on the hydrological cycle of a 680 km² watershed in the mid-Atlantic region. How do evapotranspiration and soil moisture change?",
+    "Analyze climate change effects (+2.1°C warming) on water balance for a 710 km² mid-Atlantic catchment. Predict shifts in seasonal streamflow distribution.",
+    "Evaluate how projected precipitation increases of 8-12% affect flood frequency in a coastal plain watershed with high water table and tidal influence.",
+    "Assess the compound flood risk from combined riverine flooding and storm surge in a 340 km² coastal watershed under a 10% precipitation increase scenario."
+  ],
+  "scaling": "weak",
+  "world_size": 4,
+  "fmi_channel_type": "redis",
+  "fmi_hint": "fast",
+  "results_s3_dir": "results/fmi/broadcast_redis/",
+  "experiment_name": "fmi_broadcast_redis_ws4",
+  "config": {
+    "similarity_threshold": "0.80",
+    "embedding_dimensions": "256"
+  }
+}
