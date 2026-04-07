@@ -1,11 +1,13 @@
 # Copy this to terraform.tfvars and fill in your values
 
-aws_region = "us-east-1"
-account_id = "123456789012"
+aws_region          = "us-east-1"
+account_id          = "123456789012"
+ecr_repository_name = "cylon-armada"
 
-# ECR image URIs (after docker push)
-python_image_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-python:latest"
-nodejs_image_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/cylon-armada-nodejs:latest"
+# ECR image tags — Terraform constructs the full URI as:
+#   <ecr_repository_url>:<tag>
+python_image_tag = "python-latest"
+nodejs_image_tag = "nodejs-latest"
 
 # Lambda configuration
 python_memory_mb = 1024
