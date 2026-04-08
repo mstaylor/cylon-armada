@@ -139,3 +139,36 @@ output "lambda_execution_role_arn" {
   description = "ARN of the Lambda execution IAM role"
   value       = aws_iam_role.lambda_execution.arn
 }
+
+# ---------------------------------------------------------------------------
+# Rendezvous test Lambda
+# ---------------------------------------------------------------------------
+
+output "rendezvous_test_arn" {
+  description = "ARN of the rendezvous test Lambda"
+  value       = aws_lambda_function.rendezvous_test.arn
+}
+
+output "rendezvous_host" {
+  description = "Rendezvous server host configured for FMI direct channel"
+  value       = var.rendezvous_host
+}
+
+output "rendezvous_port" {
+  description = "Rendezvous server port"
+  value       = var.rendezvous_port
+}
+
+# ---------------------------------------------------------------------------
+# Redis ECS service (when create_ecs_redis = true)
+# ---------------------------------------------------------------------------
+
+output "redis_service_dns" {
+  description = "Cloud Map DNS name for the ECS Redis service (VPC-internal)"
+  value       = var.create_ecs_redis ? "redis.${var.project_name}.local" : null
+}
+
+output "redis_ecr_image" {
+  description = "ECR image used for the Redis ECS service"
+  value       = var.create_ecs_redis ? "${data.aws_ecr_repository.redis[0].repository_url}:${var.redis_image_tag}" : null
+}

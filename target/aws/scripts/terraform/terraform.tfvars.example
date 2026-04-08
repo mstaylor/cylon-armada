@@ -35,3 +35,15 @@ context_backend              = "cylon"
 
 # Step Functions
 step_functions_max_concurrency = 10
+
+# Rendezvous server (FMI direct channel)
+rendezvous_host = "cylon-rendezvous.aws-cylondata.com"
+rendezvous_port = 10000
+
+# Redis — deploy from ECR image (set create_ecs_redis = true to enable)
+# Requires vpc_id and ecs_task_subnet_ids to be set.
+create_ecs_redis          = false
+redis_ecr_repository_name = "redis"       # ECR repo name containing your Redis image
+redis_image_tag           = "redis-latest"
+redis_cpu                 = 256
+redis_memory_mb           = 512

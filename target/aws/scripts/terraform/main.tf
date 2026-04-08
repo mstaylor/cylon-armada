@@ -20,7 +20,11 @@ locals {
     ManagedBy   = "terraform"
   }
 
-  redis_endpoint = var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address : var.redis_host
+  redis_endpoint = (
+    var.create_ecs_redis    ? "redis.${var.project_name}.local" :
+    var.create_elasticache  ? aws_elasticache_cluster.redis[0].cache_nodes[0].address :
+    var.redis_host
+  )
 
   # Env vars shared by all Lambda functions
   # Note: AWS_DEFAULT_REGION is a reserved Lambda key and cannot be set here;
@@ -686,6 +690,186 @@ resource "aws_sfn_state_machine" "ecs_ec2_workflow" {
   type     = "STANDARD"
 
   definition = templatefile("${path.module}/../step_functions/workflow_ecs_ec2.asl.json", local.ecs_asl_vars)
+
+  tags = local.common_tags
+}
+# ---------------------------------------------------------------------------
+# Redis — ECS Fargate service from ECR image (create_ecs_redis = true)
+#
+# Provides a Redis service backed by your own ECR image rather than
+# ElastiCache. Reachable at redis.<project_name>.local:6379 within the VPC
+# via Cloud Map private DNS.
+# ---------------------------------------------------------------------------
+
+data "aws_ecr_repository" "redis" {
+  count = var.create_ecs_redis ? 1 : 0
+  name  = var.redis_ecr_repository_name
+}
+
+resource "aws_service_discovery_private_dns_namespace" "cylon" {
+  count = var.create_ecs_redis ? 1 : 0
+
+  name        = "${var.project_name}.local"
+  description = "Private DNS namespace for cylon-armada services"
+  vpc         = var.vpc_id
+
+  tags = local.common_tags
+}
+
+resource "aws_service_discovery_service" "redis" {
+  count = var.create_ecs_redis ? 1 : 0
+
+  name = "redis"
+
+  dns_config {
+    namespace_id   = aws_service_discovery_private_dns_namespace.cylon[0].id
+    routing_policy = "MULTIVALUE"
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "ecs_redis" {
+  count             = var.create_ecs_redis ? 1 : 0
+  name              = "/ecs/${var.project_name}-redis"
+  retention_in_days = var.redis_log_retention_days
+  tags              = local.common_tags
+}
+
+resource "aws_security_group" "redis" {
+  count       = var.create_ecs_redis ? 1 : 0
+  name        = "${var.project_name}-redis-sg"
+  description = "Allow inbound Redis traffic from Lambda and ECS tasks"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description     = "Redis from VPC"
+    from_port       = var.redis_container_port
+    to_port         = var.redis_container_port
+    protocol        = "tcp"
+    cidr_blocks     = ["10.0.0.0/8"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_ecs_task_definition" "redis" {
+  count = var.create_ecs_redis ? 1 : 0
+
+  family                   = "${var.project_name}-redis"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.redis_cpu
+  memory                   = var.redis_memory_mb
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+
+  container_definitions = jsonencode([{
+    name      = "redis"
+    image     = "${data.aws_ecr_repository.redis[0].repository_url}:${var.redis_image_tag}"
+    essential = true
+
+    portMappings = [{
+      containerPort = var.redis_container_port
+      protocol      = "tcp"
+    }]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.ecs_redis[0].name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "redis"
+      }
+    }
+
+    healthCheck = {
+      command     = ["CMD-SHELL", "redis-cli ping || exit 1"]
+      interval    = 10
+      timeout     = 5
+      retries     = 3
+      startPeriod = 15
+    }
+  }])
+
+  tags = local.common_tags
+}
+
+resource "aws_ecs_service" "redis" {
+  count = var.create_ecs_redis ? 1 : 0
+
+  name            = "${var.project_name}-redis"
+  cluster         = data.aws_ecs_cluster.fargate.id
+  task_definition = aws_ecs_task_definition.redis[0].arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.ecs_task_subnet_ids
+    security_groups  = [aws_security_group.redis[0].id]
+    assign_public_ip = false
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.redis[0].arn
+  }
+
+  # Prevent Terraform from restarting the service on every plan
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# Rendezvous test Lambda
+#
+# Validates FMI rendezvous server connectivity via a TCP connect check.
+# Returns success/failure and round-trip latency in milliseconds.
+# ---------------------------------------------------------------------------
+
+resource "aws_lambda_function" "rendezvous_test" {
+  function_name = "${var.project_name}-rendezvous-test"
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
+  memory_size   = 256
+  timeout       = 60
+
+  image_config {
+    command = ["rendezvous_test.handler"]
+  }
+
+  environment {
+    variables = merge(local.lambda_env, {
+      RENDEZVOUS_HOST = var.rendezvous_host
+      RENDEZVOUS_PORT = tostring(var.rendezvous_port)
+    })
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
 
   tags = local.common_tags
 }

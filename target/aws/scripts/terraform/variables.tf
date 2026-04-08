@@ -256,3 +256,65 @@ variable "context_backend" {
   type        = string
   default     = "cylon"
 }
+
+# ---------------------------------------------------------------------------
+# Rendezvous server (FMI direct channel)
+# ---------------------------------------------------------------------------
+
+variable "rendezvous_host" {
+  description = "Rendezvous server hostname for FMI direct (TCPunch) channel"
+  type        = string
+  default     = ""
+}
+
+variable "rendezvous_port" {
+  description = "Rendezvous server port"
+  type        = number
+  default     = 10000
+}
+
+# ---------------------------------------------------------------------------
+# Redis — ECS Fargate service from ECR image
+# ---------------------------------------------------------------------------
+
+variable "create_ecs_redis" {
+  description = "Deploy Redis as an ECS Fargate service using an ECR image"
+  type        = bool
+  default     = false
+}
+
+variable "redis_ecr_repository_name" {
+  description = "Name of the ECR repository containing the Redis image"
+  type        = string
+  default     = ""
+}
+
+variable "redis_image_tag" {
+  description = "ECR image tag for the Redis container"
+  type        = string
+  default     = "redis-latest"
+}
+
+variable "redis_container_port" {
+  description = "Port Redis listens on inside the container"
+  type        = number
+  default     = 6379
+}
+
+variable "redis_cpu" {
+  description = "CPU units for the Redis ECS task (256 = 0.25 vCPU)"
+  type        = number
+  default     = 256
+}
+
+variable "redis_memory_mb" {
+  description = "Memory for the Redis ECS task (MB)"
+  type        = number
+  default     = 512
+}
+
+variable "redis_log_retention_days" {
+  description = "CloudWatch log retention for the Redis ECS task (days)"
+  type        = number
+  default     = 7
+}
