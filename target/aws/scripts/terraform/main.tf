@@ -260,6 +260,22 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# public.ecr.aws requires these two permissions in addition to the managed policy
+resource "aws_iam_role_policy" "ecs_execution_public_ecr" {
+  count = var.create_ecs_redis ? 1 : 0
+  name  = "${var.project_name}-ecs-execution-public-ecr"
+  role  = aws_iam_role.ecs_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ecr-public:GetAuthorizationToken", "sts:GetServiceBearerToken"]
+      Resource = "*"
+    }]
+  })
+}
+
 # ---------------------------------------------------------------------------
 # IAM Role — ECS task role (what the container can do at runtime)
 # ---------------------------------------------------------------------------
