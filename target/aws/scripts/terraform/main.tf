@@ -731,7 +731,7 @@ resource "aws_security_group" "redis" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description = "Redis — open to internet (public IP Fargate task)"
+    description = "Redis - open to internet (public IP Fargate task)"
     from_port   = var.redis_container_port
     to_port     = var.redis_container_port
     protocol    = "tcp"
