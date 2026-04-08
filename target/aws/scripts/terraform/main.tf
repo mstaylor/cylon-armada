@@ -836,10 +836,10 @@ resource "aws_lambda_function" "rendezvous_test" {
   }
 
   environment {
-    variables = merge(local.lambda_env, {
+    variables = {
       RENDEZVOUS_HOST = var.rendezvous_host
       RENDEZVOUS_PORT = tostring(var.rendezvous_port)
-    })
+    }
   }
 
   dynamic "vpc_config" {
