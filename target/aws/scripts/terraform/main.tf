@@ -731,11 +731,11 @@ resource "aws_security_group" "redis" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description     = "Redis from VPC"
-    from_port       = var.redis_container_port
-    to_port         = var.redis_container_port
-    protocol        = "tcp"
-    cidr_blocks     = ["10.0.0.0/8"]
+    description = "Redis — open to internet (public IP Fargate task)"
+    from_port   = var.redis_container_port
+    to_port     = var.redis_container_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
