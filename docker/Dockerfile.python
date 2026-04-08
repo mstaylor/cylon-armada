@@ -90,12 +90,17 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 # Copy cylon-armada source code
 # ---------------------------------------------------------------------------
 
+COPY target/aws/scripts/lambda/runCyloninLambda.sh /cylon/target/aws/scripts/lambda/runCyloninLambda.sh
+RUN chmod +x /cylon/target/aws/scripts/lambda/runCyloninLambda.sh
+
 COPY target/shared/scripts/ /cylon-armada/scripts/
 COPY target/aws/scripts/lambda/python/armada_init.py /cylon-armada/armada_init.py
 COPY target/aws/scripts/lambda/python/armada_executor.py /cylon-armada/armada_executor.py
 COPY target/aws/scripts/lambda/python/armada_aggregate.py /cylon-armada/armada_aggregate.py
 COPY target/aws/scripts/lambda/python/armada_ecs_runner.py /cylon-armada/armada_ecs_runner.py
 COPY target/aws/scripts/lambda/python/s3_loader.py /cylon-armada/s3_loader.py
+COPY target/aws/scripts/lambda/python/rendezvous_test.py /cylon-armada/rendezvous_test.py
+COPY target/aws/scripts/lambda/python/handler.py /cylon-armada/handler.py
 COPY cpp/ /cylon-armada/cpp/
 COPY python/ /cylon-armada/python/
 
@@ -146,16 +151,16 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 
 EXPOSE $EXPOSE_ENV
 
-ENV PYTHONPATH="${CYLON_PREFIX}/lib:/cylon-armada/scripts:/cylon-armada/python"
+ENV PYTHONPATH="/cylon-armada:${CYLON_PREFIX}/lib:/cylon-armada/scripts:/cylon-armada/python"
 ENV LD_LIBRARY_PATH="$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib"
 ENV SHARED_SCRIPTS_PATH="/cylon-armada/scripts"
 
 WORKDIR /cylon-armada
 
-ENTRYPOINT [ "/cylon/target/aws/scripts/lambda/runCyloninLambda.sh" ]
+# The entrypoint activates the cylon_dev conda env then execs its arguments.
+# Baking "python -m awslambdaric" here means each Lambda only needs to supply
+# the handler name as CMD (e.g. ["armada_init.handler"]).
+ENTRYPOINT [ "/cylon/target/aws/scripts/lambda/runCyloninLambda.sh", "python", "-m", "awslambdaric" ]
 
-# Each Lambda function uses the same image with a different CMD:
-#   cylon-armada-init:      CMD ["python", "-m", "awslambdaric", "armada_init.handler"]
-#   cylon-armada-executor:  CMD ["python", "-m", "awslambdaric", "armada_executor.handler"]
-#   cylon-armada-aggregate: CMD ["python", "-m", "awslambdaric", "armada_aggregate.handler/"]
-CMD [ "python", "-m", "awslambdaric", "armada_init.handler" ]
+# Default handler — overridden per-function via Terraform image_config.command
+CMD [ "armada_init.handler" ]
