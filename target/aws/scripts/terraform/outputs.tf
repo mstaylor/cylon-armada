@@ -118,7 +118,7 @@ output "dynamodb_table_arn" {
 
 output "scripts_bucket" {
   description = "S3 bucket for Lambda/ECS hot-reload scripts"
-  value       = aws_s3_bucket.scripts.bucket
+  value       = data.aws_s3_bucket.scripts.bucket
 }
 
 output "results_bucket" {

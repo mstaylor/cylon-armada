@@ -23,6 +23,8 @@ locals {
   redis_endpoint = var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address : var.redis_host
 
   # Env vars shared by all Lambda functions
+  # Note: AWS_DEFAULT_REGION is a reserved Lambda key and cannot be set here;
+  # Lambda functions read the region via the execution environment automatically.
   lambda_env = {
     BEDROCK_LLM_MODEL_ID         = var.bedrock_llm_model_id
     BEDROCK_EMBEDDING_MODEL_ID   = var.bedrock_embedding_model_id
@@ -32,7 +34,6 @@ locals {
     REDIS_HOST                   = local.redis_endpoint
     REDIS_PORT                   = tostring(var.redis_port)
     DYNAMO_TABLE_NAME            = aws_dynamodb_table.context_store.name
-    AWS_DEFAULT_REGION           = var.aws_region
   }
 
   # Env vars shared by all ECS tasks (static; dynamic fields injected per-run
@@ -100,11 +101,8 @@ data "aws_s3_bucket" "results" {
   bucket = var.results_bucket_name
 }
 
-resource "aws_s3_bucket" "scripts" {
-  bucket        = var.scripts_bucket_name
-  force_destroy = true
-
-  tags = local.common_tags
+data "aws_s3_bucket" "scripts" {
+  bucket = var.scripts_bucket_name
 }
 
 # ---------------------------------------------------------------------------
@@ -220,8 +218,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Effect = "Allow"
         Action = ["s3:GetObject", "s3:ListBucket", "s3:PutObject"]
         Resource = [
-          aws_s3_bucket.scripts.arn,
-          "${aws_s3_bucket.scripts.arn}/*",
+          data.aws_s3_bucket.scripts.arn,
+          "${data.aws_s3_bucket.scripts.arn}/*",
         ]
       },
     ]
@@ -297,8 +295,8 @@ resource "aws_iam_role_policy" "ecs_task_policy" {
           data.aws_s3_bucket.results.arn,
           "${data.aws_s3_bucket.results.arn}/*",
           # Scripts bucket (hot-reload)
-          aws_s3_bucket.scripts.arn,
-          "${aws_s3_bucket.scripts.arn}/*",
+          data.aws_s3_bucket.scripts.arn,
+          "${data.aws_s3_bucket.scripts.arn}/*",
         ]
       },
       {
@@ -675,7 +673,7 @@ resource "aws_sfn_state_machine" "model_parallel_workflow" {
 resource "aws_sfn_state_machine" "ecs_fargate_workflow" {
   name     = "${var.project_name}-ecs-fargate-workflow"
   role_arn = aws_iam_role.step_functions_execution.arn
-  type     = "EXPRESS"
+  type     = "STANDARD"
 
   definition = templatefile("${path.module}/../step_functions/workflow_ecs_fargate.asl.json", local.ecs_asl_vars)
 
@@ -685,7 +683,7 @@ resource "aws_sfn_state_machine" "ecs_fargate_workflow" {
 resource "aws_sfn_state_machine" "ecs_ec2_workflow" {
   name     = "${var.project_name}-ecs-ec2-workflow"
   role_arn = aws_iam_role.step_functions_execution.arn
-  type     = "EXPRESS"
+  type     = "STANDARD"
 
   definition = templatefile("${path.module}/../step_functions/workflow_ecs_ec2.asl.json", local.ecs_asl_vars)
 
