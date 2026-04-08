@@ -168,7 +168,17 @@ output "redis_service_dns" {
   value       = var.create_ecs_redis ? "redis.${var.project_name}.local" : null
 }
 
-output "redis_ecr_image" {
-  description = "ECR image used for the Redis ECS service"
-  value       = var.create_ecs_redis ? "${data.aws_ecr_repository.redis[0].repository_url}:${var.redis_image_tag}" : null
+output "redis_image_uri" {
+  description = "Container image used for the Redis ECS service"
+  value       = var.create_ecs_redis ? var.redis_image_uri : null
+}
+
+output "redis_hostname" {
+  description = "Route 53 hostname for the Redis ECS service (auto-updated on task replacement)"
+  value       = var.redis_hostname != "" ? var.redis_hostname : null
+}
+
+output "redis_dns_updater_arn" {
+  description = "ARN of the Lambda that updates Route 53 when Redis restarts"
+  value       = local.deploy_redis_dns ? aws_lambda_function.redis_dns_updater[0].arn : null
 }

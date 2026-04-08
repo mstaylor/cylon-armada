@@ -278,21 +278,15 @@ variable "rendezvous_port" {
 # ---------------------------------------------------------------------------
 
 variable "create_ecs_redis" {
-  description = "Deploy Redis as an ECS Fargate service using an ECR image"
+  description = "Deploy Redis as an ECS Fargate service"
   type        = bool
   default     = false
 }
 
-variable "redis_ecr_repository_name" {
-  description = "Name of the ECR repository containing the Redis image"
+variable "redis_image_uri" {
+  description = "Full Redis container image URI"
   type        = string
-  default     = ""
-}
-
-variable "redis_image_tag" {
-  description = "ECR image tag for the Redis container"
-  type        = string
-  default     = "redis-latest"
+  default     = "public.ecr.aws/docker/library/redis:7.0"
 }
 
 variable "redis_container_port" {
@@ -317,4 +311,26 @@ variable "redis_log_retention_days" {
   description = "CloudWatch log retention for the Redis ECS task (days)"
   type        = number
   default     = 7
+}
+
+# ---------------------------------------------------------------------------
+# Redis — Route 53 DNS auto-update
+# ---------------------------------------------------------------------------
+
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone ID for the Redis DNS record"
+  type        = string
+  default     = ""
+}
+
+variable "redis_hostname" {
+  description = "Fully-qualified DNS name for the Redis ECS service (updated on each task restart)"
+  type        = string
+  default     = ""
+}
+
+variable "redis_dns_ttl" {
+  description = "TTL (seconds) for the Redis Route 53 A record — keep low so clients re-resolve quickly after task replacement"
+  type        = number
+  default     = 30
 }

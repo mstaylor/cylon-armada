@@ -40,10 +40,15 @@ step_functions_max_concurrency = 10
 rendezvous_host = "cylon-rendezvous.aws-cylondata.com"
 rendezvous_port = 10000
 
-# Redis — deploy from ECR image (set create_ecs_redis = true to enable)
+# Redis — deploy as ECS Fargate service (set create_ecs_redis = true to enable)
 # Requires vpc_id and ecs_task_subnet_ids to be set.
-create_ecs_redis          = false
-redis_ecr_repository_name = "redis"       # ECR repo name containing your Redis image
-redis_image_tag           = "redis-latest"
-redis_cpu                 = 256
-redis_memory_mb           = 512
+create_ecs_redis = false
+redis_image_uri  = "public.ecr.aws/docker/library/redis:7.0"
+redis_cpu        = 256
+redis_memory_mb  = 512
+
+# Redis Route 53 DNS auto-update (required when create_ecs_redis = true)
+# The Lambda updater fires on every task restart and upserts the A record.
+route53_zone_id = "Z1D633PJN98FT9"          # your hosted zone ID
+redis_hostname  = "redis.example.com"        # FQDN to register
+redis_dns_ttl   = 30                         # low TTL so clients re-resolve quickly

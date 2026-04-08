@@ -701,11 +701,6 @@ resource "aws_sfn_state_machine" "ecs_ec2_workflow" {
 # via Cloud Map private DNS.
 # ---------------------------------------------------------------------------
 
-data "aws_ecr_repository" "redis" {
-  count = var.create_ecs_redis ? 1 : 0
-  name  = var.redis_ecr_repository_name
-}
-
 resource "aws_service_discovery_private_dns_namespace" "cylon" {
   count = var.create_ecs_redis ? 1 : 0
 
@@ -781,7 +776,7 @@ resource "aws_ecs_task_definition" "redis" {
 
   container_definitions = jsonencode([{
     name      = "redis"
-    image     = "${data.aws_ecr_repository.redis[0].repository_url}:${var.redis_image_tag}"
+    image     = var.redis_image_uri
     essential = true
 
     portMappings = [{
@@ -822,8 +817,12 @@ resource "aws_ecs_service" "redis" {
   network_configuration {
     subnets          = var.ecs_task_subnet_ids
     security_groups  = [aws_security_group.redis[0].id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
+
+  # Allow the container health check time to pass before ECS considers
+  # the task unhealthy and replaces it (Redis needs ~15s to start).
+  health_check_grace_period_seconds = 60
 
   service_registries {
     registry_arn = aws_service_discovery_service.redis[0].arn
@@ -872,4 +871,129 @@ resource "aws_lambda_function" "rendezvous_test" {
   }
 
   tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# Redis DNS updater — Lambda + EventBridge
+#
+# When ECS replaces an unhealthy Redis task the new task gets a new public IP.
+# An EventBridge rule fires on every ECS Task State Change → RUNNING for the
+# Redis service. The Lambda reads the ENI's public IP and upserts the Route 53
+# A record so all clients resolve to the live task automatically.
+#
+# Only deployed when create_ecs_redis = true AND route53_zone_id is set.
+# ---------------------------------------------------------------------------
+
+locals {
+  deploy_redis_dns = var.create_ecs_redis && var.route53_zone_id != "" && var.redis_hostname != ""
+}
+
+data "archive_file" "redis_dns_updater" {
+  count = local.deploy_redis_dns ? 1 : 0
+
+  type        = "zip"
+  source_file = "${path.module}/../lambda/python/redis_dns_updater.py"
+  output_path = "${path.module}/../lambda/python/redis_dns_updater.zip"
+}
+
+resource "aws_iam_role" "redis_dns_updater" {
+  count = local.deploy_redis_dns ? 1 : 0
+  name  = "${var.project_name}-redis-dns-updater-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "redis_dns_updater" {
+  count = local.deploy_redis_dns ? 1 : 0
+  name  = "${var.project_name}-redis-dns-updater-policy"
+  role  = aws_iam_role.redis_dns_updater[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ec2:DescribeNetworkInterfaces"]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["route53:ChangeResourceRecordSets"]
+        Resource = "arn:aws:route53:::hostedzone/${var.route53_zone_id}"
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_function" "redis_dns_updater" {
+  count = local.deploy_redis_dns ? 1 : 0
+
+  function_name    = "${var.project_name}-redis-dns-updater"
+  role             = aws_iam_role.redis_dns_updater[0].arn
+  runtime          = "python3.12"
+  handler          = "redis_dns_updater.handler"
+  filename         = data.archive_file.redis_dns_updater[0].output_path
+  source_code_hash = data.archive_file.redis_dns_updater[0].output_base64sha256
+  memory_size      = 128
+  timeout          = 30
+
+  environment {
+    variables = {
+      ROUTE53_ZONE_ID = var.route53_zone_id
+      REDIS_HOSTNAME  = var.redis_hostname
+      REDIS_DNS_TTL   = tostring(var.redis_dns_ttl)
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_event_rule" "redis_task_running" {
+  count = local.deploy_redis_dns ? 1 : 0
+
+  name        = "${var.project_name}-redis-task-running"
+  description = "Fires when a Redis ECS task reaches RUNNING — triggers DNS update"
+
+  event_pattern = jsonencode({
+    source        = ["aws.ecs"]
+    "detail-type" = ["ECS Task State Change"]
+    detail = {
+      lastStatus = ["RUNNING"]
+      group      = ["service:${var.project_name}-redis"]
+    }
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_event_target" "redis_dns_updater" {
+  count = local.deploy_redis_dns ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.redis_task_running[0].name
+  target_id = "redis-dns-updater"
+  arn       = aws_lambda_function.redis_dns_updater[0].arn
+}
+
+resource "aws_lambda_permission" "redis_dns_updater_eventbridge" {
+  count = local.deploy_redis_dns ? 1 : 0
+
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.redis_dns_updater[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.redis_task_running[0].arn
 }
