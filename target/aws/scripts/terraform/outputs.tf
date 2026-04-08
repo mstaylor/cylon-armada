@@ -164,8 +164,8 @@ output "rendezvous_port" {
 # ---------------------------------------------------------------------------
 
 output "redis_service_dns" {
-  description = "Cloud Map DNS name for the ECS Redis service (VPC-internal)"
-  value       = var.create_ecs_redis ? "redis.${var.project_name}.local" : null
+  description = "Route 53 DNS name for the ECS Redis service (auto-updated on task replacement)"
+  value       = var.create_ecs_redis ? var.redis_hostname : null
 }
 
 output "redis_image_uri" {

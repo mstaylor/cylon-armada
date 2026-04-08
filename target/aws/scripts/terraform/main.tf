@@ -21,7 +21,7 @@ locals {
   }
 
   redis_endpoint = (
-    var.create_ecs_redis    ? "redis.${var.project_name}.local" :
+    var.create_ecs_redis    ? var.redis_hostname :
     var.create_elasticache  ? aws_elasticache_cluster.redis[0].cache_nodes[0].address :
     var.redis_host
   )
@@ -701,38 +701,6 @@ resource "aws_sfn_state_machine" "ecs_ec2_workflow" {
 # via Cloud Map private DNS.
 # ---------------------------------------------------------------------------
 
-resource "aws_service_discovery_private_dns_namespace" "cylon" {
-  count = var.create_ecs_redis ? 1 : 0
-
-  name        = "${var.project_name}.local"
-  description = "Private DNS namespace for cylon-armada services"
-  vpc         = var.vpc_id
-
-  tags = local.common_tags
-}
-
-resource "aws_service_discovery_service" "redis" {
-  count = var.create_ecs_redis ? 1 : 0
-
-  name = "redis"
-
-  dns_config {
-    namespace_id   = aws_service_discovery_private_dns_namespace.cylon[0].id
-    routing_policy = "MULTIVALUE"
-
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
-  }
-
-  tags = local.common_tags
-}
-
 resource "aws_cloudwatch_log_group" "ecs_redis" {
   count             = var.create_ecs_redis ? 1 : 0
   name              = "/ecs/${var.project_name}-redis"
@@ -823,10 +791,6 @@ resource "aws_ecs_service" "redis" {
   # Allow the container health check time to pass before ECS considers
   # the task unhealthy and replaces it (Redis needs ~15s to start).
   health_check_grace_period_seconds = 60
-
-  service_registries {
-    registry_arn = aws_service_discovery_service.redis[0].arn
-  }
 
   # Prevent Terraform from restarting the service on every plan
   lifecycle {
