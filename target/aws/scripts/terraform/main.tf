@@ -764,6 +764,7 @@ resource "aws_ecs_task_definition" "redis" {
     name      = "redis"
     image     = var.redis_image_uri
     essential = true
+    command   = ["redis-server", "--protected-mode", "no", "--bind", "0.0.0.0"]
 
     portMappings = [{
       containerPort = var.redis_container_port
