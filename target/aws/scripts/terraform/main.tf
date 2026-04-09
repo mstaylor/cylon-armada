@@ -832,7 +832,7 @@ resource "aws_lambda_function" "rendezvous_test" {
   package_type  = "Image"
   image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
   memory_size   = 256
-  timeout       = 60
+  timeout       = 120
 
   image_config {
     command = ["rendezvous_test.handler"]
