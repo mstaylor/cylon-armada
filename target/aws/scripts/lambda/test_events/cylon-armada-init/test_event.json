@@ -1,0 +1,17 @@
+{
+    "workflow_id": "test-workflow-001",
+    "tasks": [
+        "Analyze the spectral energy distribution of a Type Ia supernova at redshift z=0.5",
+        "Classify galaxy morphology from HST imaging data using photometric redshifts"
+    ],
+    "scaling": "weak",
+    "world_size": 1,
+    "results_s3_dir": "results/lambda/weak/",
+    "experiment_name": "lambda_weak_ws1",
+    "config": {
+        "llm_model_id": "anthropic.claude-3-haiku-20240307-v1:0",
+        "embedding_model_id": "amazon.titan-embed-text-v2:0",
+        "embedding_dimensions": 256,
+        "similarity_threshold": 0.8
+    }
+}

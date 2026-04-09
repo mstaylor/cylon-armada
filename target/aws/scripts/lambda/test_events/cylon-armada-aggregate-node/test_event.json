@@ -1,0 +1,27 @@
+{
+    "workflow_id": "test-workflow-001",
+    "scaling": "weak",
+    "world_size": 1,
+    "results_s3_dir": "results/lambda/weak/",
+    "experiment_name": "lambda_weak_ws1",
+    "prepare_cost": {
+        "embedding_cost_usd": 0.000012,
+        "total_tokens": 24
+    },
+    "task_results": [
+        {
+            "response": "The spectral energy distribution analysis indicates...",
+            "source": "llm",
+            "cost_usd": 0.00045,
+            "similarity": 0.0,
+            "search_latency_ms": 120.5,
+            "llm_latency_ms": 1850.3,
+            "total_latency_ms": 1980.8,
+            "backend": "cylon",
+            "context_id": "ctx-abc123",
+            "task_description": "Analyze the spectral energy distribution of a Type Ia supernova at redshift z=0.5",
+            "rank": 0,
+            "workflow_id": "test-workflow-001"
+        }
+    ]
+}

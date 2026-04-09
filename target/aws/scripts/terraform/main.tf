@@ -224,6 +224,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Resource = [
           data.aws_s3_bucket.scripts.arn,
           "${data.aws_s3_bucket.scripts.arn}/*",
+          data.aws_s3_bucket.results.arn,
+          "${data.aws_s3_bucket.results.arn}/*",
         ]
       },
     ]
