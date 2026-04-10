@@ -2,8 +2,8 @@
 
 Phase 1: TCP connectivity check — confirms the rendezvous server is reachable.
 Phase 2: Address exchange — two threads simulate rank 0 and rank 1 using the
-         FMI direct (TCPunch) channel. A barrier() call exercises the full
-         rendezvous handshake and peer address exchange.
+         FMI direct (TCPunch) channel. allreduce(1, SUM) == 2 confirms both
+         workers completed the rendezvous handshake and can communicate.
 
 Returns:
     {
@@ -11,7 +11,7 @@ Returns:
         "rendezvous_host": "...",
         "rendezvous_port": 10000,
         "connectivity_ms": ...,     # Phase 1 TCP connect latency
-        "exchange_ms": {            # Phase 2 barrier latency per rank
+        "exchange_ms": {            # Phase 2 allreduce latency per rank
             "rank_0": ...,
             "rank_1": ...
         },
@@ -37,6 +37,8 @@ def handler(event, context):
     """Lambda entry point."""
     rendezvous_host = os.environ.get("RENDEZVOUS_HOST", "").strip()
     rendezvous_port = int(os.environ.get("RENDEZVOUS_PORT", 10000))
+    redis_host = os.environ.get("REDIS_HOST", "")
+    redis_port = int(os.environ.get("REDIS_PORT", 6379))
 
     if not rendezvous_host:
         return {"success": False, "error": "RENDEZVOUS_HOST environment variable not set"}
@@ -63,8 +65,9 @@ def handler(event, context):
 
     # ------------------------------------------------------------------
     # Phase 2 — Address exchange via FMI direct channel
-    # Two threads simulate rank 0 and rank 1. barrier() exercises the
-    # full rendezvous handshake and peer address exchange.
+    # Two threads simulate rank 0 and rank 1.
+    # allreduce(1, SUM) == world_size confirms both workers completed
+    # the rendezvous handshake and established direct communication.
     # ------------------------------------------------------------------
     logger.info("Phase 2: FMI address exchange (world_size=2, channel=direct)")
 
@@ -84,17 +87,26 @@ def handler(event, context):
                 world_size=2,
                 rank=rank,
                 channel_type="direct",
-                hint="low_latency",
+                rendezvous_host=rendezvous_host,
+                rendezvous_port=rendezvous_port,
+                redis_host=redis_host,
+                redis_port=redis_port,
+                comm_name="rendezvous_test",
             )
 
             if not bridge.available:
-                errors[rank] = "fmilib not available in this container"
+                errors[rank] = "pycylon FMI not available in this container"
                 return
 
-            logger.info("Rank %d: communicator initialized, running barrier", rank)
-            bridge.barrier()
+            logger.info("Rank %d: communicator ready, running allreduce", rank)
+            total = bridge.reduce_float(1.0, op="sum")
             exchange_ms = round((time.monotonic() - t_start) * 1000, 2)
-            logger.info("Rank %d: barrier complete in %.1fms", rank, exchange_ms)
+
+            if int(total) != 2:
+                errors[rank] = f"allreduce returned {total}, expected 2 — address exchange incomplete"
+                return
+
+            logger.info("Rank %d: allreduce returned %.0f in %.1fms", rank, total, exchange_ms)
             bridge.finalize()
             results[rank] = exchange_ms
 
@@ -102,13 +114,15 @@ def handler(event, context):
             logger.error("Rank %d failed: %s", rank, e)
             errors[rank] = str(e)
 
-    threads = [threading.Thread(target=run_rank, args=(r,), name=f"rank-{r}") for r in range(2)]
+    threads = [
+        threading.Thread(target=run_rank, args=(r,), name=f"rank-{r}")
+        for r in range(2)
+    ]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=30)
 
-    # Check for threads that timed out (still alive after join)
     timed_out = [t.name for t in threads if t.is_alive()]
     if timed_out:
         return {

@@ -1,93 +1,114 @@
 """FMI Communicator bridge for cylon-armada.
 
-Wraps Cylon's FMI communicator for inter-Lambda communication in
-context reuse workflows. Based on the pattern from AI-for-Astronomy's
-inference_FMI.py.
+Wraps Cylon's FMI communicator (pycylon.net.fmi_communicator) for
+inter-Lambda communication in context reuse workflows.
 
-Three use cases:
-1. Context broadcasting — rank 0 broadcasts embedding cache to all workers
-2. Result reduction — workers reduce costs/metrics back to rank 0
-3. Model parallelism — tensor exchange between stages
+Available Python-level operations (pycylon exposes only allreduce):
+  - barrier()        → allreduce(0, SUM) — synchronise all workers
+  - reduce_float()   → allreduce(value, SUM/MAX/MIN)
+  - reduce_cost()    → reduce_float(cost, SUM)
+  - reduce_metrics() → reduce_float per metric key
+
+Broadcast operations (broadcast_bytes, broadcast_embeddings, etc.) are NOT
+available at the Python level through pycylon. Those paths fall back to Redis
+automatically when fmi.available is True but broadcast is not supported.
 
 Usage:
-    from communicator.fmi_bridge import FMIBridge
-
-    bridge = FMIBridge(world_size=10, rank=3)
+    bridge = FMIBridge(world_size=4, rank=2,
+                       channel_type="direct",
+                       rendezvous_host="host", rendezvous_port=10000,
+                       redis_host="redis-host", redis_port=6379)
     bridge.barrier()
-    bridge.broadcast_embeddings(embeddings, root=0)
-    bridge.reduce_cost(local_cost, root=0)
+    total_cost = bridge.reduce_cost(local_cost)
 """
 
-import base64
-import json
 import logging
 import os
-from typing import Optional
-
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
 def _import_fmi():
-    """Lazy-import FMI — only available in Cylon Lambda containers."""
+    """Lazy-import pycylon FMI — only available in Cylon Lambda containers."""
     try:
-        import fmi
-        from fmilib.fmi_operations import fmi_communicator
-        return fmi, fmi_communicator
+        from pycylon.net.fmi_config import FMIConfig
+        from pycylon.net.reduce_op import ReduceOp
+        from pycylon.frame import CylonEnv
+        return FMIConfig, CylonEnv, ReduceOp
     except ImportError:
-        logger.warning("FMI not available — running without inter-Lambda communication")
-        return None, None
+        logger.warning("pycylon FMI not available — running without inter-Lambda communication")
+        return None, None, None
 
 
 class FMIBridge:
     """Bridge between cylon-armada and Cylon's FMI communicator.
 
-    Provides context-reuse-specific operations on top of FMI primitives.
-
     Args:
-        world_size: Total number of Lambda workers.
-        rank: This worker's rank (0-indexed).
-        channel_type: FMI channel type ('redis', 'direct', 's3'). Default: 'redis'.
-        hint: FMI performance hint ('fast', 'low_latency'). Default: 'fast'.
+        world_size:       Total number of Lambda workers.
+        rank:             This worker's rank (0-indexed).
+        channel_type:     FMI channel type ('direct', 'redis', 's3'). Default: 'redis'.
+        rendezvous_host:  Rendezvous server host (required for 'direct' channel).
+        rendezvous_port:  Rendezvous server port. Default: 10000.
+        redis_host:       Redis host (required for 'redis' channel).
+        redis_port:       Redis port. Default: 6379.
+        comm_name:        Communication group name — all workers in the same run
+                          must use the same value. Default: 'cylon_armada'.
+        maxtimeout:       FMI max timeout ms. Default: 30000.
     """
 
-    def __init__(self, world_size, rank, channel_type="redis", hint="fast"):
+    def __init__(self, world_size, rank, channel_type="redis",
+                 rendezvous_host="", rendezvous_port=10000,
+                 redis_host="", redis_port=6379,
+                 comm_name="cylon_armada", maxtimeout=30000):
         self.world_size = int(world_size)
         self.rank = int(rank)
         self.channel_type = channel_type
-        self.hint = hint
 
-        self._fmi, self._fmi_communicator_cls = _import_fmi()
+        self._FMIConfig, self._CylonEnv, self._ReduceOp = _import_fmi()
+        self._env = None
         self._comm = None
 
-        if self._fmi is not None:
-            self._comm = self._fmi_communicator_cls(self.world_size, self.rank)
-            fmi_hint = getattr(self._fmi.hints, hint, self._fmi.hints.fast)
-            self._comm.hint(fmi_hint)
-            logger.info(
-                "FMI communicator initialized: rank=%d, world_size=%d, "
-                "channel_type=%s, hint=%s",
-                self.rank, self.world_size, channel_type, hint,
+        if self._FMIConfig is None or self.world_size <= 1:
+            return
+
+        try:
+            fmi_config = self._FMIConfig(
+                rank=self.rank,
+                world_size=self.world_size,
+                host=rendezvous_host,
+                port=int(rendezvous_port),
+                maxtimeout=int(maxtimeout),
+                resolveip=True,
+                comm_name=comm_name,
+                nonblocking=False,
+                redis_host=redis_host,
+                redis_port=int(redis_port),
+                redis_namespace=comm_name,
+                channel_type=channel_type,
             )
+            self._env = self._CylonEnv(config=fmi_config, distributed=True)
+            self._comm = self._env.context.get_communicator()
+            logger.info(
+                "FMI communicator initialized: rank=%d world_size=%d channel=%s",
+                self.rank, self.world_size, channel_type,
+            )
+        except Exception as e:
+            logger.error("FMI communicator init failed: %s", e)
+            self._env = None
+            self._comm = None
 
     @classmethod
     def from_env(cls):
-        """Create FMIBridge from environment variables (Lambda context).
-
-        Env vars (matching Cylon's Lambda conventions):
-        - RANK, WORLD_SIZE — worker identity
-        - FMI_CHANNEL_TYPE — channel type: 'redis', 'direct', 's3' (default: 'redis')
-        - FMI_HINT — performance hint: 'fast', 'low_latency' (default: 'fast')
-        - RENDEZVOUS_HOST, RENDEZVOUS_PORT — for 'direct' channel (TCPunch)
-        - REDIS_HOST, REDIS_PORT — for 'redis' channel
-        """
-        rank = int(os.environ.get("RANK", 0))
-        world_size = int(os.environ.get("WORLD_SIZE", 1))
-        channel_type = os.environ.get("FMI_CHANNEL_TYPE", "redis")
-        hint = os.environ.get("FMI_HINT", "fast")
-        return cls(world_size=world_size, rank=rank,
-                   channel_type=channel_type, hint=hint)
+        """Create FMIBridge from environment variables (Lambda context)."""
+        return cls(
+            world_size=int(os.environ.get("WORLD_SIZE", 1)),
+            rank=int(os.environ.get("RANK", 0)),
+            channel_type=os.environ.get("FMI_CHANNEL_TYPE", "redis"),
+            rendezvous_host=os.environ.get("RENDEZVOUS_HOST", ""),
+            rendezvous_port=int(os.environ.get("RENDEZVOUS_PORT", 10000)),
+            redis_host=os.environ.get("REDIS_HOST", ""),
+            redis_port=int(os.environ.get("REDIS_PORT", 6379)),
+        )
 
     @classmethod
     def from_payload(cls, payload):
@@ -96,12 +117,15 @@ class FMIBridge:
             world_size=int(payload.get("world_size", 1)),
             rank=int(payload.get("rank", 0)),
             channel_type=payload.get("fmi_channel_type", "redis"),
-            hint=payload.get("fmi_hint", "fast"),
+            rendezvous_host=os.environ.get("RENDEZVOUS_HOST", ""),
+            rendezvous_port=int(os.environ.get("RENDEZVOUS_PORT", 10000)),
+            redis_host=os.environ.get("REDIS_HOST", ""),
+            redis_port=int(os.environ.get("REDIS_PORT", 6379)),
         )
 
     @property
     def available(self):
-        """True if FMI is available and initialized."""
+        """True if FMI communicator is initialised and ready."""
         return self._comm is not None
 
     # ------------------------------------------------------------------
@@ -109,133 +133,40 @@ class FMIBridge:
     # ------------------------------------------------------------------
 
     def barrier(self):
-        """Synchronize all workers."""
+        """Synchronise all workers."""
         if not self.available:
             return
-        self._comm.barrier()
+        self._comm.allreduce(0, self._ReduceOp.SUM)
         logger.debug("Barrier complete (rank=%d)", self.rank)
 
     def reduce_float(self, value, root=0, op="sum"):
-        """Reduce a float value across all workers to root.
+        """Reduce a float value across all workers (result available on all ranks).
 
         Args:
             value: Local float value.
-            root: Destination rank.
-            op: Reduction operation ('sum', 'max', 'min').
+            root:  Unused — pycylon allreduce delivers result to all ranks.
+            op:    'sum', 'max', or 'min'.
 
         Returns:
-            Reduced value on root rank, local value on others.
+            Reduced value on all ranks.
         """
         if not self.available or self.world_size <= 1:
             return value
 
-        fmi_op = getattr(self._fmi.op, op, self._fmi.op.sum)
-        result = self._comm.reduce(
-            float(value), root,
-            self._fmi.func(fmi_op),
-            self._fmi.types(self._fmi.datatypes.double),
-        )
-        return result
+        reduce_op = {
+            "sum": self._ReduceOp.SUM,
+            "max": self._ReduceOp.MAX,
+            "min": self._ReduceOp.MIN,
+        }.get(op, self._ReduceOp.SUM)
 
-    def broadcast_bytes(self, data, root=0):
-        """Broadcast raw bytes from root to all workers.
-
-        Args:
-            data: Bytes to broadcast (only needs to be valid on root).
-            root: Source rank.
-
-        Returns:
-            Received bytes on all ranks.
-        """
-        if not self.available or self.world_size <= 1:
-            return data
-
-        if self.rank == root:
-            # Encode length + data
-            length = len(data) if data else 0
-            payload = length.to_bytes(8, "big") + (data or b"")
-        else:
-            payload = b""
-
-        # Use FMI broadcast — sends raw bytes
-        result = self._comm.broadcast(payload, root)
-        if self.rank != root:
-            length = int.from_bytes(result[:8], "big")
-            return result[8:8 + length]
-        return data
-
-    # ------------------------------------------------------------------
-    # Context reuse operations
-    # ------------------------------------------------------------------
-
-    def broadcast_embeddings(self, embeddings_b64_list, root=0):
-        """Broadcast embedding cache from root to all workers.
-
-        Avoids each worker independently loading embeddings from Redis.
-
-        Args:
-            embeddings_b64_list: List of (context_id, embedding_b64) tuples.
-                Only needs to be valid on root rank.
-            root: Source rank.
-
-        Returns:
-            List of (context_id, embedding_b64) tuples on all ranks.
-        """
-        if not self.available or self.world_size <= 1:
-            return embeddings_b64_list
-
-        if self.rank == root:
-            payload = json.dumps(embeddings_b64_list).encode("utf-8")
-        else:
-            payload = None
-
-        received = self.broadcast_bytes(payload, root=root)
-        return json.loads(received.decode("utf-8"))
-
-    def broadcast_context_table(self, context_data, root=0):
-        """Broadcast full context table (embeddings + metadata) from root.
-
-        Args:
-            context_data: Serializable dict with context store snapshot.
-                Only needs to be valid on root rank.
-            root: Source rank.
-
-        Returns:
-            Context data dict on all ranks.
-        """
-        if not self.available or self.world_size <= 1:
-            return context_data
-
-        if self.rank == root:
-            payload = json.dumps(context_data).encode("utf-8")
-        else:
-            payload = None
-
-        received = self.broadcast_bytes(payload, root=root)
-        return json.loads(received.decode("utf-8"))
+        return self._comm.allreduce(float(value), reduce_op)
 
     def reduce_cost(self, local_cost, root=0):
-        """Reduce total cost across all workers to root.
-
-        Args:
-            local_cost: This worker's cost (float).
-            root: Destination rank.
-
-        Returns:
-            Total cost on root, local cost on others.
-        """
+        """Reduce total cost across all workers."""
         return self.reduce_float(local_cost, root=root, op="sum")
 
     def reduce_metrics(self, local_metrics, root=0):
-        """Reduce multiple metrics across all workers.
-
-        Args:
-            local_metrics: Dict with float values to reduce.
-            root: Destination rank.
-
-        Returns:
-            Dict with summed values on root, local values on others.
-        """
+        """Reduce multiple float metrics across all workers."""
         if not self.available or self.world_size <= 1:
             return local_metrics
 
@@ -248,78 +179,22 @@ class FMIBridge:
         return result
 
     # ------------------------------------------------------------------
-    # Model parallelism operations
+    # Broadcast — not available via pycylon allreduce; callers fall back
+    # to Redis when these return None.
     # ------------------------------------------------------------------
 
-    def exchange_tensor(self, tensor_data, tensor_shape, dest_rank):
-        """Send a tensor to another Lambda worker.
+    def broadcast_bytes(self, data, root=0):
+        """Not supported via pycylon FMI — returns None so callers fall back to Redis."""
+        logger.debug("broadcast_bytes not available via pycylon FMI (rank=%d)", self.rank)
+        return None
 
-        Used for model parallelism — send intermediate activations
-        between pipeline stages.
+    def broadcast_embeddings(self, embeddings_b64_list, root=0):
+        """Not supported via pycylon FMI — returns None so callers fall back to Redis."""
+        return None
 
-        Args:
-            tensor_data: numpy float32 array.
-            tensor_shape: Tuple of dimensions.
-            dest_rank: Target worker rank.
-        """
-        if not self.available:
-            raise RuntimeError("FMI not available for tensor exchange")
-
-        payload = {
-            "data_b64": base64.b64encode(tensor_data.tobytes()).decode("ascii"),
-            "shape": list(tensor_shape),
-            "dtype": "float32",
-            "src_rank": self.rank,
-        }
-        payload_bytes = json.dumps(payload).encode("utf-8")
-
-        # Use point-to-point send (if available) or broadcast pattern
-        # FMI doesn't have direct send/recv, so use gather + scatter pattern
-        logger.info("Tensor exchange: rank %d → rank %d, shape=%s",
-                     self.rank, dest_rank, tensor_shape)
-
-        # For now, use broadcast — all ranks get it, only dest uses it
-        self.broadcast_bytes(payload_bytes, root=self.rank)
-
-    def allgather_tensors(self, local_tensor):
-        """All-gather tensors from all workers.
-
-        Used for model parallelism — collect outputs from parallel stages
-        before fusion.
-
-        Args:
-            local_tensor: numpy float32 array (this worker's contribution).
-
-        Returns:
-            List of numpy arrays, one per rank.
-        """
-        if not self.available or self.world_size <= 1:
-            return [local_tensor]
-
-        # Serialize local tensor
-        local_payload = {
-            "data_b64": base64.b64encode(local_tensor.tobytes()).decode("ascii"),
-            "shape": list(local_tensor.shape),
-            "rank": self.rank,
-        }
-        local_bytes = json.dumps(local_payload).encode("utf-8")
-
-        # All-gather: each rank broadcasts, all collect
-        gathered = []
-        for src_rank in range(self.world_size):
-            if src_rank == self.rank:
-                data = self.broadcast_bytes(local_bytes, root=src_rank)
-            else:
-                data = self.broadcast_bytes(None, root=src_rank)
-
-            payload = json.loads(data.decode("utf-8"))
-            tensor = np.frombuffer(
-                base64.b64decode(payload["data_b64"]),
-                dtype=np.float32,
-            ).reshape(payload["shape"])
-            gathered.append(tensor)
-
-        return gathered
+    def broadcast_context_table(self, context_data, root=0):
+        """Not supported via pycylon FMI — returns None so callers fall back to Redis."""
+        return None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -327,7 +202,11 @@ class FMIBridge:
 
     def finalize(self):
         """Clean up FMI communicator."""
-        if self._comm is not None:
-            self.barrier()
-            logger.info("FMI finalized (rank=%d)", self.rank)
+        if self._env is not None:
+            try:
+                self._env.finalize()
+            except Exception:
+                pass
+            self._env = None
             self._comm = None
+            logger.info("FMI finalized (rank=%d)", self.rank)

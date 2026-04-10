@@ -38,6 +38,9 @@ locals {
     REDIS_HOST                   = local.redis_endpoint
     REDIS_PORT                   = tostring(var.redis_port)
     DYNAMO_TABLE_NAME            = aws_dynamodb_table.context_store.name
+    RENDEZVOUS_HOST              = var.rendezvous_host
+    RENDEZVOUS_PORT              = tostring(var.rendezvous_port)
+    RESULTS_BUCKET               = var.results_bucket_name
   }
 
   # Env vars shared by all ECS tasks (static; dynamic fields injected per-run
@@ -53,6 +56,8 @@ locals {
     { name = "DYNAMO_TABLE_NAME",             value = aws_dynamodb_table.context_store.name },
     { name = "RESULTS_BUCKET",                value = var.results_bucket_name },
     { name = "AWS_DEFAULT_REGION",            value = var.aws_region },
+    { name = "RENDEZVOUS_HOST",               value = var.rendezvous_host },
+    { name = "RENDEZVOUS_PORT",               value = tostring(var.rendezvous_port) },
   ]
 
   # Template variables for Lambda Step Functions ASL files
@@ -842,6 +847,8 @@ resource "aws_lambda_function" "rendezvous_test" {
     variables = {
       RENDEZVOUS_HOST = var.rendezvous_host
       RENDEZVOUS_PORT = tostring(var.rendezvous_port)
+      REDIS_HOST      = local.redis_endpoint
+      REDIS_PORT      = tostring(var.redis_port)
     }
   }
 
