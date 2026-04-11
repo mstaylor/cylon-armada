@@ -27,8 +27,6 @@ Task payload (each item from armada_init's body array):
         "world_size": 4,
         "fmi_channel_type": "redis",   # "redis" | "direct" | "s3"
         "fmi_hint": "fast",            # "fast" | "low_latency"
-        "s3_scripts_bucket": "<optional>",
-        "s3_scripts_prefix": "scripts/",
         "config": {
             "llm_model_id": "...",
             "embedding_model_id": "...",
@@ -162,19 +160,10 @@ def handler(event, context):
     'event' is one item from armada_init's body array, passed directly
     by the Step Functions Map state via $$.Map.Item.Value.
     """
-    # --- S3 script loading (optional) -----------------------------------
-    s3_scripts_bucket = event.get("s3_scripts_bucket", "")
-    s3_scripts_prefix = event.get("s3_scripts_prefix", "scripts/")
-
-    if s3_scripts_bucket:
-        import s3_loader
-        ok = s3_loader.load_scripts(s3_scripts_bucket, s3_scripts_prefix)
-        if not ok:
-            logger.warning(
-                "armada_executor: S3 script load failed — falling back to baked-in scripts"
-            )
-
-    # --- Shared script imports (lazy so S3 path is on sys.path first) ---
+    # --- Shared script imports -------------------------------------------
+    # When invoked via lambda_entry.py, S3 scripts are already downloaded
+    # and on sys.path.  The baked-in path below is the fallback for direct
+    # invocations (local dev, Rivanna, smoke tests).
     _shared = os.environ.get(
         "SHARED_SCRIPTS_PATH",
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "shared", "scripts"),

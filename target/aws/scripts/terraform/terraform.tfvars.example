@@ -18,6 +18,13 @@ lambda_timeout   = 300
 scripts_bucket_name   = "cylon-armada-scripts"
 results_bucket_name   = "cylon-armada-results"
 
+# S3 script hot-reload — all Lambdas pull handler + shared scripts from S3
+# at cold-start via lambda_entry.py. Deploy bug fixes without image rebuilds:
+#   aws s3 sync target/shared/scripts/ s3://cylon-armada-scripts/scripts/
+#   aws s3 sync target/aws/scripts/lambda/python/ s3://cylon-armada-scripts/scripts/lambda/
+# Can also be overridden per-invocation via event payload fields.
+s3_scripts_prefix = "scripts/"
+
 # VPC — required for ECS Redis service and (optionally) Lambda VPC config
 vpc_id              = "vpc-xxxxxxxx"
 ecs_task_subnet_ids = ["subnet-xxxxxxxx", "subnet-yyyyyyyy"]   # public subnets (assign_public_ip = true)

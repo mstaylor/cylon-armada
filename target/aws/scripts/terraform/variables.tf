@@ -190,6 +190,12 @@ variable "scripts_bucket_name" {
   default     = "cylon-armada-scripts"
 }
 
+variable "s3_scripts_prefix" {
+  description = "S3 key prefix for the scripts folder (shared + lambda handlers)"
+  type        = string
+  default     = "scripts/"
+}
+
 variable "results_bucket_name" {
   description = "Existing S3 bucket for experiment results"
   type        = string

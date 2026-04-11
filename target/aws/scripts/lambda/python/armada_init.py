@@ -13,18 +13,16 @@ Infrastructure config (Redis, DynamoDB) is read from Lambda environment
 variables — not embedded in the payload — so it stays out of Step
 Functions execution history.
 
-S3 script loading (optional):
-    Pass "s3_scripts_bucket" (and optionally "s3_scripts_prefix") in the
-    event payload to have each Lambda download the shared scripts folder
-    from S3 at cold-start time instead of using the baked-in image copy.
-    armada_init propagates these fields into every per-task payload so
-    armada_executor and armada_aggregate can call s3_loader.load_scripts()
-    the same way.
+S3 script loading:
+    When invoked via lambda_entry.py (the default), scripts are downloaded
+    from S3 at cold-start time.  S3_SCRIPTS_BUCKET and S3_SCRIPTS_PREFIX
+    are configured via Lambda env vars (Terraform) or event payload override.
 
     Deploy script changes in seconds:
         aws s3 sync target/shared/scripts/ s3://<bucket>/scripts/
+        aws s3 sync target/aws/scripts/lambda/python/ s3://<bucket>/scripts/lambda/
 
-    Omit "s3_scripts_bucket" to use the scripts baked into the image
+    When S3_SCRIPTS_BUCKET is unset, the baked-in image scripts are used
     (default for local dev, smoke tests, Rivanna).
 
 Event payload:
@@ -35,8 +33,6 @@ Event payload:
         "world_size": 1,                 # optional: number of concurrent workers
         "results_s3_dir": "results/lambda/{scaling}/",  # optional; {scaling}/{world_size} substituted
         "experiment_name": "lambda_{scaling}_ws{world_size}",  # optional; same substitutions
-        "s3_scripts_bucket": "<optional>",   # enables S3 script loading
-        "s3_scripts_prefix": "scripts/",     # optional, default "scripts/"
         "config": {                          # optional overrides
             "llm_model_id": "...",
             "embedding_model_id": "...",
@@ -85,19 +81,10 @@ def handler(event, context):
     results_s3_dir  = raw_results_s3_dir.format(scaling=scaling, world_size=world_size)
     experiment_name = raw_experiment_name.format(scaling=scaling, world_size=world_size)
 
-    # --- S3 script loading (optional) -----------------------------------
-    # Read S3 coordinates from the event payload (cylon_init.py pattern).
-    # If present, download the shared scripts folder before importing them.
-    s3_scripts_bucket = event.get("s3_scripts_bucket", "")
-    s3_scripts_prefix = event.get("s3_scripts_prefix", "scripts/")
-
-    if s3_scripts_bucket:
-        import s3_loader
-        ok = s3_loader.load_scripts(s3_scripts_bucket, s3_scripts_prefix)
-        if not ok:
-            logger.warning("armada_init: S3 script load failed — falling back to baked-in scripts")
-
-    # --- Shared script imports (lazy so S3 path is on sys.path first) ---
+    # --- Shared script imports -------------------------------------------
+    # When invoked via lambda_entry.py, S3 scripts are already downloaded
+    # and on sys.path.  The baked-in path below is the fallback for direct
+    # invocations (local dev, Rivanna, smoke tests).
     _shared = os.environ.get(
         "SHARED_SCRIPTS_PATH",
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "shared", "scripts"),
@@ -120,12 +107,11 @@ def handler(event, context):
     fmi_channel_type = event.get("fmi_channel_type", "redis")
     fmi_hint         = event.get("fmi_hint", "fast")
 
-    # Propagate S3 script coordinates, scaling metadata, and FMI config into
-    # every per-task payload so armada_executor and armada_aggregate can use them.
+    # Propagate scaling metadata and FMI config into every per-task payload
+    # so armada_executor and armada_aggregate receive them via the Map state.
+    # S3 script coordinates are handled by lambda_entry.py via env vars
+    # (or event payload override) — no need to propagate per-task.
     for i, payload in enumerate(result["task_payloads"]):
-        if s3_scripts_bucket:
-            payload["s3_scripts_bucket"] = s3_scripts_bucket
-            payload["s3_scripts_prefix"] = s3_scripts_prefix
         payload["scaling"]          = scaling
         payload["world_size"]       = world_size
         payload["rank"]             = i
@@ -146,6 +132,4 @@ def handler(event, context):
         "fmi_hint":         fmi_hint,
         "prepare_cost": result["prepare_cost"],
         "prepare_latency_ms": result["prepare_latency_ms"],
-        "s3_scripts_bucket": s3_scripts_bucket,
-        "s3_scripts_prefix": s3_scripts_prefix,
     }

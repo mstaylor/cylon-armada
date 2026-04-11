@@ -94,6 +94,7 @@ COPY target/aws/scripts/lambda/runCyloninLambda.sh /cylon/target/aws/scripts/lam
 RUN chmod +x /cylon/target/aws/scripts/lambda/runCyloninLambda.sh
 
 COPY target/shared/scripts/ /cylon-armada/scripts/
+COPY target/aws/scripts/lambda/python/lambda_entry.py /cylon-armada/lambda_entry.py
 COPY target/aws/scripts/lambda/python/armada_init.py /cylon-armada/armada_init.py
 COPY target/aws/scripts/lambda/python/armada_executor.py /cylon-armada/armada_executor.py
 COPY target/aws/scripts/lambda/python/armada_aggregate.py /cylon-armada/armada_aggregate.py
@@ -162,5 +163,6 @@ WORKDIR /cylon-armada
 # the handler name as CMD (e.g. ["armada_init.handler"]).
 ENTRYPOINT [ "/cylon/target/aws/scripts/lambda/runCyloninLambda.sh", "python", "-m", "awslambdaric" ]
 
-# Default handler — overridden per-function via Terraform image_config.command
-CMD [ "armada_init.handler" ]
+# Default handler — overridden per-function via Terraform image_config.command.
+# lambda_entry downloads scripts from S3 then delegates to HANDLER_MODULE.
+CMD [ "lambda_entry.handler" ]

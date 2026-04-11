@@ -29,7 +29,21 @@ logger = logging.getLogger(__name__)
 
 
 def _import_fmi():
-    """Lazy-import pycylon FMI — only available in Cylon Lambda containers."""
+    """Lazy-import pycylon FMI — only available in Cylon Lambda containers.
+
+    mpi4py.rc flags must be set before any pycylon import to prevent OpenMPI
+    from calling MPI_Init automatically. MPI_Init fails in Lambda (no HOME dir).
+    The FMI communicator uses TCP/TCPunch — it does not need MPI at runtime,
+    but pycylon links against OpenMPI and mpi4py would trigger MPI_Init on
+    import unless suppressed here.
+    """
+    try:
+        import mpi4py
+        mpi4py.rc.initialize = False
+        mpi4py.rc.finalize = False
+    except ImportError:
+        pass
+
     try:
         from pycylon.net.fmi_config import FMIConfig
         from pycylon.net.reduce_op import ReduceOp
