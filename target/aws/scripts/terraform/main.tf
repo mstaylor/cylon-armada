@@ -41,8 +41,6 @@ locals {
     RENDEZVOUS_HOST              = var.rendezvous_host
     RENDEZVOUS_PORT              = tostring(var.rendezvous_port)
     RESULTS_BUCKET               = var.results_bucket_name
-    S3_SCRIPTS_BUCKET            = var.scripts_bucket_name
-    S3_SCRIPTS_PREFIX            = var.s3_scripts_prefix
   }
 
   # Env vars shared by all ECS tasks (static; dynamic fields injected per-run
@@ -852,8 +850,6 @@ resource "aws_lambda_function" "rendezvous_test" {
       RENDEZVOUS_PORT   = tostring(var.rendezvous_port)
       REDIS_HOST        = local.redis_endpoint
       REDIS_PORT        = tostring(var.redis_port)
-      S3_SCRIPTS_BUCKET = var.scripts_bucket_name
-      S3_SCRIPTS_PREFIX = var.s3_scripts_prefix
     }
   }
 
