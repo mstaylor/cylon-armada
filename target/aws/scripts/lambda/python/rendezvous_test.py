@@ -25,6 +25,7 @@ import socket
 import sys
 import threading
 import time
+import uuid
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -75,6 +76,11 @@ def handler(event, context):
     if shared_scripts not in sys.path:
         sys.path.insert(0, shared_scripts)
 
+    # Unique comm_name per invocation — prevents rendezvous server state
+    # conflicts when a previous invocation timed out and left stale ranks.
+    comm_name = f"rendezvous_test_{uuid.uuid4().hex[:8]}"
+    logger.info("Phase 2 comm_name: %s", comm_name)
+
     results = {}
     errors = {}
 
@@ -91,7 +97,7 @@ def handler(event, context):
                 rendezvous_port=rendezvous_port,
                 redis_host=redis_host,
                 redis_port=redis_port,
-                comm_name="rendezvous_test",
+                comm_name=comm_name,
             )
 
             if not bridge.available:
