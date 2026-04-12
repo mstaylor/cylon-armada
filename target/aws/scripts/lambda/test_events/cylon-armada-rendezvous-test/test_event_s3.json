@@ -1,0 +1,4 @@
+the{
+  "S3_SCRIPTS_BUCKET": "cylon-armada-scripts",
+  "S3_SCRIPTS_PREFIX": "scripts/"
+}
