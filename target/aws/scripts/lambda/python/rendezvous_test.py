@@ -1,20 +1,40 @@
 """rendezvous_test — validates FMI rendezvous server connectivity and address exchange.
 
 Phase 1: TCP connectivity check — confirms the rendezvous server is reachable.
-Phase 2: Address exchange — two threads simulate rank 0 and rank 1 using the
-         FMI direct (TCPunch) channel. allreduce(1, SUM) == 2 confirms both
+Phase 2: Address exchange — a single rank registers with the rendezvous server
+         via the FMI direct (TCPunch) channel. To complete the exchange, invoke
+         two Lambda functions concurrently with the same comm_name but different
+         ranks (rank=0, rank=1). allreduce(1, SUM) == world_size confirms both
          workers completed the rendezvous handshake and can communicate.
+
+Single-rank invocation (Phase 2):
+    Invoke two Lambdas concurrently with the same comm_name:
+
+    # Terminal 1 (rank 0):
+    aws lambda invoke --function-name cylon-armada-rendezvous-test \
+      --payload '{"rank":0,"world_size":2,"comm_name":"test_abc"}' /dev/stdout
+
+    # Terminal 2 (rank 1):
+    aws lambda invoke --function-name cylon-armada-rendezvous-test \
+      --payload '{"rank":1,"world_size":2,"comm_name":"test_abc"}' /dev/stdout
+
+    Both should return success with allreduce result == 2.
+
+TCP-only invocation (Phase 1 only — no rank/comm_name needed):
+    aws lambda invoke --function-name cylon-armada-rendezvous-test \
+      --payload '{}' /dev/stdout
 
 Returns:
     {
         "success": true | false,
         "rendezvous_host": "...",
         "rendezvous_port": 10000,
+        "rank": 0,
+        "world_size": 2,
+        "comm_name": "test_abc",
         "connectivity_ms": ...,     # Phase 1 TCP connect latency
-        "exchange_ms": {            # Phase 2 allreduce latency per rank
-            "rank_0": ...,
-            "rank_1": ...
-        },
+        "exchange_ms": ...,         # Phase 2 allreduce latency (single rank)
+        "allreduce_result": 2.0,    # Should equal world_size
         "error": "..."              # present only on failure
     }
 """
@@ -23,7 +43,6 @@ import logging
 import os
 import socket
 import sys
-import threading
 import time
 import uuid
 
@@ -66,97 +85,95 @@ def handler(event, context):
 
     # ------------------------------------------------------------------
     # Phase 2 — Address exchange via FMI direct channel
-    # Two threads simulate rank 0 and rank 1.
-    # allreduce(1, SUM) == world_size confirms both workers completed
-    # the rendezvous handshake and established direct communication.
+    #
+    # Requires rank and comm_name in the event payload. If not provided,
+    # return Phase 1 results only (TCP connectivity check).
     # ------------------------------------------------------------------
-    logger.info("Phase 2: FMI address exchange (world_size=2, channel=direct)")
+    rank = event.get("rank")
+    if rank is None:
+        return {
+            "success": True,
+            "phase": "tcp_only",
+            "rendezvous_host": rendezvous_host,
+            "rendezvous_port": rendezvous_port,
+            "connectivity_ms": connectivity_ms,
+        }
+
+    rank = int(rank)
+    world_size = int(event.get("world_size", 2))
+    comm_name = event.get("comm_name", f"rendezvous_test_{uuid.uuid4().hex[:8]}")
+
+    logger.info(
+        "Phase 2: FMI address exchange (rank=%d, world_size=%d, comm_name=%s, channel=direct)",
+        rank, world_size, comm_name,
+    )
 
     shared_scripts = os.environ.get("SHARED_SCRIPTS_PATH", "/cylon-armada/scripts")
     if shared_scripts not in sys.path:
         sys.path.insert(0, shared_scripts)
 
-    # Unique comm_name per invocation — prevents rendezvous server state
-    # conflicts when a previous invocation timed out and left stale ranks.
-    comm_name = f"rendezvous_test_{uuid.uuid4().hex[:8]}"
-    logger.info("Phase 2 comm_name: %s", comm_name)
+    try:
+        from communicator.fmi_bridge import FMIBridge
 
-    results = {}
-    errors = {}
+        t_start = time.monotonic()
+        bridge = FMIBridge(
+            world_size=world_size,
+            rank=rank,
+            channel_type="direct",
+            rendezvous_host=rendezvous_host,
+            rendezvous_port=rendezvous_port,
+            redis_host=redis_host,
+            redis_port=redis_port,
+            comm_name=comm_name,
+        )
 
-    def run_rank(rank):
-        try:
-            from communicator.fmi_bridge import FMIBridge
+        if not bridge.available:
+            return {
+                "success": False,
+                "phase": "address_exchange",
+                "rendezvous_host": rendezvous_host,
+                "rendezvous_port": rendezvous_port,
+                "rank": rank,
+                "world_size": world_size,
+                "comm_name": comm_name,
+                "connectivity_ms": connectivity_ms,
+                "error": "pycylon FMI not available in this container",
+            }
 
-            t_start = time.monotonic()
-            bridge = FMIBridge(
-                world_size=2,
-                rank=rank,
-                channel_type="direct",
-                rendezvous_host=rendezvous_host,
-                rendezvous_port=rendezvous_port,
-                redis_host=redis_host,
-                redis_port=redis_port,
-                comm_name=comm_name,
-            )
+        logger.info("Rank %d: communicator ready, running allreduce", rank)
+        total = bridge.reduce_float(1.0, op="sum")
+        exchange_ms = round((time.monotonic() - t_start) * 1000, 2)
 
-            if not bridge.available:
-                errors[rank] = "pycylon FMI not available in this container"
-                return
+        logger.info("Rank %d: allreduce returned %.1f in %.1fms", rank, total, exchange_ms)
+        bridge.finalize()
 
-            logger.info("Rank %d: communicator ready, running allreduce", rank)
-            total = bridge.reduce_float(1.0, op="sum")
-            exchange_ms = round((time.monotonic() - t_start) * 1000, 2)
+        success = int(total) == world_size
+        result = {
+            "success": success,
+            "phase": "address_exchange",
+            "rendezvous_host": rendezvous_host,
+            "rendezvous_port": rendezvous_port,
+            "rank": rank,
+            "world_size": world_size,
+            "comm_name": comm_name,
+            "connectivity_ms": connectivity_ms,
+            "exchange_ms": exchange_ms,
+            "allreduce_result": total,
+        }
+        if not success:
+            result["error"] = f"allreduce returned {total}, expected {world_size}"
+        return result
 
-            if int(total) != 2:
-                errors[rank] = f"allreduce returned {total}, expected 2 — address exchange incomplete"
-                return
-
-            logger.info("Rank %d: allreduce returned %.0f in %.1fms", rank, total, exchange_ms)
-            bridge.finalize()
-            results[rank] = exchange_ms
-
-        except Exception as e:
-            logger.error("Rank %d failed: %s", rank, e)
-            errors[rank] = str(e)
-
-    threads = [
-        threading.Thread(target=run_rank, args=(r,), name=f"rank-{r}")
-        for r in range(2)
-    ]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=30)
-
-    timed_out = [t.name for t in threads if t.is_alive()]
-    if timed_out:
+    except Exception as e:
+        logger.error("Rank %d failed: %s", rank, e)
         return {
             "success": False,
             "phase": "address_exchange",
             "rendezvous_host": rendezvous_host,
             "rendezvous_port": rendezvous_port,
+            "rank": rank,
+            "world_size": world_size,
+            "comm_name": comm_name,
             "connectivity_ms": connectivity_ms,
-            "error": f"Threads timed out after 30s: {timed_out}",
+            "error": str(e),
         }
-
-    if errors:
-        return {
-            "success": False,
-            "phase": "address_exchange",
-            "rendezvous_host": rendezvous_host,
-            "rendezvous_port": rendezvous_port,
-            "connectivity_ms": connectivity_ms,
-            "errors": {f"rank_{k}": v for k, v in errors.items()},
-        }
-
-    return {
-        "success": True,
-        "rendezvous_host": rendezvous_host,
-        "rendezvous_port": rendezvous_port,
-        "connectivity_ms": connectivity_ms,
-        "exchange_ms": {
-            "rank_0": results.get(0),
-            "rank_1": results.get(1),
-        },
-    }

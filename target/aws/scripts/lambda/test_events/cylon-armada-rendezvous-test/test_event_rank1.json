@@ -1,0 +1,5 @@
+{
+  "rank": 1,
+  "world_size": 2,
+  "comm_name": "test_abc"
+}
