@@ -46,6 +46,17 @@ import logging
 import os
 import sys
 
+# Suppress OpenMPI MPI_Init before any pycylon import. Lambda has no HOME
+# directory, causing opal_init to fail. The FMI communicator uses TCP/TCPunch
+# and does not need MPI at runtime, but pycylon links against OpenMPI and
+# mpi4py would trigger MPI_Init on import unless suppressed here.
+try:
+    import mpi4py
+    mpi4py.rc.initialize = False
+    mpi4py.rc.finalize = False
+except ImportError:
+    pass
+
 import boto3
 from botocore.exceptions import ClientError
 
