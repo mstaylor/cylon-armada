@@ -153,7 +153,7 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 EXPOSE $EXPOSE_ENV
 
 ENV PYTHONPATH="/cylon-armada:${CYLON_PREFIX}/lib:/cylon-armada/scripts:/cylon-armada/python"
-ENV LD_LIBRARY_PATH="$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib"
+ENV LD_LIBRARY_PATH="$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib:/usr/local/lib"
 ENV SHARED_SCRIPTS_PATH="/cylon-armada/scripts"
 
 WORKDIR /cylon-armada

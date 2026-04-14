@@ -502,11 +502,11 @@ resource "aws_lambda_function" "nodejs_init" {
   timeout       = var.lambda_timeout
 
   image_config {
-    command = ["lambda_entry.handler"]
+    command = ["armada_init.handler"]
   }
 
   environment {
-    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_init" })
+    variables = local.lambda_env
   }
 
   dynamic "vpc_config" {
@@ -529,11 +529,11 @@ resource "aws_lambda_function" "nodejs_executor" {
   timeout       = var.lambda_timeout
 
   image_config {
-    command = ["lambda_entry.handler"]
+    command = ["armada_executor.handler"]
   }
 
   environment {
-    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_executor" })
+    variables = local.lambda_env
   }
 
   dynamic "vpc_config" {
@@ -556,11 +556,11 @@ resource "aws_lambda_function" "nodejs_aggregate" {
   timeout       = var.lambda_timeout
 
   image_config {
-    command = ["lambda_entry.handler"]
+    command = ["armada_aggregate.handler"]
   }
 
   environment {
-    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_aggregate" })
+    variables = local.lambda_env
   }
 
   dynamic "vpc_config" {

@@ -57,7 +57,7 @@ ENV CYLON_ARMADA_WASM_BINDINGS=/app/cylon-armada-wasm/cylon_armada_wasm.js
 WORKDIR /app
 
 COPY target/aws/scripts/lambda/node/package.json /app/package.json
-RUN npm install --production
+RUN npm install --production && npm install aws-lambda-ric
 
 # ---------------------------------------------------------------------------
 # ONNX model (optional — loaded from S3 at runtime via ONNX_MODEL_S3_URI)
@@ -79,8 +79,10 @@ COPY target/aws/scripts/lambda/node/ /app/
 # Lambda handler entry point
 # ---------------------------------------------------------------------------
 
+# The entrypoint invokes the AWS Lambda Runtime Interface Client.
 # Each Lambda function uses the same image with a different CMD:
-#   cylon-armada-init:      CMD ["armada_init.handler"]
-#   cylon-armada-executor:  CMD ["armada_executor.handler"]
-#   cylon-armada-aggregate: CMD ["armada_aggregate.handler"]
+#   cylon-armada-init-node:      CMD ["armada_init.handler"]
+#   cylon-armada-executor-node:  CMD ["armada_executor.handler"]
+#   cylon-armada-aggregate-node: CMD ["armada_aggregate.handler"]
+ENTRYPOINT ["npx", "aws-lambda-ric"]
 CMD ["armada_init.handler"]
