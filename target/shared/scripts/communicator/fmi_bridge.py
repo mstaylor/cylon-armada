@@ -67,13 +67,15 @@ class FMIBridge:
         redis_port:       Redis port. Default: 6379.
         comm_name:        Communication group name — all workers in the same run
                           must use the same value. Default: 'cylon_armada'.
-        maxtimeout:       FMI max timeout ms. Default: 30000.
+        maxtimeout:       FMI max timeout ms. Default: 120000.
+        enableping:       Enable FMI ping. Default: False.
     """
 
     def __init__(self, world_size, rank, channel_type="redis",
                  rendezvous_host="", rendezvous_port=10000,
                  redis_host="", redis_port=6379,
-                 comm_name="cylon_armada", maxtimeout=30000):
+                 comm_name="cylon_armada", maxtimeout=120000,
+                 enableping=False):
         self.world_size = int(world_size)
         self.rank = int(rank)
         self.channel_type = channel_type
@@ -98,6 +100,7 @@ class FMIBridge:
                 redis_host=redis_host,
                 redis_port=int(redis_port),
                 redis_namespace=comm_name,
+                enableping=enableping,
                 channel_type=channel_type,
             )
             self._env = self._CylonEnv(config=fmi_config, distributed=True)
