@@ -16,6 +16,8 @@ ENV CC_wasm32_unknown_unknown=clang
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN rustup target add wasm32-unknown-unknown
 
+ADD https://google.com cache_bust
+
 # Build cylon-wasm (from the cylon repo)
 ARG CYLON_BRANCH=cylon-context-support
 RUN git clone --depth 1 --branch ${CYLON_BRANCH} \
