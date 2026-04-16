@@ -61,7 +61,7 @@ class BedrockConfig:
         Env vars → Event payload → Config file → Defaults
     """
 
-    llm_model_id: str = "anthropic.claude-3-haiku-20240307-v1:0"
+    llm_model_id: str = "amazon.nova-lite-v1:0"
     embedding_model_id: str = "amazon.titan-embed-text-v2:0"
     embedding_dimensions: int = 1024
     similarity_threshold: float = 0.85

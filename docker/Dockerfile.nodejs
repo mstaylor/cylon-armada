@@ -86,9 +86,9 @@ COPY target/aws/scripts/lambda/node/ /app/
 # ---------------------------------------------------------------------------
 
 # The entrypoint invokes the AWS Lambda Runtime Interface Client.
-# Each Lambda function uses the same image with a different CMD:
-#   cylon-armada-init-node:      CMD ["armada_init.handler"]
-#   cylon-armada-executor-node:  CMD ["armada_executor.handler"]
-#   cylon-armada-aggregate-node: CMD ["armada_aggregate.handler"]
+# All Node.js Lambda functions use lambda_entry.handler as the entry point.
+# Terraform sets HANDLER_MODULE per-function to control which module is loaded.
+# lambda_entry downloads scripts from S3 at cold start, then delegates to the
+# target handler — eliminating Docker rebuilds for script changes.
 ENTRYPOINT ["npx", "aws-lambda-ric"]
-CMD ["armada_init.handler"]
+CMD ["lambda_entry.handler"]

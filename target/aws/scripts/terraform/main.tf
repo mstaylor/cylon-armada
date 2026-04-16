@@ -210,7 +210,10 @@ resource "aws_iam_role_policy" "lambda_policy" {
       {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel"]
-        Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
+        Resource = [
+          "arn:aws:bedrock:*::foundation-model/*",
+          "arn:aws:bedrock:*:${var.account_id}:inference-profile/*"
+        ]
       },
       {
         Effect = "Allow"
@@ -312,7 +315,10 @@ resource "aws_iam_role_policy" "ecs_task_policy" {
       {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel"]
-        Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
+        Resource = [
+          "arn:aws:bedrock:*::foundation-model/*",
+          "arn:aws:bedrock:*:${var.account_id}:inference-profile/*"
+        ]
       },
       {
         Effect = "Allow"
@@ -502,11 +508,11 @@ resource "aws_lambda_function" "nodejs_init" {
   timeout       = var.lambda_timeout
 
   image_config {
-    command = ["armada_init.handler"]
+    command = ["lambda_entry.handler"]
   }
 
   environment {
-    variables = local.lambda_env
+    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_init" })
   }
 
   dynamic "vpc_config" {
@@ -529,11 +535,11 @@ resource "aws_lambda_function" "nodejs_executor" {
   timeout       = var.lambda_timeout
 
   image_config {
-    command = ["armada_executor.handler"]
+    command = ["lambda_entry.handler"]
   }
 
   environment {
-    variables = local.lambda_env
+    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_executor" })
   }
 
   dynamic "vpc_config" {
@@ -556,11 +562,11 @@ resource "aws_lambda_function" "nodejs_aggregate" {
   timeout       = var.lambda_timeout
 
   image_config {
-    command = ["armada_aggregate.handler"]
+    command = ["lambda_entry.handler"]
   }
 
   environment {
-    variables = local.lambda_env
+    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_aggregate" })
   }
 
   dynamic "vpc_config" {

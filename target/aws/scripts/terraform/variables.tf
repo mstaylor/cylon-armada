@@ -236,7 +236,7 @@ variable "step_functions_max_concurrency" {
 variable "bedrock_llm_model_id" {
   description = "Default Bedrock LLM model ID"
   type        = string
-  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+  default     = "amazon.nova-lite-v1:0"
 }
 
 variable "bedrock_embedding_model_id" {

@@ -12,6 +12,7 @@
  * CMD: armada_executor.handler
  */
 
+import crypto from 'node:crypto';
 import { StopWatch } from './stopwatch.mjs';
 import {
     initWasm,
