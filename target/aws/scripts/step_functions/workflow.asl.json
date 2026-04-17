@@ -51,9 +51,7 @@
         "world_size.$":       "$.init_output.world_size",
         "results_s3_dir.$":   "$.init_output.results_s3_dir",
         "experiment_name.$":  "$.init_output.experiment_name",
-        "prepare_cost.$":     "$.init_output.prepare_cost",
-        "s3_scripts_bucket.$": "$.init_output.s3_scripts_bucket",
-        "s3_scripts_prefix.$": "$.init_output.s3_scripts_prefix"
+        "prepare_cost.$":     "$.init_output.prepare_cost"
       },
       "Retry": [
         {

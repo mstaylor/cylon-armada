@@ -1,0 +1,92 @@
+{
+  "Comment": "Context-Based Cost Optimization — ECS EC2 GPU path. A single g4dn/g5 EC2-backed ECS task runs the full experiment using gcylon/cuDF for SIMD operations (SIMD_BACKEND=pycylon). UCX/UCC/libfabric used for inter-task communication.",
+  "StartAt": "RunECSTask",
+  "States": {
+    "RunECSTask": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "Cluster": "${ECS_EC2_CLUSTER}",
+        "TaskDefinition": "${GPU_TASK_DEF}",
+        "LaunchType": "EC2",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": ${SUBNET_IDS},
+            "SecurityGroups": ${SECURITY_GROUP_IDS},
+            "AssignPublicIp": "DISABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "${CONTAINER_NAME}",
+              "Environment": [
+                {
+                  "Name": "WORKFLOW_ID",
+                  "Value.$": "$.workflow_id"
+                },
+                {
+                  "Name": "TASKS_JSON",
+                  "Value.$": "States.JsonToString($.tasks)"
+                },
+                {
+                  "Name": "SCALING",
+                  "Value.$": "$.scaling"
+                },
+                {
+                  "Name": "WORLD_SIZE",
+                  "Value.$": "States.Format('{}', $.world_size)"
+                },
+                {
+                  "Name": "RESULTS_DIR",
+                  "Value.$": "$.results_dir"
+                },
+                {
+                  "Name": "EXPERIMENT_NAME",
+                  "Value.$": "$.experiment_name"
+                },
+                {
+                  "Name": "S3_SCRIPTS_BUCKET",
+                  "Value.$": "States.JsonToString($.s3_scripts_bucket)"
+                },
+                {
+                  "Name": "S3_SCRIPTS_PREFIX",
+                  "Value.$": "States.JsonToString($.s3_scripts_prefix)"
+                },
+                {
+                  "Name": "COMPUTE_PLATFORM",
+                  "Value": "ecs-ec2-gpu"
+                },
+                {
+                  "Name": "SIMD_BACKEND",
+                  "Value": "pycylon"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["ECS.AmazonECSException", "States.TaskFailed"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ExperimentFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "End": true
+    },
+    "ExperimentFailed": {
+      "Type": "Fail",
+      "Error": "ECSTaskFailed",
+      "Cause": "ECS EC2 GPU task exited with non-zero status. Check CloudWatch logs."
+    }
+  }
+}
