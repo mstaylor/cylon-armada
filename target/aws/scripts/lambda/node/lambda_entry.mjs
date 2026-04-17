@@ -22,7 +22,7 @@
  */
 
 import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, symlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { existsSync } from 'node:fs';
@@ -74,6 +74,14 @@ async function downloadScripts(s3Bucket, s3Prefix) {
         }
 
         console.log(`Downloaded ${count} scripts from s3://${s3Bucket}/${s3Prefix} to ${LOCAL_DIR}`);
+
+        // Symlink /app/node_modules into the download dir so ESM package
+        // resolution (which walks up from /tmp/armada_scripts/lambda/) finds
+        // the native packages already installed in the image.
+        const nmLink = join(LOCAL_DIR, 'node_modules');
+        if (!existsSync(nmLink)) {
+            await symlink('/app/node_modules', nmLink);
+        }
     } catch (err) {
         console.error('S3 script download failed:', err);
         return false;
