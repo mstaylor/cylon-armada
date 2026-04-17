@@ -73,16 +73,28 @@ async function initWasm() {
 // ---------------------------------------------------------------------------
 
 let redisClient = null;
+let redisUnavailable = false;  // set true on first connection failure; skip retries
 let dynamoClient = null;
 let bedrockClient = null;
 
 async function getRedis() {
+    if (redisUnavailable) return null;
     if (redisClient) return redisClient;
     const host = process.env.REDIS_HOST || 'localhost';
     const port = parseInt(process.env.REDIS_PORT || '6379');
-    redisClient = createClient({ url: `redis://${host}:${port}` });
-    await redisClient.connect();
-    return redisClient;
+    try {
+        const client = createClient({
+            url: `redis://${host}:${port}`,
+            socket: { connectTimeout: 3000 },
+        });
+        await client.connect();
+        redisClient = client;
+        return redisClient;
+    } catch (err) {
+        console.warn(`Redis unavailable (${host}:${port}) — continuing without persistence: ${err.message}`);
+        redisUnavailable = true;
+        return null;
+    }
 }
 
 function getDynamo() {
@@ -286,23 +298,26 @@ async function storeContext(contextId, workflowId, taskDescription, embedding, r
         }));
     }
 
-    // Redis — primary persistence + search embeddings
-    const pipeline = redis.multi();
-    pipeline.set(`embedding:${contextId}`, Buffer.from(embedding.buffer), { EX: 3600 });
-    pipeline.set(`context:${contextId}`, JSON.stringify({
-        response,
-        input_tokens: costMetadata.input_tokens || 0,
-        output_tokens: costMetadata.output_tokens || 0,
-        model_id: costMetadata.model_id || '',
-        cost_usd: costMetadata.cost_usd || 0,
-    }), { EX: 3600 });
-    pipeline.sAdd(`workflow:${workflowId}`, contextId);
-    pipeline.expire(`workflow:${workflowId}`, 7200);
-    await pipeline.exec();
+    // Redis — optional persistence; skip if unavailable
+    if (redis) {
+        const pipeline = redis.multi();
+        pipeline.set(`embedding:${contextId}`, Buffer.from(embedding.buffer), { EX: 3600 });
+        pipeline.set(`context:${contextId}`, JSON.stringify({
+            response,
+            input_tokens: costMetadata.input_tokens || 0,
+            output_tokens: costMetadata.output_tokens || 0,
+            model_id: costMetadata.model_id || '',
+            cost_usd: costMetadata.cost_usd || 0,
+        }), { EX: 3600 });
+        pipeline.sAdd(`workflow:${workflowId}`, contextId);
+        pipeline.expire(`workflow:${workflowId}`, 7200);
+        await pipeline.exec();
+    }
 }
 
 async function getAllEmbeddings(workflowId) {
     const redis = await getRedis();
+    if (!redis) return [];
     const contextIds = await redis.sMembers(`workflow:${workflowId}`);
 
     const results = [];
@@ -320,8 +335,10 @@ async function getAllEmbeddings(workflowId) {
 
 async function getContext(contextId) {
     const redis = await getRedis();
-    const cached = await redis.get(`context:${contextId}`);
-    if (cached) return JSON.parse(cached);
+    if (redis) {
+        const cached = await redis.get(`context:${contextId}`);
+        if (cached) return JSON.parse(cached);
+    }
 
     // DynamoDB fallback — only if configured
     if (TABLE_NAME) {
@@ -346,8 +363,8 @@ async function getContext(contextId) {
 async function incrementReuseCount(contextId) {
     // Update Redis metadata
     const redis = await getRedis();
-    const cached = await redis.get(`context:${contextId}`);
-    if (cached) {
+    const cached = redis ? await redis.get(`context:${contextId}`) : null;
+    if (redis && cached) {
         const data = JSON.parse(cached);
         data.reuse_count = (data.reuse_count || 0) + 1;
         await redis.set(`context:${contextId}`, JSON.stringify(data), { KEEPTTL: true });
