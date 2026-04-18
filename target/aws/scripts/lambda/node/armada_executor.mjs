@@ -61,8 +61,8 @@ export async function handler(event) {
     if (matches.length > 0) {
         // Cache hit
         const bestMatch = matches[0];
-        const context   = await getContext(bestMatch.contextId);
-        await incrementReuseCount(bestMatch.contextId);
+        const context   = await getContext(bestMatch.contextId, workflowId);
+        await incrementReuseCount(bestMatch.contextId, workflowId);
 
         const avoidedInput  = context.input_tokens  || 0;
         const avoidedOutput = context.output_tokens || 0;
