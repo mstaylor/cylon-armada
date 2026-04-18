@@ -18,9 +18,17 @@ import {
 } from './shared.mjs';
 
 export async function handler(event) {
-    const workflowId  = event.workflow_id || randomUUID();
-    const tasks       = event.tasks;
-    const config      = event.config || {};
+    const workflowId   = event.workflow_id || randomUUID();
+    const tasks        = event.tasks;
+    const config       = event.config || {};
+    const scaling      = (event.scaling || 'weak').toLowerCase();
+    const worldSize    = event.world_size || tasks?.length || 1;
+
+    // File naming — support {scaling} and {world_size} substitutions
+    const rawResultsDir     = event.results_s3_dir    || 'results/lambda/{scaling}/';
+    const rawExperimentName = event.experiment_name   || 'lambda_{scaling}_ws{world_size}';
+    const resultsS3Dir      = rawResultsDir.replace('{scaling}', scaling).replace('{world_size}', worldSize);
+    const experimentName    = rawExperimentName.replace('{scaling}', scaling).replace('{world_size}', worldSize);
 
     if (!tasks || tasks.length === 0) {
         return { statusCode: 400, body: JSON.stringify({ error: 'tasks array is required' }) };
@@ -40,7 +48,7 @@ export async function handler(event) {
             embedding_metadata: metadata,
             workflow_id:        workflowId,
             rank:               i,
-            world_size:         tasks.length,
+            world_size:         worldSize,
             config,
         });
     }
@@ -49,8 +57,12 @@ export async function handler(event) {
 
     return {
         statusCode:         200,
-        body:               taskPayloads,        // Map state iterates this
+        body:               taskPayloads,
         workflow_id:        workflowId,
+        scaling,
+        world_size:         worldSize,
+        results_s3_dir:     resultsS3Dir,
+        experiment_name:    experimentName,
         prepare_cost:       costTracker.getSummary(),
         prepare_latency_ms: prepareLatencyMs,
     };

@@ -45,7 +45,7 @@
       "Type": "Task",
       "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-aggregate-node",
       "Parameters": {
-        "workflow_id.$":      "$.workflow_id",
+        "workflow_id.$":      "$.init_output.workflow_id",
         "task_results.$":     "$.task_results",
         "scaling.$":          "$.init_output.scaling",
         "world_size.$":       "$.init_output.world_size",
