@@ -1,0 +1,21 @@
+{
+  "workflow_id": "mp-test-001",
+  "model_config": {
+    "stage_0_path": null,
+    "stage_1_path": null,
+    "stage_2_path": null
+  },
+  "inference_input": {
+    "image": [],
+    "image_shape": [1, 5, 224, 224],
+    "magnitude": [],
+    "shapes": {
+      "image": [1, 5, 224, 224],
+      "magnitude": [1, 5]
+    }
+  },
+  "fmi_config": {
+    "channel_type": "redis",
+    "comm_name": "cylon_armada_mp_test"
+  }
+}

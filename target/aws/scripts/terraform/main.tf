@@ -582,6 +582,33 @@ resource "aws_lambda_function" "nodejs_aggregate" {
   tags = local.common_tags
 }
 
+resource "aws_lambda_function" "nodejs_worker" {
+  function_name = "${var.project_name}-worker-node"
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
+  memory_size   = var.nodejs_memory_mb
+  timeout       = var.lambda_timeout
+
+  image_config {
+    command = ["lambda_entry.handler"]
+  }
+
+  environment {
+    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_worker" })
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
 # ---------------------------------------------------------------------------
 # IAM Role — Step Functions execution
 # ---------------------------------------------------------------------------
@@ -619,6 +646,7 @@ resource "aws_iam_role_policy" "step_functions_policy" {
           aws_lambda_function.nodejs_init.arn,
           aws_lambda_function.nodejs_executor.arn,
           aws_lambda_function.nodejs_aggregate.arn,
+          aws_lambda_function.nodejs_worker.arn,
         ]
       },
       # Run and monitor ECS tasks (used by ecs:runTask.sync)
