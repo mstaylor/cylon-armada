@@ -1,0 +1,46 @@
+# Copy this to terraform.tfvars and fill in your values.
+# GPU Terraform is intentionally separate from the main stack so GPU EC2
+# instances (g4dn/g5) can be spun up and torn down independently to control cost.
+
+aws_region          = "us-east-1"
+account_id          = "448324707516"
+ecr_repository_name = "cylon-armada"
+
+# ECR image tag for the GPU runner (built with gcylon + cuDF support)
+gpu_image_tag = "cylon-armada-gpu"
+
+# Existing EC2 cluster — must have g4dn.xlarge or g5.xlarge instances registered
+ecs_ec2_cluster_name = "CylonEC2Experiments"
+
+# GPU task sizing — sized for g4dn.xlarge (4 vCPU, 16 GB RAM, 1x T4 GPU)
+# Adjust for g5.xlarge (4 vCPU, 16 GB RAM, 1x A10G GPU) — same cpu/memory values
+gpu_cpu       = 4096
+gpu_memory_mb = 14336
+gpu_count     = 1
+
+# ECS networking — EC2 instances must be in these subnets
+ecs_task_subnet_ids    = ["subnet-xxxxxxxx", "subnet-yyyyyyyy"]
+ecs_security_group_ids = ["sg-xxxxxxxx"]
+
+# S3
+scripts_bucket_name        = "staylor.dev2"
+s3_scripts_prefix          = "cylon-armada/scripts/"
+results_bucket_name        = "staylor.dev2"
+results_prefix_ecs_ec2_gpu = "results/ecs-ec2-gpu/"
+
+# DynamoDB — use the same table created by the main Terraform stack
+dynamo_table_name = "cylon-armada-context-store"
+
+# Redis — reuse the Redis instance from the main stack
+redis_host = ""
+redis_port = 6379
+
+# Bedrock
+bedrock_llm_model_id         = "amazon.nova-lite-v1:0"
+bedrock_embedding_model_id   = "amazon.titan-embed-text-v2:0"
+bedrock_embedding_dimensions = 1024
+similarity_threshold         = 0.85
+context_backend              = "cylon"
+
+# Log retention — keep GPU logs longer (experiments are expensive, preserve evidence)
+ecs_log_retention_days = 14

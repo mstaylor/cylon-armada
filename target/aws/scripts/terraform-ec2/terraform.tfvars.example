@@ -1,0 +1,41 @@
+# Copy to terraform.tfvars and fill in before applying.
+# terraform init && terraform apply
+
+# ---- Required ---------------------------------------------------------------
+account_id          = "448324707516"
+ecr_repository_name = "cylon-armada"
+results_bucket_name = "staylor.dev2"
+
+# ---- EC2 instances ----------------------------------------------------------
+instance_type        = "m3.xlarge"
+asg_desired_capacity = 1
+asg_min_size         = 0
+asg_max_size         = 4
+
+# Subnets and security groups for the EC2 container instances (ASG)
+ec2_subnet_ids         = ["subnet-xxxxxxxx"]
+ec2_security_group_ids = ["sg-xxxxxxxx"]
+
+# Subnets and security groups for ECS tasks (awsvpc mode)
+ecs_task_subnet_ids    = ["subnet-xxxxxxxx"]
+ecs_security_group_ids = ["sg-xxxxxxxx"]
+
+# Optional: SSH key for debugging
+# key_pair_name = "my-key"
+
+# ---- S3 hot-reload ----------------------------------------------------------
+scripts_bucket_name = "staylor.dev2"
+s3_scripts_prefix   = "cylon-armada/scripts/"
+
+# ---- Bedrock ----------------------------------------------------------------
+bedrock_llm_model_id             = "amazon.nova-lite-v1:0"
+bedrock_embedding_model_id       = "amazon.titan-embed-text-v2:0"
+bedrock_embedding_dimensions     = 1024
+similarity_threshold             = 0.85
+
+# ---- Context backend --------------------------------------------------------
+context_backend = "cylon"
+# redis_host    = ""   # set if context_backend = "redis"
+
+# ---- Cluster (defaults are fine for CylonEC2Experiments) --------------------
+# ecs_ec2_cluster_name = "CylonEC2Experiments"
