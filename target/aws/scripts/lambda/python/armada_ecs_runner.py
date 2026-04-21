@@ -305,6 +305,7 @@ def main() -> None:
 
     logger.info("Embedding %d tasks...", len(tasks))
     embeddings = []
+    total_tokens = 0
     for task in tasks:
         response = bedrock.invoke_model(
             modelId=config.embedding_model_id,
@@ -312,6 +313,8 @@ def main() -> None:
         )
         body = json.loads(response["body"].read())
         embeddings.append(np.array(body["embedding"], dtype=np.float32))
+        total_tokens += body.get("inputTextTokenCount", 0)
+    embedding_metadata["token_count"] = total_tokens
 
     # ------------------------------------------------------------------ #
     # 4. Assign tasks to workers                                         #

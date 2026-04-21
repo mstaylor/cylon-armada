@@ -189,8 +189,8 @@ class ContextRouter:
 
         # Record embedding cost
         cost_tracker.record_embedding_call(
-            embedding_metadata["model_id"],
-            embedding_metadata["token_count"],
+            embedding_metadata.get("model_id", "unknown"),
+            embedding_metadata.get("token_count", 0),
         )
 
         # Similarity search
