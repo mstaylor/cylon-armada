@@ -47,11 +47,11 @@
                 },
                 {
                   "Name": "S3_SCRIPTS_BUCKET",
-                  "Value.$": "States.JsonToString($.s3_scripts_bucket)"
+                  "Value.$": "$.s3_scripts_bucket"
                 },
                 {
                   "Name": "S3_SCRIPTS_PREFIX",
-                  "Value.$": "States.JsonToString($.s3_scripts_prefix)"
+                  "Value.$": "$.s3_scripts_prefix"
                 },
                 {
                   "Name": "COMPUTE_PLATFORM",
