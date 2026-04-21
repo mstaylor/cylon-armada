@@ -394,8 +394,8 @@ resource "aws_ecs_task_definition" "python_armada" {
     # Clear the Lambda ENTRYPOINT baked into the image so ECS runs the
     # runner directly.  entryPoint=[] removes the Dockerfile ENTRYPOINT;
     # command becomes the full exec.
-    entryPoint = ["python"]
-    command     = ["armada_ecs_runner.py"]
+    entryPoint = ["/cylon/target/aws/scripts/lambda/runCyloninLambda.sh"]
+    command     = ["python", "armada_ecs_runner.py"]
 
     environment = local.ecs_env
 
