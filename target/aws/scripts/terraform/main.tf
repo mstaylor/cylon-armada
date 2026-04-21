@@ -391,8 +391,11 @@ resource "aws_ecs_task_definition" "python_armada" {
     image     = "${data.aws_ecr_repository.main.repository_url}:${var.ecs_image_tag}"
     essential = true
 
-    # Entry point for ECS experiments — reads per-run config from env vars
-    command = ["python", "armada_ecs_runner.py"]
+    # Clear the Lambda ENTRYPOINT baked into the image so ECS runs the
+    # runner directly.  entryPoint=[] removes the Dockerfile ENTRYPOINT;
+    # command becomes the full exec.
+    entryPoint = []
+    command     = ["python", "armada_ecs_runner.py"]
 
     environment = local.ecs_env
 

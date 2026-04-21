@@ -257,7 +257,8 @@ resource "aws_ecs_task_definition" "gpu_armada" {
     image     = "${data.aws_ecr_repository.main.repository_url}:${var.gpu_image_tag}"
     essential = true
 
-    command = ["python", "armada_ecs_runner.py"]
+    entryPoint = []
+    command     = ["python", "armada_ecs_runner.py"]
 
     environment = local.ecs_gpu_env
 
