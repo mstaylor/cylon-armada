@@ -13,12 +13,13 @@ asg_min_size         = 0
 asg_max_size         = 4
 
 # Subnets and security groups for the EC2 container instances (ASG)
-ec2_subnet_ids         = ["subnet-xxxxxxxx"]
-ec2_security_group_ids = ["sg-xxxxxxxx"]
+# Default VPC subnets (us-east-1a/1c) — survive terraform destroy
+ec2_subnet_ids         = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
+ec2_security_group_ids = ["sg-09d82c04201698ee0"]   # cylonSecurityGroup
 
-# Subnets and security groups for ECS tasks (awsvpc mode)
-ecs_task_subnet_ids    = ["subnet-xxxxxxxx"]
-ecs_security_group_ids = ["sg-xxxxxxxx"]
+# Subnets and security groups for ECS tasks (awsvpc mode — each task gets its own ENI)
+ecs_task_subnet_ids    = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
+ecs_security_group_ids = ["sg-09d82c04201698ee0"]   # cylonSecurityGroup
 
 # Optional: SSH key for debugging
 # key_pair_name = "my-key"
