@@ -9,13 +9,6 @@
         "Cluster": "${ECS_EC2_CLUSTER}",
         "TaskDefinition": "${GPU_TASK_DEF}",
         "LaunchType": "EC2",
-        "NetworkConfiguration": {
-          "AwsvpcConfiguration": {
-            "Subnets": ${SUBNET_IDS},
-            "SecurityGroups": ${SECURITY_GROUP_IDS},
-            "AssignPublicIp": "DISABLED"
-          }
-        },
         "Overrides": {
           "ContainerOverrides": [
             {
@@ -47,11 +40,11 @@
                 },
                 {
                   "Name": "S3_SCRIPTS_BUCKET",
-                  "Value.$": "States.JsonToString($.s3_scripts_bucket)"
+                  "Value.$": "$.s3_scripts_bucket"
                 },
                 {
                   "Name": "S3_SCRIPTS_PREFIX",
-                  "Value.$": "States.JsonToString($.s3_scripts_prefix)"
+                  "Value.$": "$.s3_scripts_prefix"
                 },
                 {
                   "Name": "COMPUTE_PLATFORM",

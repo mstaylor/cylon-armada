@@ -40,11 +40,9 @@ locals {
 
   # Template variables for the GPU Step Functions ASL
   gpu_asl_vars = {
-    ECS_EC2_CLUSTER    = data.aws_ecs_cluster.ec2.arn
-    GPU_TASK_DEF       = aws_ecs_task_definition.gpu_armada.arn
-    CONTAINER_NAME     = var.ecs_container_name
-    SUBNET_IDS         = jsonencode(var.ecs_task_subnet_ids)
-    SECURITY_GROUP_IDS = jsonencode(var.ecs_security_group_ids)
+    ECS_EC2_CLUSTER = data.aws_ecs_cluster.ec2.arn
+    GPU_TASK_DEF    = aws_ecs_task_definition.gpu_armada.arn
+    CONTAINER_NAME  = var.ecs_container_name
   }
 }
 
@@ -234,14 +232,16 @@ resource "aws_iam_role_policy" "step_functions_policy" {
 # ECS Task Definition — GPU armada runner
 #
 # EC2 launch type only (GPU placement). GPU allocation via resourceRequirements.
-# network_mode = "awsvpc" is required for EC2 + awsvpc.
+# host network mode: GPU instances in the default VPC have a public IP on their
+# primary ENI; awsvpc secondary ENIs don't get public IPs so they can't reach
+# Bedrock/S3 without a NAT gateway. Host mode shares the instance's primary ENI.
 # The container runs armada_ecs_runner.py with SIMD_BACKEND=pycylon (gcylon).
 # ---------------------------------------------------------------------------
 
 resource "aws_ecs_task_definition" "gpu_armada" {
   family                   = "${var.project_name}-gpu"
   requires_compatibilities = ["EC2"]
-  network_mode             = "awsvpc"
+  network_mode             = "host"
   cpu                      = tostring(var.gpu_cpu)
   memory                   = tostring(var.gpu_memory_mb)
   task_role_arn            = aws_iam_role.ecs_task.arn
