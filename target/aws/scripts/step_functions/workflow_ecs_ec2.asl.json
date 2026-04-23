@@ -8,7 +8,9 @@
       "Parameters": {
         "Cluster": "${ECS_EC2_CLUSTER}",
         "TaskDefinition": "${PYTHON_TASK_DEF}",
-        "LaunchType": "EC2",
+        "CapacityProviderStrategy": [
+          { "capacityProvider": "${CAPACITY_PROVIDER_NAME}", "weight": 1, "base": 0 }
+        ],
         "NetworkConfiguration": {
           "AwsvpcConfiguration": {
             "Subnets": ${SUBNET_IDS},

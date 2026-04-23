@@ -36,11 +36,12 @@ locals {
   ]
 
   asl_vars = {
-    ECS_EC2_CLUSTER    = data.aws_ecs_cluster.ec2.arn
-    PYTHON_TASK_DEF    = aws_ecs_task_definition.cpu_armada.arn
-    CONTAINER_NAME     = var.ecs_container_name
-    SUBNET_IDS         = jsonencode(var.ecs_task_subnet_ids)
-    SECURITY_GROUP_IDS = jsonencode(var.ecs_security_group_ids)
+    ECS_EC2_CLUSTER        = data.aws_ecs_cluster.ec2.arn
+    PYTHON_TASK_DEF        = aws_ecs_task_definition.cpu_armada.arn
+    CONTAINER_NAME         = var.ecs_container_name
+    SUBNET_IDS             = jsonencode(var.ecs_task_subnet_ids)
+    SECURITY_GROUP_IDS     = jsonencode(var.ecs_security_group_ids)
+    CAPACITY_PROVIDER_NAME = aws_ecs_capacity_provider.cpu.name
   }
 }
 
