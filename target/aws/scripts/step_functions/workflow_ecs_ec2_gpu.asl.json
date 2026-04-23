@@ -8,7 +8,9 @@
       "Parameters": {
         "Cluster": "${ECS_EC2_CLUSTER}",
         "TaskDefinition": "${GPU_TASK_DEF}",
-        "LaunchType": "EC2",
+        "CapacityProviderStrategy": [
+          { "CapacityProvider": "${CAPACITY_PROVIDER_NAME}", "Weight": 1, "Base": 0 }
+        ],
         "Overrides": {
           "ContainerOverrides": [
             {

@@ -40,9 +40,10 @@ locals {
 
   # Template variables for the GPU Step Functions ASL
   gpu_asl_vars = {
-    ECS_EC2_CLUSTER = data.aws_ecs_cluster.ec2.arn
-    GPU_TASK_DEF    = aws_ecs_task_definition.gpu_armada.arn
-    CONTAINER_NAME  = var.ecs_container_name
+    ECS_EC2_CLUSTER        = data.aws_ecs_cluster.ec2.arn
+    GPU_TASK_DEF           = aws_ecs_task_definition.gpu_armada.arn
+    CONTAINER_NAME         = var.ecs_container_name
+    CAPACITY_PROVIDER_NAME = aws_ecs_capacity_provider.gpu.name
   }
 }
 
@@ -60,6 +61,11 @@ data "aws_ecr_repository" "main" {
 
 data "aws_ecs_cluster" "ec2" {
   cluster_name = var.ecs_ec2_cluster_name
+}
+
+# Latest ECS-optimized GPU AMI (Amazon Linux 2 + NVIDIA drivers)
+data "aws_ssm_parameter" "gpu_ami" {
+  name = "/aws/service/ecs/optimized-ami/amazon-linux-2/gpu/recommended/image_id"
 }
 
 # ---------------------------------------------------------------------------
@@ -117,6 +123,114 @@ resource "aws_iam_instance_profile" "ec2_instance" {
   name = "${var.project_name}-gpu-ec2-instance-profile"
   role = aws_iam_role.ec2_instance.name
   tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# EC2 Launch Template — ECS GPU AMI, registers to cluster via user_data
+# ---------------------------------------------------------------------------
+
+resource "aws_launch_template" "ecs_gpu" {
+  name_prefix   = "${var.project_name}-gpu-"
+  image_id      = data.aws_ssm_parameter.gpu_ami.value
+  instance_type = var.instance_type
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_instance.name
+  }
+
+  key_name = var.key_pair_name != "" ? var.key_pair_name : null
+
+  vpc_security_group_ids = length(var.ec2_security_group_ids) > 0 ? var.ec2_security_group_ids : null
+
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    echo ECS_CLUSTER=${var.ecs_ec2_cluster_name} >> /etc/ecs/ecs.config
+    echo ECS_ENABLE_AWSLOGS_EXECUTIONROLE_OVERRIDE=true >> /etc/ecs/ecs.config
+    echo ECS_ENABLE_GPU_SUPPORT=true >> /etc/ecs/ecs.config
+  EOF
+  )
+
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+    http_endpoint               = "enabled"
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(local.common_tags, {
+      Name = "${var.project_name}-ecs-gpu-instance"
+    })
+  }
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# Auto Scaling Group — GPU instances (default min=0 to control cost)
+# ---------------------------------------------------------------------------
+
+resource "aws_autoscaling_group" "ecs_gpu" {
+  name                = "${var.project_name}-ecs-gpu-asg"
+  min_size            = var.asg_min_size
+  max_size            = var.asg_max_size
+  desired_capacity    = var.asg_desired_capacity
+  vpc_zone_identifier = var.ec2_subnet_ids
+
+  launch_template {
+    id      = aws_launch_template.ecs_gpu.id
+    version = "$Latest"
+  }
+
+  protect_from_scale_in = true
+
+  tag {
+    key                 = "AmazonECSManaged"
+    value               = true
+    propagate_at_launch = true
+  }
+
+  dynamic "tag" {
+    for_each = local.common_tags
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# ECS Capacity Provider — wires GPU ASG to the cluster
+# ---------------------------------------------------------------------------
+
+resource "aws_ecs_capacity_provider" "gpu" {
+  name = "${var.project_name}-gpu-capacity-provider"
+
+  auto_scaling_group_provider {
+    auto_scaling_group_arn         = aws_autoscaling_group.ecs_gpu.arn
+    managed_termination_protection = "ENABLED"
+
+    managed_scaling {
+      status                    = "ENABLED"
+      target_capacity           = 100
+      minimum_scaling_step_size = 1
+      maximum_scaling_step_size = 1
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_ecs_cluster_capacity_providers" "gpu" {
+  cluster_name       = data.aws_ecs_cluster.ec2.cluster_name
+  capacity_providers = [aws_ecs_capacity_provider.gpu.name]
+
+  default_capacity_provider_strategy {
+    capacity_provider = aws_ecs_capacity_provider.gpu.name
+    weight            = 1
+    base              = 0
+  }
 }
 
 # ---------------------------------------------------------------------------

@@ -75,17 +75,47 @@ variable "ecs_log_retention_days" {
 }
 
 # ---------------------------------------------------------------------------
-# ECS networking (awsvpc mode)
+# EC2 instance configuration (ASG)
 # ---------------------------------------------------------------------------
 
-variable "ecs_task_subnet_ids" {
-  description = "Subnet IDs for ECS GPU tasks (awsvpc network mode)"
+variable "instance_type" {
+  description = "GPU EC2 instance type (g4dn.xlarge = T4, g5.xlarge = A10G)"
+  type        = string
+  default     = "g4dn.xlarge"
+}
+
+variable "asg_min_size" {
+  description = "Minimum GPU instances (keep 0 — capacity provider scales on demand)"
+  type        = number
+  default     = 0
+}
+
+variable "asg_max_size" {
+  description = "Maximum GPU instances"
+  type        = number
+  default     = 1
+}
+
+variable "asg_desired_capacity" {
+  description = "Desired GPU instances at apply time"
+  type        = number
+  default     = 0
+}
+
+variable "key_pair_name" {
+  description = "EC2 key pair name for SSH access (leave empty to disable)"
+  type        = string
+  default     = ""
+}
+
+variable "ec2_subnet_ids" {
+  description = "Subnet IDs for GPU EC2 instances (ASG)"
   type        = list(string)
   default     = []
 }
 
-variable "ecs_security_group_ids" {
-  description = "Security group IDs for ECS GPU tasks"
+variable "ec2_security_group_ids" {
+  description = "Security group IDs for GPU EC2 instances"
   type        = list(string)
   default     = []
 }

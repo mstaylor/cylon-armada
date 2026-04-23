@@ -18,10 +18,15 @@ gpu_cpu       = 4096
 gpu_memory_mb = 14336
 gpu_count     = 1
 
-# ECS networking — EC2 instances must be in these subnets
+# EC2 GPU instances (ASG) — default min=0, scales on demand via capacity provider
+instance_type        = "g4dn.xlarge"
+asg_min_size         = 0
+asg_max_size         = 1
+asg_desired_capacity = 0
+
 # Default VPC subnets (us-east-1a/1c) — survive terraform destroy
-ecs_task_subnet_ids    = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
-ecs_security_group_ids = ["sg-09d82c04201698ee0"]   # cylonSecurityGroup
+ec2_subnet_ids         = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
+ec2_security_group_ids = ["sg-09d82c04201698ee0"]   # cylonSecurityGroup
 
 # S3
 scripts_bucket_name        = "staylor.dev2"
