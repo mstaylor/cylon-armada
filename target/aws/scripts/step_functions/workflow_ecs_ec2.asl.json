@@ -9,7 +9,7 @@
         "Cluster": "${ECS_EC2_CLUSTER}",
         "TaskDefinition": "${PYTHON_TASK_DEF}",
         "CapacityProviderStrategy": [
-          { "capacityProvider": "${CAPACITY_PROVIDER_NAME}", "weight": 1, "base": 0 }
+          { "CapacityProvider": "${CAPACITY_PROVIDER_NAME}", "Weight": 1, "Base": 0 }
         ],
         "NetworkConfiguration": {
           "AwsvpcConfiguration": {
