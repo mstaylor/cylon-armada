@@ -11,13 +11,6 @@
         "CapacityProviderStrategy": [
           { "CapacityProvider": "${CAPACITY_PROVIDER_NAME}", "Weight": 1, "Base": 0 }
         ],
-        "NetworkConfiguration": {
-          "AwsvpcConfiguration": {
-            "Subnets": ${SUBNET_IDS},
-            "SecurityGroups": ${SECURITY_GROUP_IDS},
-            "AssignPublicIp": "DISABLED"
-          }
-        },
         "Overrides": {
           "ContainerOverrides": [
             {

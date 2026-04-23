@@ -373,7 +373,7 @@ resource "aws_ecs_cluster_capacity_providers" "cpu" {
 resource "aws_ecs_task_definition" "cpu_armada" {
   family                   = "${var.project_name}-ec2"
   requires_compatibilities = ["EC2"]
-  network_mode             = "awsvpc"
+  network_mode             = "host"
   cpu                      = tostring(var.cpu_task_cpu)
   memory                   = tostring(var.cpu_task_memory_mb)
   task_role_arn            = aws_iam_role.ecs_task.arn
