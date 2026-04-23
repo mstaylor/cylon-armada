@@ -411,7 +411,7 @@ resource "aws_ecs_task_definition" "cpu_armada" {
 # ---------------------------------------------------------------------------
 
 resource "aws_sfn_state_machine" "ecs_ec2_workflow" {
-  name     = "${var.project_name}-ecs-ec2-workflow"
+  name     = "${var.project_name}-ecs-ec2-cpu-workflow"
   role_arn = aws_iam_role.step_functions_execution.arn
   type     = "STANDARD"
 
