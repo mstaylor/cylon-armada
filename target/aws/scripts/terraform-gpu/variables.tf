@@ -108,6 +108,12 @@ variable "key_pair_name" {
   default     = ""
 }
 
+variable "root_volume_size_gb" {
+  description = "Root EBS volume size in GB — GPU images with cuDF/conda are large (default 100 GB)"
+  type        = number
+  default     = 100
+}
+
 variable "ec2_subnet_ids" {
   description = "Subnet IDs for GPU EC2 instances (ASG)"
   type        = list(string)

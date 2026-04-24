@@ -70,17 +70,18 @@ locals {
 
   # Template variables for ECS Step Functions ASL files
   ecs_asl_vars = {
-    AWS_REGION            = var.aws_region
-    ACCOUNT_ID            = var.account_id
-    ECS_FARGATE_CLUSTER   = data.aws_ecs_cluster.fargate.arn
-    ECS_EC2_CLUSTER       = data.aws_ecs_cluster.ec2.arn
-    PYTHON_TASK_DEF       = aws_ecs_task_definition.python_armada.arn
-    CONTAINER_NAME        = var.ecs_container_name
-    SUBNET_IDS            = jsonencode(var.ecs_task_subnet_ids)
-    SECURITY_GROUP_IDS    = jsonencode(var.ecs_security_group_ids)
-    ASSIGN_PUBLIC_IP      = var.ecs_assign_public_ip
+    AWS_REGION             = var.aws_region
+    ACCOUNT_ID             = var.account_id
+    ECS_FARGATE_CLUSTER    = data.aws_ecs_cluster.fargate.arn
+    ECS_EC2_CLUSTER        = data.aws_ecs_cluster.ec2.arn
+    PYTHON_TASK_DEF        = aws_ecs_task_definition.python_armada.arn
+    CONTAINER_NAME         = var.ecs_container_name
+    SUBNET_IDS             = jsonencode(var.ecs_task_subnet_ids)
+    SECURITY_GROUP_IDS     = jsonencode(var.ecs_security_group_ids)
+    ASSIGN_PUBLIC_IP       = var.ecs_assign_public_ip
     RESULTS_PREFIX_FARGATE = var.results_prefix_ecs_fargate
-    RESULTS_PREFIX_EC2    = var.results_prefix_ecs_ec2
+    RESULTS_PREFIX_EC2     = var.results_prefix_ecs_ec2
+    CAPACITY_PROVIDER_NAME = var.ec2_capacity_provider_name
   }
 }
 

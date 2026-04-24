@@ -219,6 +219,12 @@ variable "results_prefix_ecs_ec2" {
   default     = "results/ecs-ec2/"
 }
 
+variable "ec2_capacity_provider_name" {
+  description = "ECS capacity provider name for the EC2 CPU workflow (created by terraform-ec2)"
+  type        = string
+  default     = "cylon-armada-ec2-capacity-provider"
+}
+
 # ---------------------------------------------------------------------------
 # Step Functions
 # ---------------------------------------------------------------------------

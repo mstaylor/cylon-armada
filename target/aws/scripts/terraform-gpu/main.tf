@@ -142,6 +142,16 @@ resource "aws_launch_template" "ecs_gpu" {
 
   vpc_security_group_ids = length(var.ec2_security_group_ids) > 0 ? var.ec2_security_group_ids : null
 
+  # GPU images (cuDF, libcudf, conda envs) are large — default 30 GB fills up
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size           = var.root_volume_size_gb
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
+  }
+
   user_data = base64encode(<<-EOF
     #!/bin/bash
     echo ECS_CLUSTER=${var.ecs_ec2_cluster_name} >> /etc/ecs/ecs.config
