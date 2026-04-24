@@ -416,7 +416,7 @@ resource "aws_ecs_task_definition" "gpu_armada" {
     image     = "${data.aws_ecr_repository.main.repository_url}:${var.gpu_image_tag}"
     essential = true
 
-    entryPoint = ["/bin/bash", "/cylon/target/aws/scripts/lambda/runCyloninLambda.sh"]
+    entryPoint = ["/cylon/target/aws/scripts/lambda/runCyloninLambda.sh"]
     command     = ["python", "armada_ecs_runner.py"]
 
     environment = local.ecs_gpu_env
