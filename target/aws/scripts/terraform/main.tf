@@ -351,6 +351,11 @@ resource "aws_iam_role_policy" "ecs_task_policy" {
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:*:*:*"
       },
+      {
+        Effect   = "Allow"
+        Action   = ["pricing:GetProducts"]
+        Resource = "*"
+      },
     ]
   })
 }
