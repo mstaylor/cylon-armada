@@ -229,7 +229,7 @@ class ContextRouter:
                     "Missing token counts for context %s, avoided cost will be 0",
                     best_match["context_id"],
                 )
-            cost_tracker.record_cache_hit(
+            avoided_cost = cost_tracker.record_cache_hit(
                 chain_executor.model_id, input_tokens, output_tokens,
             )
 
@@ -242,6 +242,7 @@ class ContextRouter:
                 "response": response_text,
                 "source": "cache",
                 "cost_usd": 0.0,
+                "avoided_cost_usd": avoided_cost,
                 "similarity": best_match["similarity"],
                 "search_latency_ms": best_match.get("search_latency_ms", 0),
                 "llm_latency_ms": 0,
@@ -278,6 +279,7 @@ class ContextRouter:
             "response": llm_result["response"],
             "source": "llm",
             "cost_usd": llm_cost,
+            "avoided_cost_usd": 0.0,
             "similarity": best_match["similarity"] if best_match else 0.0,
             "search_latency_ms": best_match.get("search_latency_ms", 0) if best_match else 0,
             "llm_latency_ms": llm_result["latency_ms"],

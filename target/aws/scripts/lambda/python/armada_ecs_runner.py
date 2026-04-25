@@ -127,6 +127,9 @@ def _write_results_to_s3(
     llm_calls = len(results) - cache_hits
     reuse_rate = cache_hits / len(results) if results else 0.0
     total_cost = sum(r.get("cost_usd", 0.0) for r in results)
+    total_avoided = sum(r.get("avoided_cost_usd", 0.0) for r in results)
+    baseline_cost = total_cost + total_avoided
+    savings_pct = (total_avoided / baseline_cost * 100) if baseline_cost > 0 else 0.0
     latencies = [r.get("total_latency_ms", 0.0) for r in results]
     avg_latency = sum(latencies) / len(latencies) if latencies else 0.0
     latencies_sorted = sorted(latencies)
@@ -150,6 +153,7 @@ def _write_results_to_s3(
             "llm_latency_ms":     r.get("llm_latency_ms", 0.0),
             "total_latency_ms":   r.get("total_latency_ms", 0.0),
             "cost_usd":           r.get("cost_usd", 0.0),
+            "avoided_cost_usd":   r.get("avoided_cost_usd", 0.0),
             "similarity":         r.get("similarity", 0.0),
             "backend":            r.get("backend", ""),
         })
@@ -177,8 +181,8 @@ def _write_results_to_s3(
         "llm_calls":                llm_calls,
         "reuse_rate":               reuse_rate,
         "total_cost":               total_cost,
-        "baseline_cost":            0.0,
-        "savings_pct":              0.0,
+        "baseline_cost":            baseline_cost,
+        "savings_pct":              savings_pct,
         "total_ms":                 total_elapsed_ms,
         "avg_latency_ms":           avg_latency,
         "p50_latency_ms":           p50,
