@@ -4,9 +4,10 @@ Finds similar contexts using SIMD-accelerated cosine similarity and
 decides whether to reuse a cached response or delegate to the
 LangChain Executor for a new LLM call.
 
-Supports three SIMD backends:
+Supports four SIMD backends:
 - Path A1: pycylon per-call (Python loop, one C++ call per embedding)
 - Path A2: Cython batch (single C++ call for entire search)
+- Path A3: gcylon GPU (cuPy batch cosine similarity on CUDA — GPU instances only)
 - Path B:  WASM SIMD128 (Node.js — separate implementation)
 """
 
@@ -28,6 +29,7 @@ class SIMDBackend(Enum):
     """Available SIMD backends for similarity search."""
     PYCYLON = "pycylon"       # Path A1: per-call native C++ SIMD
     CYTHON_BATCH = "cython"   # Path A2: batch Cython extension
+    GCYLON = "gcylon"         # Path A3: cuPy GPU batch (CUDA — GPU instances only)
     NUMPY = "numpy"           # Fallback: pure numpy
 
 
@@ -60,6 +62,64 @@ def _load_cython_batch():
         return None
 
 
+def _load_gcylon():
+    """Lazy-load cuPy for GPU batch cosine similarity (Path A3).
+
+    Requires cuPy installed with a compatible CUDA runtime — available in
+    the cylon-armada-gpu image. Falls back to None on CPU-only instances.
+    """
+    try:
+        import cupy as cp
+        # Verify CUDA is actually accessible (cuPy can be installed without GPU)
+        cp.cuda.runtime.getDeviceCount()
+        logger.info("gcylon GPU backend: cuPy %s, CUDA devices=%d",
+                    cp.__version__, cp.cuda.runtime.getDeviceCount())
+        return cp
+    except Exception as e:
+        logger.warning("gcylon GPU backend not available: %s", e)
+        return None
+
+
+def _gcylon_batch_search(
+    cp,
+    query: np.ndarray,
+    embeddings_matrix: np.ndarray,
+    threshold: float,
+    top_k: int,
+) -> list[tuple[int, float]]:
+    """GPU batch cosine similarity via cuPy (Path A3).
+
+    Transfers embeddings to GPU once, computes all similarities in a single
+    matrix-vector multiply, filters by threshold, and returns sorted results.
+    All comparisons run in parallel on CUDA cores.
+
+    Returns list of (index, similarity) tuples sorted descending.
+    """
+    q = cp.asarray(query, dtype=cp.float32)
+    E = cp.asarray(embeddings_matrix, dtype=cp.float32)
+
+    # Normalise query and rows in one pass
+    q_norm = q / (cp.linalg.norm(q) + 1e-8)
+    row_norms = cp.linalg.norm(E, axis=1, keepdims=True)
+    E_norm = E / (row_norms + 1e-8)
+
+    # All similarities in a single GEMV — shape (n,)
+    similarities = cp.dot(E_norm, q_norm)
+
+    # Filter and top-k on GPU before transferring back
+    mask = similarities >= threshold
+    indices = cp.where(mask)[0]
+    if indices.size == 0:
+        return []
+
+    sims = similarities[indices]
+    order = cp.argsort(-sims)[:top_k]
+    top_indices = indices[order].get().tolist()
+    top_sims = sims[order].get().tolist()
+
+    return list(zip(top_indices, top_sims))
+
+
 class ContextRouter:
     """Route tasks through similarity search — reuse or new LLM call."""
 
@@ -81,18 +141,30 @@ class ContextRouter:
         # Lazy-loaded SIMD functions
         self._pycylon_cosine = None
         self._cython_batch = None
+        self._cupy = None
 
         if backend == SIMDBackend.PYCYLON:
             self._pycylon_cosine = _load_pycylon()
             if self._pycylon_cosine is None:
-                logger.warning("Falling back to numpy for similarity")
+                logger.warning("pycylon unavailable, falling back to numpy")
                 self.backend = SIMDBackend.NUMPY
 
         elif backend == SIMDBackend.CYTHON_BATCH:
             self._cython_batch = _load_cython_batch()
             if self._cython_batch is None:
-                logger.warning("Falling back to numpy for similarity")
+                logger.warning("Cython batch unavailable, falling back to numpy")
                 self.backend = SIMDBackend.NUMPY
+
+        elif backend == SIMDBackend.GCYLON:
+            self._cupy = _load_gcylon()
+            if self._cupy is None:
+                logger.warning("gcylon GPU unavailable, falling back to pycylon")
+                self._pycylon_cosine = _load_pycylon()
+                if self._pycylon_cosine is not None:
+                    self.backend = SIMDBackend.PYCYLON
+                else:
+                    logger.warning("pycylon also unavailable, falling back to numpy")
+                    self.backend = SIMDBackend.NUMPY
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         """Compute cosine similarity using the configured backend (A1 or fallback)."""
@@ -120,8 +192,19 @@ class ContextRouter:
 
         context_ids = [cid for cid, _ in stored]
 
+        # Path A3: gcylon GPU — cuPy batch on CUDA
+        if self.backend == SIMDBackend.GCYLON and self._cupy:
+            embeddings_matrix = np.vstack([emb for _, emb in stored])
+            batch_results = _gcylon_batch_search(
+                self._cupy, query_embedding, embeddings_matrix, self.threshold, self.top_k,
+            )
+            results = [
+                {"context_id": context_ids[idx], "similarity": float(sim)}
+                for idx, sim in batch_results
+            ]
+
         # Path A2: Cython batch search — single boundary crossing
-        if self.backend == SIMDBackend.CYTHON_BATCH and self._cython_batch:
+        elif self.backend == SIMDBackend.CYTHON_BATCH and self._cython_batch:
             embeddings_matrix = np.vstack([emb for _, emb in stored])
             batch_results = self._cython_batch(
                 query_embedding, embeddings_matrix, self.threshold, self.top_k,

@@ -34,7 +34,7 @@ locals {
     { name = "DYNAMO_TABLE_NAME",             value = var.dynamo_table_name },
     { name = "RESULTS_BUCKET",                value = var.results_bucket_name },
     { name = "AWS_DEFAULT_REGION",            value = var.aws_region },
-    { name = "SIMD_BACKEND",                  value = "pycylon" },
+    { name = "SIMD_BACKEND",                  value = "gcylon" },
     { name = "COMPUTE_PLATFORM",              value = "ecs-ec2-gpu" },
   ]
 

@@ -297,6 +297,7 @@ def main() -> None:
     simd_backend = {
         "pycylon": SIMDBackend.PYCYLON,
         "cython":  SIMDBackend.CYTHON_BATCH,
+        "gcylon":  SIMDBackend.GCYLON,
         "numpy":   SIMDBackend.NUMPY,
     }.get(raw_backend, SIMDBackend.NUMPY)
 
