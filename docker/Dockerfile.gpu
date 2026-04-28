@@ -73,8 +73,8 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
     conda install -c rapidsai -c conda-forge -c nvidia \
         cudf=24.10 libcudf=24.10 rmm=24.10 librmm=24.10 \
-        cuda-version=12.8 -y && \
-    conda list | grep -E "cudf|rmm|cccl"
+        cupy cuda-version=12.8 -y && \
+    conda list | grep -E "cudf|rmm|cupy"
 
 # Remove conda UCC/UCX libraries to avoid conflicts with custom builds
 RUN rm -f /opt/conda/envs/cylon_dev/lib/libucc* /opt/conda/envs/cylon_dev/lib/libucx* \

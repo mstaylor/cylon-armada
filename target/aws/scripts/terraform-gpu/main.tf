@@ -36,6 +36,7 @@ locals {
     { name = "AWS_DEFAULT_REGION",            value = var.aws_region },
     { name = "SIMD_BACKEND",                  value = "gcylon" },
     { name = "COMPUTE_PLATFORM",              value = "ecs-ec2-gpu" },
+    { name = "CYLON_SESSION_ID",              value = var.project_name },
   ]
 
   # Template variables for the GPU Step Functions ASL

@@ -43,6 +43,7 @@ locals {
     RESULTS_BUCKET               = var.results_bucket_name
     S3_SCRIPTS_BUCKET            = var.scripts_bucket_name
     S3_SCRIPTS_PREFIX            = var.s3_scripts_prefix
+    CYLON_SESSION_ID             = var.project_name
   }
 
   # Env vars shared by all ECS tasks (static; dynamic fields injected per-run
@@ -60,6 +61,7 @@ locals {
     { name = "AWS_DEFAULT_REGION",            value = var.aws_region },
     { name = "RENDEZVOUS_HOST",               value = var.rendezvous_host },
     { name = "RENDEZVOUS_PORT",               value = tostring(var.rendezvous_port) },
+    { name = "CYLON_SESSION_ID",              value = var.project_name },
   ]
 
   # Template variables for Lambda Step Functions ASL files

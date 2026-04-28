@@ -33,6 +33,7 @@ locals {
     { name = "AWS_DEFAULT_REGION",           value = var.aws_region },
     { name = "SIMD_BACKEND",                 value = "numpy" },
     { name = "COMPUTE_PLATFORM",             value = "ecs-ec2" },
+    { name = "CYLON_SESSION_ID",             value = var.project_name },
   ]
 
   asl_vars = {
