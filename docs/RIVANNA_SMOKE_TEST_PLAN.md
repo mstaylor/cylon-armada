@@ -45,11 +45,11 @@ Docker Hub (mstaylor/...)
 ```bash
 ECR=448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada
 
-docker tag $ECR:cylon-armada-python mstaylor/cylon-armada-python:latest
-docker tag $ECR:cylon-armada-gpu    mstaylor/cylon-armada-gpu:latest
+docker tag $ECR:cylon-armada-python qad5gv/cylon-armada-python:latest
+docker tag $ECR:cylon-armada-gpu    qad5gv/cylon-armada-gpu:latest
 
-docker push mstaylor/cylon-armada-python:latest
-docker push mstaylor/cylon-armada-gpu:latest
+docker push qad5gv/cylon-armada-python:latest
+docker push qad5gv/cylon-armada-gpu:latest
 ```
 
 ### 2. Pull SIF images on Rivanna (login node)
