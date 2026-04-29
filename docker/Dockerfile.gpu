@@ -178,6 +178,9 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 COPY target/aws/scripts/lambda/runCyloninLambda.sh /cylon/target/aws/scripts/lambda/runCyloninLambda.sh
 RUN chmod +x /cylon/target/aws/scripts/lambda/runCyloninLambda.sh
 
+COPY target/rivanna/scripts/runArmada.sh /rivanna/runArmada.sh
+RUN chmod +x /rivanna/runArmada.sh
+
 COPY target/shared/scripts/ /cylon-armada/scripts/
 COPY target/aws/scripts/lambda/python/armada_init.py /cylon-armada/armada_init.py
 COPY target/aws/scripts/lambda/python/armada_executor.py /cylon-armada/armada_executor.py

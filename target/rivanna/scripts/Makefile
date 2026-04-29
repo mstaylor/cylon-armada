@@ -1,39 +1,78 @@
 SHELL=/bin/bash
 
-.PHONY: load clean q qq cancel
+# Docker Hub username — override with: make image-pull DOCKER_USER=yourname
+DOCKER_USER ?= mstaylor
+
+SCRATCH     ?= /scratch/$(USER)
+CPU_SIF     ?= $(SCRATCH)/cylon-armada/cylon-armada.sif
+GPU_SIF     ?= $(SCRATCH)/cylon-armada/cylon-armada-gpu.sif
+CPU_RESULTS ?= $(SCRATCH)/armada-results
+GPU_RESULTS ?= $(SCRATCH)/armada-results-gpu
+REDIS_HOST  ?= dev-cylon-redis1.aws-cylondata.com
+
+.PHONY: image-pull image-pull-gpu smoke-cpu smoke-gpu cpu gpu q qq cancel clean
 
 # ---------------------------------------------------------------------------
-# Apptainer image
+# Apptainer image management
+# Pull from Docker Hub — run these from a Rivanna login node (not compute)
 # ---------------------------------------------------------------------------
 
 image-pull:
 	module load apptainer && \
-	apptainer pull cylon-armada.sif docker://docker.io/$(DOCKER_USER)/cylon-armada-python:latest
+	apptainer pull $(CPU_SIF) docker://docker.io/$(DOCKER_USER)/cylon-armada-python:latest
 
 image-pull-gpu:
 	module load apptainer && \
-	apptainer pull cylon-armada-gpu.sif docker://docker.io/$(DOCKER_USER)/cylon-armada-gpu:latest
+	apptainer pull $(GPU_SIF) docker://docker.io/$(DOCKER_USER)/cylon-armada-gpu:latest
 
 # ---------------------------------------------------------------------------
-# Experiment setup (generates SLURM scripts)
+# Smoke tests — 3 tasks, world_size=1, direct comparison with ECS smoke tests
+# ---------------------------------------------------------------------------
+
+smoke-cpu:
+	mkdir -p logs
+	python armada-experiment-setup.py --smoke \
+		-d $(CPU_SIF) \
+		-r1 $(REDIS_HOST) \
+		-n 1 -t 1 -c 4 --time 00:30:00 \
+		-m 16G \
+		-l1 $(CPU_RESULTS) -l2 /output \
+		-p2 standard
+
+smoke-gpu:
+	mkdir -p logs
+	python armada-experiment-setup.py --smoke --gpu \
+		-d $(GPU_SIF) \
+		-r1 $(REDIS_HOST) \
+		-n 1 -t 1 -c 4 --time 00:30:00 \
+		-m 16G \
+		-l1 $(GPU_RESULTS) -l2 /output \
+		-p2 bii-gpu
+
+# ---------------------------------------------------------------------------
+# Full experiment sweeps (generate + submit)
 # ---------------------------------------------------------------------------
 
 cpu:
+	mkdir -p logs
 	python armada-experiment-setup.py \
-		-d cylon-armada.sif \
-		-r1 localhost -t 1 -n 1 -c 10 \
+		-d $(CPU_SIF) \
+		-r1 $(REDIS_HOST) \
+		-n 1 -t 1 -c 10 \
 		--tasks 4 8 16 --thresholds 0.8 --dimensions 256 \
-		--runs 3 --scenario hydrology \
-		-l1 /scratch/$(USER)/armada-results -l2 /output \
+		--backends NUMPY --runs 3 --scenario hydrology \
+		-l1 $(CPU_RESULTS) -l2 /output \
 		-p2 standard --dry-run
 
 gpu:
-	python armada-experiment-setup.py \
-		-d cylon-armada-gpu.sif \
-		-r1 localhost -t 1 -n 1 -c 10 \
+	mkdir -p logs
+	python armada-experiment-setup.py --gpu \
+		-d $(GPU_SIF) \
+		-r1 $(REDIS_HOST) \
+		-n 1 -t 1 -c 10 \
 		--tasks 4 8 16 --thresholds 0.8 --dimensions 256 \
-		--runs 3 --scenario hydrology --gpu \
-		-l1 /scratch/$(USER)/armada-results-gpu -l2 /output \
+		--backends GCYLON --runs 3 --scenario hydrology \
+		-l1 $(GPU_RESULTS) -l2 /output \
 		-p2 bii-gpu --dry-run
 
 # ---------------------------------------------------------------------------
@@ -50,4 +89,4 @@ cancel:
 	scancel -u $(USER)
 
 clean:
-	rm -f *.log *.err script-*.slurm
+	rm -f *.log *.err script-*.slurm submit.log
