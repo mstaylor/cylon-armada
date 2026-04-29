@@ -54,7 +54,7 @@
                 },
                 {
                   "Name": "SIMD_BACKEND",
-                  "Value": "pycylon"
+                  "Value": "gcylon"
                 }
               ]
             }

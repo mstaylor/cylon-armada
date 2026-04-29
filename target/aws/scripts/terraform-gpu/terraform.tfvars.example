@@ -38,7 +38,7 @@ results_prefix_ecs_ec2_gpu = "results/ecs-ec2-gpu/"
 dynamo_table_name = "cylon-armada-context-store"
 
 # Redis — reuse the Redis instance from the main stack
-redis_host = ""
+redis_host = "dev-cylon-redis1.aws-cylondata.com"
 redis_port = 6379
 
 # Bedrock
