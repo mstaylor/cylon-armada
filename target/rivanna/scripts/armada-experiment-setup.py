@@ -147,6 +147,7 @@ def build_parser():
     parser.add_argument("-l2", dest="log_bind_container", type=str, default="/output")
 
     # Control
+
     parser.add_argument("--dry-run", action="store_true")
 
     return parser
@@ -178,7 +179,6 @@ def make_env_vars(args, tasks_json, exp_name, results_dir, backend, dim, thresho
         f"BEDROCK_EMBEDDING_MODEL_ID={args.embedding_model}",
         f"BEDROCK_EMBEDDING_DIMENSIONS={dim}",
         f"SIMILARITY_THRESHOLD={threshold}",
-        # AWS
         f"DYNAMO_TABLE_NAME={args.dynamo_table}",
         f"AWS_DEFAULT_REGION={args.region}",
     ]

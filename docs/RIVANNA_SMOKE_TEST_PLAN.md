@@ -76,13 +76,17 @@ Pull from a **login node** only — compute nodes have no internet access.
 
 ### 3. AWS credentials on Rivanna
 
+Run once on the Rivanna login node:
+
 ```bash
-# On Rivanna login node
 aws configure
-# Enter: Access Key, Secret Key, region=us-east-1, output=json
+# AWS Access Key ID:     <s3User access key from AWS console>
+# AWS Secret Access Key: <s3User secret key>
+# Default region name:   us-east-1
+# Default output format: json
 ```
 
-Or copy `~/.aws/credentials` from your local machine to Rivanna.
+Credentials are stored in `~/.aws/credentials` — home directory, NFS-mounted on all Rivanna compute nodes automatically. Nothing goes to scratch.
 
 ### 4. Verify Redis reachability
 
@@ -190,5 +194,5 @@ python armada-experiment-setup.py \
 | Apptainer cache fills `$HOME` quota | High | Fixed: Makefile sets `APPTAINER_CACHEDIR` and `APPTAINER_TMPDIR` to scratch; run `make image-cache-clean` after pull |
 | Redis reachability from Rivanna compute nodes | High | Test with `redis-cli ping` before submitting; open port 6379 to Rivanna egress IPs if needed |
 | GPU SIF pull time | Medium | ~20 GB SIF, allow 30–60 min from login node |
-| AWS credentials propagation to compute nodes | High | Must be in `~/.aws/credentials` before submitting |
+| AWS credentials propagation to compute nodes | ✅ | `aws configure` on login node; `~/.aws/credentials` NFS-mounted on all nodes |
 | `pycylon.simd` not available in CPU image | Low | Falls back to numpy automatically |

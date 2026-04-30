@@ -3,12 +3,14 @@ SHELL=/bin/bash
 # Docker Hub username — override with: make image-pull DOCKER_USER=yourname
 DOCKER_USER ?= mstaylor
 
-SCRATCH     ?= /scratch/$(USER)
-CPU_SIF     ?= $(SCRATCH)/cylon-armada/cylon-armada.sif
-GPU_SIF     ?= $(SCRATCH)/cylon-armada/cylon-armada-gpu.sif
-CPU_RESULTS ?= $(SCRATCH)/armada-results
-GPU_RESULTS ?= $(SCRATCH)/armada-results-gpu
-REDIS_HOST  ?= dev-cylon-redis1.aws-cylondata.com
+SCRATCH      ?= /scratch/$(USER)
+CPU_SIF      ?= $(SCRATCH)/cylon-armada/cylon-armada.sif
+GPU_SIF      ?= $(SCRATCH)/cylon-armada/cylon-armada-gpu.sif
+CPU_RESULTS  ?= $(SCRATCH)/armada-results
+GPU_RESULTS  ?= $(SCRATCH)/armada-results-gpu
+REDIS_HOST   ?= dev-cylon-redis1.aws-cylondata.com
+# AWS credentials: run 'aws configure' on Rivanna login node once.
+# Stored in ~/.aws/credentials (home dir, NFS-mounted on all compute nodes).
 
 .PHONY: image-pull image-pull-gpu smoke-cpu smoke-gpu cpu gpu q qq cancel clean
 
