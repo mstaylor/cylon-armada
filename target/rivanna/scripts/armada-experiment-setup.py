@@ -185,12 +185,20 @@ def make_env_vars(args, tasks_json, exp_name, results_dir, backend, dim, thresho
 
 
 def make_slurm_script(args, exp_name, env_vars):
-    """Render a SLURM script using the Apptainer pattern."""
+    """Render a SLURM script using the Apptainer pattern.
+
+    Uses --env-file instead of --env so that TASKS_JSON (which contains
+    commas) is not misinterpreted as an env var separator.
+    Binds ~/.aws explicitly because --containall blocks home dir access.
+    """
     memspec = f"#SBATCH --mem={args.memory}" if args.memory != "DefMemPerNode" else ""
     gpuspec = f"#SBATCH --gres={args.gres}" if args.gpu else ""
     nv_flag = "--nv \\" if args.gpu else "\\"
-    env_str = ",".join(env_vars)
+    env_file = f"env-{exp_name}.env"
     jobid = "-%j"
+
+    # Write env vars one per line (supports values with commas e.g. TASKS_JSON)
+    env_file_content = "\n".join(env_vars) + "\n"
 
     return dedent(f"""
 #!/bin/bash
@@ -215,15 +223,19 @@ echo "..............................................................."
 lscpu
 echo "..............................................................."
 mkdir -p {args.log_bind_host}
+# Write env file at job start so SLURM_JOB_ID is available for WORKFLOW_ID
+cat > {env_file} << 'ENVEOF'
+{env_file_content}ENVEOF
 time srun --exact --nodes {args.nodes} apptainer exec \\
-    --env {env_str} \\
+    --env-file {env_file} \\
     --bind {args.log_bind_host}:{args.log_bind_container} \\
+    --bind ${{HOME}}/.aws:${{HOME}}/.aws \\
     {nv_flag}
     --containall \\
     {args.docker_image} \\
     /rivanna/runArmada.sh
 echo "..............................................................."
-    """).strip()
+    """).strip(), env_file_content
 
 
 def main():
@@ -247,9 +259,10 @@ def main():
         )
 
         banner(f"SMOKE TEST: {exp_name}")
-        script = make_slurm_script(args, exp_name, env_vars)
+        script, env_file_content = make_slurm_script(args, exp_name, env_vars)
         filename = f"script-{exp_name}.slurm"
         writefile(filename, script)
+        writefile(f"env-{exp_name}.env", env_file_content)
         print(script)
 
         if not args.dry_run and not debug:
@@ -298,9 +311,10 @@ def main():
             )
 
             banner(f"SLURM {exp_name} {counter}/{len(combinations)}")
-            script = make_slurm_script(args, exp_name, env_vars)
+            script, env_file_content = make_slurm_script(args, exp_name, env_vars)
             filename = f"script-{exp_name}.slurm"
             writefile(filename, script)
+            writefile(f"env-{exp_name}.env", env_file_content)
             print(script)
 
             if not args.dry_run and not debug:
