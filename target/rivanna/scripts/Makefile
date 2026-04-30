@@ -14,16 +14,33 @@ REDIS_HOST  ?= dev-cylon-redis1.aws-cylondata.com
 
 # ---------------------------------------------------------------------------
 # Apptainer image management
-# Pull from Docker Hub — run these from a Rivanna login node (not compute)
+# Pull from Docker Hub — run these from a Rivanna login node (not compute).
+#
+# APPTAINER_CACHEDIR and APPTAINER_TMPDIR are redirected to scratch so that
+# layer decompression (~2-3x SIF size) does not fill the home directory quota.
+# CPU SIF ~6 GB, GPU SIF ~20 GB; cache overhead can reach 50-70 GB total.
 # ---------------------------------------------------------------------------
 
+APPTAINER_CACHE ?= $(SCRATCH)/apptainer-cache
+APPTAINER_TMP   ?= $(SCRATCH)/apptainer-tmp
+
 image-pull:
+	mkdir -p $(APPTAINER_CACHE) $(APPTAINER_TMP) $(dir $(CPU_SIF))
 	module load apptainer && \
+	APPTAINER_CACHEDIR=$(APPTAINER_CACHE) \
+	APPTAINER_TMPDIR=$(APPTAINER_TMP) \
 	apptainer pull $(CPU_SIF) docker://docker.io/$(DOCKER_USER)/cylon-armada-python:latest
 
 image-pull-gpu:
+	mkdir -p $(APPTAINER_CACHE) $(APPTAINER_TMP) $(dir $(GPU_SIF))
 	module load apptainer && \
+	APPTAINER_CACHEDIR=$(APPTAINER_CACHE) \
+	APPTAINER_TMPDIR=$(APPTAINER_TMP) \
 	apptainer pull $(GPU_SIF) docker://docker.io/$(DOCKER_USER)/cylon-armada-gpu:latest
+
+image-cache-clean:
+	rm -rf $(APPTAINER_CACHE) $(APPTAINER_TMP)
+	@echo "Apptainer cache cleared from scratch"
 
 # ---------------------------------------------------------------------------
 # Smoke tests — 3 tasks, world_size=1, direct comparison with ECS smoke tests

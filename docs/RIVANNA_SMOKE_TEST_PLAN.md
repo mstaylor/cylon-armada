@@ -54,13 +54,25 @@ docker push qad5gv/cylon-armada-gpu:latest
 
 ### 2. Pull SIF images on Rivanna (login node)
 
+> **Space warning**: CPU SIF ~6 GB, GPU SIF ~20 GB. Apptainer's layer cache adds
+> 2–3× overhead during the pull (~50–70 GB total). This exceeds the default `$HOME`
+> quota. The Makefile redirects `APPTAINER_CACHEDIR` and `APPTAINER_TMPDIR` to
+> `$SCRATCH` automatically — do not override this.
+
 ```bash
-cd /scratch/$USER/cylon-armada
-make -C /scratch/$USER/cylon-armada/target/rivanna/scripts image-pull     DOCKER_USER=mstaylor
-make -C /scratch/$USER/cylon-armada/target/rivanna/scripts image-pull-gpu DOCKER_USER=mstaylor
+cd /scratch/$USER/cylon-armada/target/rivanna/scripts
+
+# CPU image (~6 GB SIF, ~15 GB scratch during pull)
+make image-pull DOCKER_USER=qad5gv
+
+# GPU image (~20 GB SIF, ~50 GB scratch during pull) — allow 30–60 min
+make image-pull-gpu DOCKER_USER=qad5gv
+
+# Optional: clear cache after both pulls to reclaim scratch space (~30 GB)
+make image-cache-clean
 ```
 
-GPU SIF will be large (~10–15 GB) — pull from a login node, not a compute node.
+Pull from a **login node** only — compute nodes have no internet access.
 
 ### 3. AWS credentials on Rivanna
 
