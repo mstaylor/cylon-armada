@@ -187,7 +187,8 @@ python armada-experiment-setup.py \
 
 | Issue | Severity | Notes |
 |-------|----------|-------|
-| Redis reachability from Rivanna compute nodes | High | Test with `redis-cli ping` before submitting |
-| GPU SIF pull time | Medium | ~10–15 GB — do from login node |
-| `pycylon.simd` not available in CPU image | Low | Falls back to numpy automatically |
+| Apptainer cache fills `$HOME` quota | High | Fixed: Makefile sets `APPTAINER_CACHEDIR` and `APPTAINER_TMPDIR` to scratch; run `make image-cache-clean` after pull |
+| Redis reachability from Rivanna compute nodes | High | Test with `redis-cli ping` before submitting; open port 6379 to Rivanna egress IPs if needed |
+| GPU SIF pull time | Medium | ~20 GB SIF, allow 30–60 min from login node |
 | AWS credentials propagation to compute nodes | High | Must be in `~/.aws/credentials` before submitting |
+| `pycylon.simd` not available in CPU image | Low | Falls back to numpy automatically |
