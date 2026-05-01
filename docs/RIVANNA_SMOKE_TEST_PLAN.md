@@ -88,6 +88,29 @@ aws configure
 
 Credentials are stored in `~/.aws/credentials` — home directory, NFS-mounted on all Rivanna compute nodes automatically. Nothing goes to scratch.
 
+Validate the credentials are working before submitting any jobs:
+
+```bash
+# Confirm identity and account
+aws sts get-caller-identity
+# Expected output:
+# {
+#     "UserId": "...",
+#     "Account": "448324707516",
+#     "Arn": "arn:aws:iam::448324707516:user/s3User"
+# }
+
+# Confirm Bedrock access (the most critical permission)
+aws bedrock list-foundation-models --region us-east-1 \
+    --query 'modelSummaries[?modelId==`amazon.titan-embed-text-v2:0`].modelId' \
+    --output text
+# Expected: amazon.titan-embed-text-v2:0
+
+# Confirm S3 results bucket access
+aws s3 ls s3://staylor.dev2/results/ --region us-east-1
+# Expected: list of results directories (no AccessDenied error)
+```
+
 ### 4. Verify Redis reachability
 
 ```bash
