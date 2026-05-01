@@ -79,6 +79,8 @@ Pull from a **login node** only — compute nodes have no internet access.
 Run once on the Rivanna login node:
 
 ```bash
+module load awscli
+
 aws configure
 # AWS Access Key ID:     <s3User access key from AWS console>
 # AWS Secret Access Key: <s3User secret key>
@@ -91,6 +93,8 @@ Credentials are stored in `~/.aws/credentials` — home directory, NFS-mounted o
 Validate the credentials are working before submitting any jobs:
 
 ```bash
+module load awscli
+
 # Confirm identity and account
 aws sts get-caller-identity
 # Expected output:
@@ -114,7 +118,8 @@ aws s3 ls s3://staylor.dev2/results/ --region us-east-1
 ### 4. Verify Redis reachability
 
 ```bash
-# From Rivanna login node
+module load redis
+
 redis-cli -h dev-cylon-redis1.aws-cylondata.com -p 6379 ping
 # Expected: PONG
 ```
