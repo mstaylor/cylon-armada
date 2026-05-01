@@ -135,9 +135,10 @@ If this fails, Rivanna compute nodes cannot reach the Redis instance. Options:
 From the Rivanna login node:
 
 ```bash
-# Load modules and activate Python environment (once per session)
-module load anaconda awscli apptainer
-conda activate cylon_dev
+# Load modules once per session (Python prereqs required for python/3.9.16)
+# All complex dependencies live inside the Apptainer SIF — no conda needed on host
+module load intel-compilers/2023.1.0 impi/2021.9.0 python/3.9.16
+module load apptainer awscli
 
 cd /scratch/$USER/cylon-armada/target/rivanna/scripts
 

@@ -1,7 +1,9 @@
 SHELL=/bin/bash
 
-# Python: use the cylon_dev conda environment on the Rivanna login node.
-# Before running any make target: module load anaconda && conda activate cylon_dev
+# Python: Intel Distribution for Python on Rivanna (stdlib only needed).
+# Load before running any make target:
+#   module load intel-compilers/2023.1.0 impi/2021.9.0 python/3.9.16
+# All complex dependencies (cylon_dev, pycylon, cudf) live inside the Apptainer SIF.
 PYTHON ?= python
 
 # Docker Hub username — override with: make image-pull DOCKER_USER=yourname
