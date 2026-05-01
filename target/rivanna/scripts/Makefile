@@ -1,5 +1,9 @@
 SHELL=/bin/bash
 
+# Python: use the cylon_dev conda environment on the Rivanna login node.
+# Before running any make target: module load anaconda && conda activate cylon_dev
+PYTHON ?= python
+
 # Docker Hub username — override with: make image-pull DOCKER_USER=yourname
 DOCKER_USER ?= mstaylor
 
@@ -50,7 +54,7 @@ image-cache-clean:
 
 smoke-cpu:
 	mkdir -p logs
-	python armada-experiment-setup.py --smoke \
+	$(PYTHON) armada-experiment-setup.py --smoke \
 		-d $(CPU_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 4 --time 00:30:00 \
@@ -60,7 +64,7 @@ smoke-cpu:
 
 smoke-gpu:
 	mkdir -p logs
-	python armada-experiment-setup.py --smoke --gpu \
+	$(PYTHON) armada-experiment-setup.py --smoke --gpu \
 		-d $(GPU_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 4 --time 00:30:00 \
@@ -74,7 +78,7 @@ smoke-gpu:
 
 cpu:
 	mkdir -p logs
-	python armada-experiment-setup.py \
+	$(PYTHON) armada-experiment-setup.py \
 		-d $(CPU_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 10 \
@@ -85,7 +89,7 @@ cpu:
 
 gpu:
 	mkdir -p logs
-	python armada-experiment-setup.py --gpu \
+	$(PYTHON) armada-experiment-setup.py --gpu \
 		-d $(GPU_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 10 \

@@ -135,6 +135,10 @@ If this fails, Rivanna compute nodes cannot reach the Redis instance. Options:
 From the Rivanna login node:
 
 ```bash
+# Load modules and activate Python environment (once per session)
+module load anaconda awscli apptainer
+conda activate cylon_dev
+
 cd /scratch/$USER/cylon-armada/target/rivanna/scripts
 
 # CPU smoke (standard partition, SIMD=numpy)
