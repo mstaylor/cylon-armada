@@ -55,6 +55,7 @@ Usage:
         -p2 bii-gpu
 """
 
+import base64
 import json
 import os
 import uuid
@@ -160,8 +161,8 @@ def make_env_vars(args, tasks_json, exp_name, results_dir, backend, dim, thresho
         f"COMPUTE_PLATFORM={'rivanna-gpu' if args.gpu else 'rivanna'}",
         f"WORKFLOW_ID=rivanna-{exp_name}-{str(uuid.uuid4())[:8]}",
         f"CYLON_SESSION_ID={args.session_id}",
-        # Tasks
-        f"TASKS_JSON={tasks_json}",
+        # Tasks — base64-encoded to avoid shell evaluation of JSON brackets/commas
+        f"TASKS_JSON_B64={base64.b64encode(tasks_json.encode()).decode()}",
         f"SCALING={args.scaling}",
         f"WORLD_SIZE={world_size}",
         # Results

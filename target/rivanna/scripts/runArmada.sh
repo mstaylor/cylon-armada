@@ -25,4 +25,9 @@ echo "Backend:  ${SIMD_BACKEND:-numpy}"
 echo "Workflow: ${WORKFLOW_ID:-unset}"
 echo "==================================="
 
+# Decode TASKS_JSON from base64 (avoids shell evaluation of JSON in --env-file)
+if [ -n "${TASKS_JSON_B64:-}" ]; then
+    export TASKS_JSON=$(echo "$TASKS_JSON_B64" | base64 -d)
+fi
+
 exec python /cylon-armada/armada_ecs_runner.py
