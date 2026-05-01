@@ -128,15 +128,6 @@ If this fails, Rivanna compute nodes cannot reach the Redis instance. Options:
 - Open port 6379 on the Redis security group for Rivanna egress IPs
 - Use `CONTEXT_BACKEND=redis` in a mode that tolerates Redis failure (context stored in DynamoDB only)
 
-### 5. Sync repo to Rivanna scratch
-
-```bash
-# From local machine
-rsync -av --exclude='.git' --exclude='*.sif' \
-    /home/parallels/cylon-armada/ \
-    $RIVANNA_USER@rivanna.hpc.virginia.edu:/scratch/$RIVANNA_USER/cylon-armada/
-```
-
 ---
 
 ## Running Smoke Tests
