@@ -125,7 +125,7 @@ redis-cli -h dev-cylon-redis1.aws-cylondata.com -p 6379 ping
 ```
 
 If this fails, Rivanna compute nodes cannot reach the Redis instance. Options:
-- Open port 6379 on the Redis security group for Rivanna egress IPs
+- Open port 6379 on the Redis security group for Rivanna egress IPswhatwh
 - Use `CONTEXT_BACKEND=redis` in a mode that tolerates Redis failure (context stored in DynamoDB only)
 
 ---

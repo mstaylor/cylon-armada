@@ -34,6 +34,7 @@ APPTAINER_TMP   ?= $(SCRATCH)/apptainer-tmp
 
 image-pull:
 	mkdir -p $(APPTAINER_CACHE) $(APPTAINER_TMP) $(dir $(CPU_SIF))
+	rm -f $(CPU_SIF)
 	module load apptainer && \
 	APPTAINER_CACHEDIR=$(APPTAINER_CACHE) \
 	APPTAINER_TMPDIR=$(APPTAINER_TMP) \
@@ -41,6 +42,7 @@ image-pull:
 
 image-pull-gpu:
 	mkdir -p $(APPTAINER_CACHE) $(APPTAINER_TMP) $(dir $(GPU_SIF))
+	rm -f $(GPU_SIF)
 	module load apptainer && \
 	APPTAINER_CACHEDIR=$(APPTAINER_CACHE) \
 	APPTAINER_TMPDIR=$(APPTAINER_TMP) \
