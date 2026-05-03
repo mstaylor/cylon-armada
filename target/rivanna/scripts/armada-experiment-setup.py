@@ -188,6 +188,10 @@ def make_env_vars(args, tasks_json, exp_name, results_dir, backend, dim, thresho
         f"DYNAMO_TABLE_NAME={args.dynamo_table}",
         # Shared scripts path — tells armada_ecs_runner._setup_path() where to look
         f"SHARED_SCRIPTS_PATH=/cylon-armada/scripts",
+        # S3 hot-reload — pulls fixed shared scripts (context/, chain/, cost/) from S3
+        # and inserts them at the front of sys.path, overriding baked-in versions
+        f"S3_SCRIPTS_BUCKET=staylor.dev2",
+        f"S3_SCRIPTS_PREFIX=cylon-armada/scripts/",
     ]
 
 
