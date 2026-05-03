@@ -117,3 +117,4 @@ cancel:
 
 clean:
 	rm -f *.log *.err script-*.slurm env-*.env submit.log
+	rm -f logs/*.log logs/*.err
