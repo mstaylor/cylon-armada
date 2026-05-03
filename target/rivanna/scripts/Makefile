@@ -116,4 +116,4 @@ cancel:
 	scancel -u $(USER)
 
 clean:
-	rm -f *.log *.err script-*.slurm submit.log
+	rm -f *.log *.err script-*.slurm env-*.env submit.log

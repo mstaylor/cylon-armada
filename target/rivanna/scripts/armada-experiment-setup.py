@@ -180,8 +180,14 @@ def make_env_vars(args, tasks_json, exp_name, results_dir, backend, dim, thresho
         f"BEDROCK_EMBEDDING_MODEL_ID={args.embedding_model}",
         f"BEDROCK_EMBEDDING_DIMENSIONS={dim}",
         f"SIMILARITY_THRESHOLD={threshold}",
-        f"DYNAMO_TABLE_NAME={args.dynamo_table}",
+        # AWS — point boto3 to the bind-mounted credentials dir (/aws-creds)
+        # so credentials are found regardless of container $HOME
+        f"AWS_SHARED_CREDENTIALS_FILE=/aws-creds/credentials",
+        f"AWS_CONFIG_FILE=/aws-creds/config",
         f"AWS_DEFAULT_REGION={args.region}",
+        f"DYNAMO_TABLE_NAME={args.dynamo_table}",
+        # Shared scripts path — tells armada_ecs_runner._setup_path() where to look
+        f"SHARED_SCRIPTS_PATH=/cylon-armada/scripts",
     ]
 
 
@@ -225,13 +231,14 @@ echo "..............................................................."
 lscpu
 echo "..............................................................."
 mkdir -p {args.log_bind_host}
-# Write env file at job start so SLURM_JOB_ID is available for WORKFLOW_ID
+# Write env file — SLURM_SUBMIT_DIR is where sbatch was called from
 cat > {env_file} << 'ENVEOF'
 {env_file_content}ENVEOF
 time srun --exact --nodes {args.nodes} apptainer exec \\
     --env-file {env_file} \\
     --bind {args.log_bind_host}:{args.log_bind_container} \\
-    --bind ${{HOME}}/.aws:${{HOME}}/.aws \\
+    --bind ${{HOME}}/.aws:/aws-creds \\
+    --bind ${{SLURM_SUBMIT_DIR}}:/rivanna \\
     {nv_flag}
     --containall \\
     {args.docker_image} \\
@@ -285,9 +292,6 @@ def main():
     ]
 
     platform = "rivanna-gpu" if args.gpu else "rivanna"
-    scenario_file = (
-        f"/cylon-armada/scripts/experiment/scenarios/{args.scenario}.json"
-    )
 
     with open("submit.log", "w") as f:
         for counter, (tc, th, dim, be) in enumerate(combinations, 1):
