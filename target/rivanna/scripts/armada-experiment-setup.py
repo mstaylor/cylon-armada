@@ -242,7 +242,7 @@ time srun --exact --nodes {args.nodes} apptainer exec \\
     {nv_flag}
     --containall \\
     {args.docker_image} \\
-    /rivanna/runArmada.sh
+    /bin/bash /rivanna/runArmada.sh
 echo "..............................................................."
     """).strip(), env_file_content
 
