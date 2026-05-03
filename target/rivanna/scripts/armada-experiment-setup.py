@@ -238,11 +238,13 @@ mkdir -p {args.log_bind_host}
 # Write env file — SLURM_SUBMIT_DIR is where sbatch was called from
 cat > {env_file} << 'ENVEOF'
 {env_file_content}ENVEOF
+REPO_ROOT=$(cd "${{SLURM_SUBMIT_DIR}}/../../.." && pwd)
 time srun --exact --nodes {args.nodes} apptainer exec \\
     --env-file {env_file} \\
     --bind {args.log_bind_host}:{args.log_bind_container} \\
     --bind ${{HOME}}/.aws:/aws-creds \\
     --bind ${{SLURM_SUBMIT_DIR}}:/rivanna \\
+    --bind ${{REPO_ROOT}}/target/aws/scripts/lambda/python/armada_ecs_runner.py:/cylon-armada/armada_ecs_runner.py \\
     {nv_flag}
     --containall \\
     {args.docker_image} \\
