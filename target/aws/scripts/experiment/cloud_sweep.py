@@ -121,25 +121,60 @@ def sample_tasks(scenario_file: Path, n: int, seed: int = 42) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Execution
+# Execution — EXPRESS vs STANDARD handled separately
 # ---------------------------------------------------------------------------
 
-def fire_execution(sfn_client, arch, arn, execution_name, sfn_input, dry_run):
-    """Fire a single Step Functions execution. Returns (execution_name, arn_or_None)."""
-    logger.info("  → %s", execution_name)
-    if dry_run:
-        return execution_name, None
+EXPRESS_ARCHS = {"lambda-python", "lambda-nodejs"}
 
+
+def _get_workflow_type(sfn_client, arn):
+    return sfn_client.describe_state_machine(stateMachineArn=arn)["type"]
+
+
+def run_express(sfn_client, arn, execution_name, sfn_input):
+    """Run an EXPRESS state machine synchronously. Returns (name, status)."""
+    try:
+        resp = sfn_client.start_sync_execution(
+            stateMachineArn=arn,
+            name=execution_name,
+            input=json.dumps(sfn_input),
+        )
+        status = resp["status"]
+    except Exception as e:
+        logger.error("EXPRESS execution failed %s: %s", execution_name, e)
+        status = "FAILED"
+    icon = "✓" if status == "SUCCEEDED" else "✗"
+    logger.info("%s %s — %s", icon, execution_name, status)
+    return execution_name, status
+
+
+def run_express_parallel(sfn_client, arn, configs, max_parallel):
+    """Run multiple EXPRESS executions in parallel threads. Returns {name: status}."""
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_parallel) as pool:
+        futures = {
+            pool.submit(run_express, sfn_client, arn, name, inp): name
+            for name, inp in configs
+        }
+        for future in as_completed(futures):
+            name, status = future.result()
+            results[name] = status
+    return results
+
+
+def fire_standard(sfn_client, arn, execution_name, sfn_input):
+    """Start a STANDARD execution. Returns (name, execution_arn)."""
     resp = sfn_client.start_execution(
         stateMachineArn=arn,
         name=execution_name,
         input=json.dumps(sfn_input),
     )
+    logger.info("  → %s", execution_name)
     return execution_name, resp["executionArn"]
 
 
-def poll_executions(sfn_client, execution_arns: dict, poll_interval: int = 30):
-    """Poll until all executions complete. Returns {name: status}."""
+def poll_standard(sfn_client, execution_arns: dict, poll_interval: int = 30):
+    """Poll STANDARD executions until all complete. Returns {name: status}."""
     pending = dict(execution_arns)
     results = {}
 
@@ -174,53 +209,60 @@ def run_sweep(args):
 
     for arch in architectures:
         arn = WORKFLOW_ARNS[arch]
+        is_express = arch in EXPRESS_ARCHS
         logger.info("=" * 60)
-        logger.info("Architecture: %s", arch)
+        logger.info("Architecture: %s (%s)", arch,
+                    "EXPRESS" if is_express else "STANDARD")
         logger.info("=" * 60)
 
-        execution_arns = {}
-
+        # Collect all configs for this architecture
+        all_configs = []
         for scenario in scenarios:
             scenario_file = SCENARIOS_DIR / f"{scenario}.json"
             if not scenario_file.exists():
                 logger.error("Scenario file not found: %s", scenario_file)
                 continue
-
             for world_size in args.world_sizes:
                 tasks = sample_tasks(scenario_file, args.task_count, seed=42)
-
                 for run in range(1, args.runs + 1):
                     exp_name = (
                         f"{arch.replace('-','_')}_{scenario}_ws{world_size}_run{run}"
-                    )
-                    # Truncate to 80 chars (SFN name limit is 80)
-                    exec_name = exp_name[:80]
-
+                    )[:80]
                     sfn_input = build_sfn_input(arch, scenario, tasks, world_size, exp_name)
+                    all_configs.append((exp_name, sfn_input))
 
-                    name, exec_arn = fire_execution(
-                        sfn, arch, arn, exec_name, sfn_input, args.dry_run
-                    )
-                    if exec_arn:
-                        execution_arns[name] = exec_arn
+        logger.info("Firing %d executions for %s", len(all_configs), arch)
 
-                    # Throttle to avoid SFN rate limits
-                    if not args.dry_run and len(execution_arns) % args.max_parallel == 0:
-                        logger.info("Throttling — waiting for batch to complete...")
-                        batch_results = poll_executions(sfn, execution_arns)
-                        failed = [n for n, s in batch_results.items() if s != "SUCCEEDED"]
-                        if failed:
-                            logger.warning("%d failed: %s", len(failed), failed)
-                        execution_arns = {}
+        if args.dry_run:
+            for name, _ in all_configs:
+                logger.info("  [dry-run] %s", name)
+            continue
 
-        # Poll remaining
-        if execution_arns and not args.dry_run:
-            logger.info("Waiting for final batch (%d executions)...", len(execution_arns))
-            final_results = poll_executions(sfn, execution_arns)
-            succeeded = sum(1 for s in final_results.values() if s == "SUCCEEDED")
-            failed    = sum(1 for s in final_results.values() if s != "SUCCEEDED")
-            logger.info("Architecture %s complete: %d succeeded, %d failed",
-                        arch, succeeded, failed)
+        if is_express:
+            # EXPRESS — run synchronously in parallel threads
+            results = run_express_parallel(sfn, arn, all_configs, args.max_parallel)
+        else:
+            # STANDARD — fire all, then poll
+            execution_arns = {}
+            for name, sfn_input in all_configs:
+                n, exec_arn = fire_standard(sfn, arn, name, sfn_input)
+                execution_arns[n] = exec_arn
+                # Throttle if needed
+                if len(execution_arns) >= args.max_parallel:
+                    batch = poll_standard(sfn, execution_arns)
+                    failed = [n for n, s in batch.items() if s != "SUCCEEDED"]
+                    if failed:
+                        logger.warning("%d failed: %s", len(failed), failed)
+                    execution_arns = {}
+            if execution_arns:
+                results = poll_standard(sfn, execution_arns)
+            else:
+                results = {}
+
+        succeeded = sum(1 for s in results.values() if s == "SUCCEEDED")
+        failed    = sum(1 for s in results.values() if s != "SUCCEEDED")
+        logger.info("Architecture %s complete: %d succeeded, %d failed",
+                    arch, succeeded, failed)
 
 
 # ---------------------------------------------------------------------------
