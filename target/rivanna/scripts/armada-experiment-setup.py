@@ -239,16 +239,22 @@ mkdir -p {args.log_bind_host}
 cat > {env_file} << 'ENVEOF'
 {env_file_content}ENVEOF
 REPO_ROOT=$(cd "${{SLURM_SUBMIT_DIR}}/../../.." && pwd)
+# Per-job scratch temp dir — UCX/CUDA IPC shared memory pools use /tmp
+# which is tiny on compute nodes; redirect to scratch to avoid space warnings
+JOB_TMP=/scratch/${{USER}}/tmp_${{SLURM_JOB_ID}}
+mkdir -p "${{JOB_TMP}}"
 time srun --exact --nodes {args.nodes} apptainer exec \\
     --env-file {env_file} \\
     --bind {args.log_bind_host}:{args.log_bind_container} \\
     --bind ${{HOME}}/.aws:/aws-creds \\
     --bind ${{SLURM_SUBMIT_DIR}}:/rivanna \\
     --bind ${{REPO_ROOT}}/target/aws/scripts/lambda/python/armada_ecs_runner.py:/cylon-armada/armada_ecs_runner.py \\
+    --bind ${{JOB_TMP}}:/tmp \\
     {nv_flag}
     --containall \\
     {args.docker_image} \\
     /bin/bash /rivanna/runArmada.sh
+rm -rf "${{JOB_TMP}}"
 echo "..............................................................."
     """).strip(), env_file_content
 

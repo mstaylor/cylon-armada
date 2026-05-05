@@ -37,7 +37,15 @@ from coordinator.agent_coordinator import AgentCoordinator
 from context.router import SIMDBackend
 from cost.bedrock_pricing import BedrockConfig
 from experiment.benchmark import ExperimentBenchmark
-from baselines.llamaindex_baseline import run_llamaindex_baseline
+def _get_llamaindex_baseline():
+    try:
+        from baselines.llamaindex_baseline import run_llamaindex_baseline
+        return run_llamaindex_baseline
+    except ImportError as e:
+        raise ImportError(
+            "llama_index not installed — run: pip install llama-index\n"
+            f"Original error: {e}"
+        )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -232,6 +240,7 @@ def run_experiment(
 
     bench.start("total")
     if config.system == "llamaindex":
+        run_llamaindex_baseline = _get_llamaindex_baseline()
         result = run_llamaindex_baseline(
             tasks=task_list,
             config=bedrock_config,
