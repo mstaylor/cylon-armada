@@ -395,7 +395,7 @@ resource "aws_ecs_task_definition" "cpu_armada" {
     image     = "${data.aws_ecr_repository.main.repository_url}:${var.cpu_image_tag}"
     essential = true
 
-    entryPoint = ["/cylon/target/aws/scripts/lambda/runCyloninLambda.sh"]
+    entryPoint = ["/bin/bash", "/rivanna/runArmada.sh"]
     command     = ["python", "armada_ecs_runner.py"]
 
     environment = local.ecs_cpu_env
