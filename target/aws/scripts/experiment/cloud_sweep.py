@@ -27,6 +27,7 @@ import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -201,8 +202,9 @@ def poll_standard(sfn_client, execution_arns: dict, poll_interval: int = 30):
 # Sweep
 # ---------------------------------------------------------------------------
 
-def run_sweep(args):
+def run_sweep(args, sweep_tag=""):
     sfn = boto3.client("stepfunctions", region_name=REGION)
+    tag = f"_{sweep_tag}" if sweep_tag else ""
 
     architectures = ALL_ARCHITECTURES if args.arch == "all" else [args.arch]
     scenarios     = ALL_SCENARIOS if args.scenario == "all" else [args.scenario]
@@ -226,7 +228,7 @@ def run_sweep(args):
                 tasks = sample_tasks(scenario_file, args.task_count, seed=42)
                 for run in range(1, args.runs + 1):
                     exp_name = (
-                        f"{arch.replace('-','_')}_{scenario}_ws{world_size}_run{run}"
+                        f"{arch.replace('-','_')}_{scenario}_ws{world_size}_run{run}{tag}"
                     )[:80]
                     sfn_input = build_sfn_input(arch, scenario, tasks, world_size, exp_name)
                     all_configs.append((exp_name, sfn_input))
@@ -297,9 +299,12 @@ def main():
         len(args.world_sizes) *
         args.runs
     )
-    logger.info("Sweep plan: %d total executions (dry_run=%s)", total, args.dry_run)
+    # Unique sweep tag prevents ExecutionAlreadyExists on retries
+    sweep_tag = datetime.utcnow().strftime("%m%d%H%M")
+    logger.info("Sweep plan: %d total executions (dry_run=%s, tag=%s)",
+                total, args.dry_run, sweep_tag)
 
-    run_sweep(args)
+    run_sweep(args, sweep_tag)
 
 
 if __name__ == "__main__":
