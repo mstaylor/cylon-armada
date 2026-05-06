@@ -422,8 +422,8 @@ resource "aws_ecs_task_definition" "gpu_armada" {
     image     = "${data.aws_ecr_repository.main.repository_url}:${var.gpu_image_tag}"
     essential = true
 
-    entryPoint = ["/bin/bash", "/rivanna/runArmada.sh"]
-    command     = ["python", "armada_ecs_runner.py"]
+    entryPoint = ["/opt/conda/bin/conda", "run", "--no-capture-output", "-n", "cylon_dev"]
+    command     = ["python", "/cylon-armada/armada_ecs_runner.py"]
 
     environment = local.ecs_gpu_env
 
