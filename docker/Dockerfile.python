@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -46,12 +47,17 @@ RUN cd $CYLON_HOME && git checkout -b context-support origin/cylon-context-suppo
 
 SHELL ["/bin/bash", "--login", "-c"]
 
-RUN conda install -n base -c conda-forge mamba -y
+RUN --mount=type=cache,target=/opt/conda/pkgs \
+    conda install -n base -c conda-forge mamba -y && \
+    conda config --set solver libmamba && \
+    conda config --set channel_priority strict
 
-RUN . /opt/conda/etc/profile.d/conda.sh && \
+RUN --mount=type=cache,target=/opt/conda/pkgs \
+    . /opt/conda/etc/profile.d/conda.sh && \
     mamba env create -f $CYLON_HOME/conda/environments/cylon_NoUCX.yml
 
-RUN . /opt/conda/etc/profile.d/conda.sh && \
+RUN --mount=type=cache,target=/opt/conda/pkgs \
+    . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
     conda install -c anaconda boto3 -y && pip install cloudmesh-openstack && \
     conda install -c conda-forge redis-py -y && pip install awslambdaric
