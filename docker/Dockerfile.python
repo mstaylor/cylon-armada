@@ -49,7 +49,6 @@ SHELL ["/bin/bash", "--login", "-c"]
 
 RUN --mount=type=cache,target=/opt/conda/pkgs \
     conda install -n base -c conda-forge mamba -y && \
-    conda config --set solver libmamba && \
     conda config --set channel_priority strict
 
 RUN --mount=type=cache,target=/opt/conda/pkgs \
