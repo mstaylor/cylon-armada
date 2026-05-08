@@ -65,22 +65,22 @@ SCENARIOS_DIR = Path(__file__).parent.parent.parent.parent / "shared" / "scripts
 # Input builders — each architecture has a slightly different SFN schema
 # ---------------------------------------------------------------------------
 
-def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir, workflow_id=None):
+def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir, workflow_id=None, scaling="weak"):
     return {
         "workflow_id":      workflow_id or f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
         "tasks":            tasks,
-        "scaling":          "weak",
+        "scaling":          scaling,
         "world_size":       world_size,
         "results_s3_dir":   results_s3_dir,
         "experiment_name":  experiment_name,
     }
 
 
-def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id=None):
+def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id=None, scaling="weak"):
     return {
         "workflow_id":      workflow_id or f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
         "tasks":            tasks,
-        "scaling":          "weak",
+        "scaling":          scaling,
         "world_size":       world_size,
         "results_dir":      results_dir,
         "experiment_name":  experiment_name,
@@ -89,18 +89,19 @@ def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, 
     }
 
 
-def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None):
+def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None, scaling="weak"):
     """Build the Step Functions input payload for the given architecture.
 
-    workflow_id is shared across runs of the same (arch, scenario) so that
-    run 2-4 can reuse contexts stored by run 1.
+    workflow_id is shared across runs of the same (arch, scenario, scaling, world_size)
+    so that run 2-4 can reuse contexts stored by run 1.
     """
+    results_dir = f"results/{arch}/{scenario}/{scaling}/"
     if arch in ("lambda-python", "lambda-nodejs"):
-        results_dir = f"results/{arch}/{scenario}/weak/"
-        return _build_lambda_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id)
+        return _build_lambda_input(scenario, tasks, world_size, experiment_name,
+                                   results_dir, workflow_id, scaling)
     else:
-        results_dir = f"results/{arch}/{scenario}/weak/"
-        return _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id)
+        return _build_ecs_input(scenario, tasks, world_size, experiment_name,
+                                results_dir, workflow_id, scaling)
 
 
 # ---------------------------------------------------------------------------
@@ -108,21 +109,31 @@ def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow
 # ---------------------------------------------------------------------------
 
 def sample_tasks(scenario_file: Path, n: int, seed: int = 42) -> list:
-    """Stratified sample of n tasks from a scenario file."""
+    """Sample n tasks from a scenario file, tiling if n > scenario size.
+
+    Mirrors the cylon scaling.py pattern where `rows` is fixed per worker
+    (weak) or total (strong), and the scenario file is the task pool.
+    Tiling is valid — production LLM workloads naturally see recurring task
+    types, and context reuse is most valuable when similar tasks repeat.
+    """
     data = json.loads(scenario_file.read_text())
     all_tasks = data.get("tasks", [])
     if not all_tasks:
         raise ValueError(f"No tasks in {scenario_file}")
-    if n >= len(all_tasks):
-        return all_tasks[:n]
-    # Stratified: divide list into n buckets, pick one from each
-    import random
-    rng = random.Random(seed)
-    bucket_size = len(all_tasks) / n
-    return [
-        all_tasks[int(i * bucket_size) + rng.randint(0, int(bucket_size) - 1)]
-        for i in range(n)
-    ]
+    if n <= len(all_tasks):
+        if n == len(all_tasks):
+            return all_tasks[:]
+        import random
+        rng = random.Random(seed)
+        bucket_size = len(all_tasks) / n
+        return [
+            all_tasks[int(i * bucket_size) + rng.randint(0, int(bucket_size) - 1)]
+            for i in range(n)
+        ]
+    # n > available tasks: tile the list (realistic for recurring task patterns)
+    import math
+    tiled = (all_tasks * math.ceil(n / len(all_tasks)))[:n]
+    return tiled
 
 
 # ---------------------------------------------------------------------------
@@ -228,20 +239,34 @@ def run_sweep(args, sweep_tag=""):
             if not scenario_file.exists():
                 logger.error("Scenario file not found: %s", scenario_file)
                 continue
-            for world_size in args.world_sizes:
-                tasks = sample_tasks(scenario_file, args.task_count, seed=42)
-                # Stable workflow_id shared across all runs of this (arch, scenario)
-                # so run 2-4 can reuse contexts stored by run 1
-                shared_workflow_id = f"{arch.replace('-','_')}_{scenario}_ws{world_size}"
-                for run in range(1, args.runs + 1):
-                    exp_name = (
-                        f"{arch.replace('-','_')}_{scenario}_ws{world_size}_run{run}{tag}"
-                    )[:80]
-                    sfn_input = build_sfn_input(
-                        arch, scenario, tasks, world_size, exp_name,
-                        workflow_id=shared_workflow_id,
+            for scaling in args.scaling:
+                for world_size in args.world_sizes:
+                    # Weak scaling: each worker gets task_count tasks → total = task_count × world_size
+                    #   Pass task_count × world_size tasks; runner chunk()s them giving each
+                    #   worker task_count tasks. Throughput measurement.
+                    # Strong scaling: fixed total = task_count tasks split across world_size workers
+                    #   Pass task_count tasks; runner chunk()s giving each worker task_count/world_size.
+                    #   Speedup measurement.
+                    # Both use scaling="weak" in the SFN input so the runner always uses chunk().
+                    if scaling == "weak":
+                        n_tasks = args.task_count * world_size
+                    else:
+                        n_tasks = args.task_count
+                    tasks = sample_tasks(scenario_file, n_tasks, seed=42)
+                    # Stable workflow_id shared across runs so run 2-4 reuse run 1's contexts
+                    shared_workflow_id = (
+                        f"{arch.replace('-','_')}_{scenario}_{scaling}_ws{world_size}"
                     )
-                    all_configs.append((exp_name, sfn_input))
+                    for run in range(1, args.runs + 1):
+                        exp_name = (
+                            f"{arch.replace('-','_')}_{scenario}_{scaling}_ws{world_size}_run{run}{tag}"
+                        )[:80]
+                        sfn_input = build_sfn_input(
+                            arch, scenario, tasks, world_size, exp_name,
+                            workflow_id=shared_workflow_id,
+                            scaling="weak",   # always chunk() — scaling mode encoded in task count
+                        )
+                        all_configs.append((exp_name, sfn_input))
 
         logger.info("Firing %d executions for %s", len(all_configs), arch)
 
@@ -292,8 +317,12 @@ def main():
                         help="Scenario to run, or 'all'")
     parser.add_argument("--world-sizes", type=int, nargs="+", default=[1],
                         help="World sizes (parallel workers)")
+    parser.add_argument("--scaling", nargs="+", default=["weak"],
+                        choices=["weak", "strong"],
+                        help="Scaling mode(s) — weak: each worker gets task_count tasks; "
+                             "strong: all workers share task_count tasks")
     parser.add_argument("--task-count", type=int, default=16,
-                        help="Number of tasks sampled per scenario per run")
+                        help="Number of tasks per worker (weak) or total tasks (strong)")
     parser.add_argument("--runs", type=int, default=4,
                         help="Number of runs per config (for error bars)")
     parser.add_argument("--max-parallel", type=int, default=10,
@@ -307,6 +336,7 @@ def main():
         (len(ALL_ARCHITECTURES) if args.arch == "all" else 1) *
         (len(ALL_SCENARIOS) if args.scenario == "all" else 1) *
         len(args.world_sizes) *
+        len(args.scaling) *
         args.runs
     )
     # Unique sweep tag prevents ExecutionAlreadyExists on retries
