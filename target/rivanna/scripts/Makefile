@@ -18,7 +18,7 @@ REDIS_HOST   ?= dev-cylon-redis1.aws-cylondata.com
 # AWS credentials: run 'aws configure' on Rivanna login node once.
 # Stored in ~/.aws/credentials (home dir, NFS-mounted on all compute nodes).
 
-.PHONY: image-pull image-pull-gpu smoke-cpu smoke-gpu cpu gpu q qq cancel clean
+.PHONY: image-pull image-pull-gpu smoke-cpu smoke-gpu cpu cpu-all gpu gpu-all q qq cancel clean
 
 # ---------------------------------------------------------------------------
 # Apptainer image management
@@ -78,7 +78,12 @@ smoke-gpu:
 
 # ---------------------------------------------------------------------------
 # Full experiment sweeps (generate + submit)
+# Run once per scenario: make cpu SCENARIO=hydrology
+#                        make cpu SCENARIO=epidemiology  etc.
+# Or submit all at once: make cpu-all / make gpu-all
 # ---------------------------------------------------------------------------
+
+SCENARIO ?= hydrology
 
 cpu:
 	mkdir -p logs
@@ -86,10 +91,25 @@ cpu:
 		-d $(CPU_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 10 \
-		--tasks 4 8 16 --thresholds 0.8 --dimensions 256 \
-		--backends NUMPY --runs 3 --scenario hydrology \
+		--tasks 8 16 --thresholds 0.70 0.80 0.90 \
+		--dimensions 256 1024 \
+		--backends NUMPY --runs 4 --scenario $(SCENARIO) \
 		-l1 $(CPU_RESULTS) -l2 /output \
-		-p2 standard --dry-run
+		-p2 standard
+
+cpu-all:
+	for scenario in hydrology epidemiology seismology mixed_scientific; do \
+		mkdir -p logs && \
+		$(PYTHON) armada-experiment-setup.py \
+			-d $(CPU_SIF) \
+			-r1 $(REDIS_HOST) \
+			-n 1 -t 1 -c 10 \
+			--tasks 8 16 --thresholds 0.70 0.80 0.90 \
+			--dimensions 256 1024 \
+			--backends NUMPY --runs 4 --scenario $$scenario \
+			-l1 $(CPU_RESULTS) -l2 /output \
+			-p2 standard; \
+	done
 
 gpu:
 	mkdir -p logs
@@ -97,10 +117,25 @@ gpu:
 		-d $(GPU_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 10 \
-		--tasks 4 8 16 --thresholds 0.8 --dimensions 256 \
-		--backends GCYLON --runs 3 --scenario hydrology \
+		--tasks 8 16 --thresholds 0.70 0.80 0.90 \
+		--dimensions 256 1024 \
+		--backends GCYLON --runs 4 --scenario $(SCENARIO) \
 		-l1 $(GPU_RESULTS) -l2 /output \
-		-p2 bii-gpu --dry-run
+		-p2 bii-gpu
+
+gpu-all:
+	for scenario in hydrology epidemiology seismology mixed_scientific; do \
+		mkdir -p logs && \
+		$(PYTHON) armada-experiment-setup.py --gpu \
+			-d $(GPU_SIF) \
+			-r1 $(REDIS_HOST) \
+			-n 1 -t 1 -c 10 \
+			--tasks 8 16 --thresholds 0.70 0.80 0.90 \
+			--dimensions 256 1024 \
+			--backends GCYLON --runs 4 --scenario $$scenario \
+			-l1 $(GPU_RESULTS) -l2 /output \
+			-p2 bii-gpu; \
+	done
 
 # ---------------------------------------------------------------------------
 # SLURM management
