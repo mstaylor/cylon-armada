@@ -68,9 +68,13 @@ def _write_results_to_s3(
     reuse_stats  = aggregate.get("reuse_stats",  {})
     latency      = aggregate.get("latency",       {})
 
-    total_cost   = cost_summary.get("total_cost",   0.0)
-    baseline_cost = cost_summary.get("baseline_cost", 0.0)
-    savings_pct  = cost_summary.get("savings_pct",  0.0)
+    # Compute costs from task results directly — cost_summary.baseline_cost is
+    # always 0 because Step Functions doesn't track avoided costs through the
+    # Map state. task_results carry avoided_cost_usd from router.route().
+    total_cost    = sum(r.get("cost_usd", 0.0) for r in task_results)
+    total_avoided = sum(r.get("avoided_cost_usd", 0.0) for r in task_results)
+    baseline_cost = total_cost + total_avoided
+    savings_pct   = (total_avoided / baseline_cost * 100) if baseline_cost > 0 else 0.0
     reuse_rate   = reuse_stats.get("reuse_rate",    0.0)
     cache_hits   = reuse_stats.get("cache_hits",    0)
     llm_calls    = reuse_stats.get("llm_calls",     len(task_results))
@@ -97,6 +101,7 @@ def _write_results_to_s3(
             "llm_latency_ms":    r.get("llm_latency_ms", 0.0),
             "total_latency_ms":  r.get("total_latency_ms", 0.0),
             "cost_usd":          r.get("cost_usd", 0.0),
+            "avoided_cost_usd":  r.get("avoided_cost_usd", 0.0),
             "similarity":        r.get("similarity", 0.0),
             "backend":           r.get("backend", ""),
         })

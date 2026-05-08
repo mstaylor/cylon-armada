@@ -49,6 +49,7 @@ async function writeResultsToS3(aggregate, taskResults, bucket, resultsS3Dir, ex
         llm_latency_ms:    r.llm_latency_ms    ?? 0,
         total_latency_ms:  r.total_latency_ms  ?? 0,
         cost_usd:          r.cost_usd          ?? 0,
+        avoided_cost_usd:  r.avoided_cost_usd  ?? 0,
         similarity:        r.similarity        ?? 0,
         backend:           r.backend           || '',
     }));
@@ -77,9 +78,15 @@ async function writeResultsToS3(aggregate, taskResults, bucket, resultsS3Dir, ex
         cache_hits:       reuse.cache_hits  ?? aggregate.cache_hits  ?? 0,
         llm_calls:        reuse.llm_calls   ?? aggregate.llm_calls   ?? 0,
         reuse_rate:       reuse.reuse_rate  ?? aggregate.reuse_rate  ?? 0,
-        total_cost:       costSummary.total_cost    ?? 0,
-        baseline_cost:    costSummary.baseline_cost ?? 0,
-        savings_pct:      costSummary.savings_pct   ?? 0,
+        // Compute from task results — costSummary.baseline_cost is always 0
+        // because Step Functions doesn't propagate avoided costs through Map state
+        total_cost:       taskResults.reduce((s, r) => s + (r.cost_usd ?? 0), 0),
+        baseline_cost:    taskResults.reduce((s, r) => s + (r.cost_usd ?? 0) + (r.avoided_cost_usd ?? 0), 0),
+        savings_pct:      (() => {
+            const base = taskResults.reduce((s, r) => s + (r.cost_usd ?? 0) + (r.avoided_cost_usd ?? 0), 0);
+            const avoided = taskResults.reduce((s, r) => s + (r.avoided_cost_usd ?? 0), 0);
+            return base > 0 ? (avoided / base * 100) : 0;
+        })(),
         total_ms:         latency.total_ms  ?? 0,
         avg_latency_ms:   latency.avg_ms    ?? 0,
         p50_latency_ms:   latency.p50_ms    ?? 0,

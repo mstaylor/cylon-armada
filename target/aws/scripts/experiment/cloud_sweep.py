@@ -65,9 +65,9 @@ SCENARIOS_DIR = Path(__file__).parent.parent.parent.parent / "shared" / "scripts
 # Input builders — each architecture has a slightly different SFN schema
 # ---------------------------------------------------------------------------
 
-def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir):
+def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir, workflow_id=None):
     return {
-        "workflow_id":      f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
+        "workflow_id":      workflow_id or f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
         "tasks":            tasks,
         "scaling":          "weak",
         "world_size":       world_size,
@@ -76,9 +76,9 @@ def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3
     }
 
 
-def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir):
+def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id=None):
     return {
-        "workflow_id":      f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
+        "workflow_id":      workflow_id or f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
         "tasks":            tasks,
         "scaling":          "weak",
         "world_size":       world_size,
@@ -89,14 +89,18 @@ def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir):
     }
 
 
-def build_sfn_input(arch, scenario, tasks, world_size, experiment_name):
-    """Build the Step Functions input payload for the given architecture."""
+def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None):
+    """Build the Step Functions input payload for the given architecture.
+
+    workflow_id is shared across runs of the same (arch, scenario) so that
+    run 2-4 can reuse contexts stored by run 1.
+    """
     if arch in ("lambda-python", "lambda-nodejs"):
         results_dir = f"results/{arch}/{scenario}/weak/"
-        return _build_lambda_input(scenario, tasks, world_size, experiment_name, results_dir)
+        return _build_lambda_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id)
     else:
         results_dir = f"results/{arch}/{scenario}/weak/"
-        return _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir)
+        return _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id)
 
 
 # ---------------------------------------------------------------------------
@@ -226,11 +230,17 @@ def run_sweep(args, sweep_tag=""):
                 continue
             for world_size in args.world_sizes:
                 tasks = sample_tasks(scenario_file, args.task_count, seed=42)
+                # Stable workflow_id shared across all runs of this (arch, scenario)
+                # so run 2-4 can reuse contexts stored by run 1
+                shared_workflow_id = f"{arch.replace('-','_')}_{scenario}_ws{world_size}"
                 for run in range(1, args.runs + 1):
                     exp_name = (
                         f"{arch.replace('-','_')}_{scenario}_ws{world_size}_run{run}{tag}"
                     )[:80]
-                    sfn_input = build_sfn_input(arch, scenario, tasks, world_size, exp_name)
+                    sfn_input = build_sfn_input(
+                        arch, scenario, tasks, world_size, exp_name,
+                        workflow_id=shared_workflow_id,
+                    )
                     all_configs.append((exp_name, sfn_input))
 
         logger.info("Firing %d executions for %s", len(all_configs), arch)

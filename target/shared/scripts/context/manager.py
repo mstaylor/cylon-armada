@@ -404,6 +404,12 @@ class ContextManager:
 
     def _get_embeddings_cylon(self, workflow_id):
         batch = self._cylon["table"].to_arrow()
+        # In-memory table is empty on every new invocation (Lambda/ECS cold start).
+        # Attempt to restore from the Redis Arrow IPC snapshot so cross-invocation
+        # context reuse works without requiring a stateful process.
+        if (batch is None or batch.num_rows == 0) and workflow_id:
+            self.load_from_redis(workflow_id)
+            batch = self._cylon["table"].to_arrow()
         if batch is None or batch.num_rows == 0:
             return []
         results = []
