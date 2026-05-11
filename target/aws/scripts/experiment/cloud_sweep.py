@@ -253,9 +253,11 @@ def run_sweep(args, sweep_tag=""):
                     else:
                         n_tasks = args.task_count
                     tasks = sample_tasks(scenario_file, n_tasks, seed=42)
-                    # Stable workflow_id shared across runs so run 2-4 reuse run 1's contexts
+                    # Stable workflow_id shared across runs so run 2-4 reuse run 1's contexts.
+                    # Include sweep_tag so each new sweep starts with a cold context store
+                    # rather than inheriting cached contexts from a previous sweep.
                     shared_workflow_id = (
-                        f"{arch.replace('-','_')}_{scenario}_{scaling}_ws{world_size}"
+                        f"{arch.replace('-','_')}_{scenario}_{scaling}_ws{world_size}_{sweep_tag}"
                     )
                     for run in range(1, args.runs + 1):
                         exp_name = (
