@@ -75,14 +75,22 @@ def _write_results_to_s3(
     total_avoided = sum(r.get("avoided_cost_usd", 0.0) for r in task_results)
     baseline_cost = total_cost + total_avoided
     savings_pct   = (total_avoided / baseline_cost * 100) if baseline_cost > 0 else 0.0
-    reuse_rate   = reuse_stats.get("reuse_rate",    0.0)
     cache_hits   = reuse_stats.get("cache_hits",    0)
     llm_calls    = reuse_stats.get("llm_calls",     len(task_results))
+    # Compute reuse_rate as fraction (0–1) from task results directly.
+    # AgentCoordinator returns reuse_rate as a percentage (×100), so we
+    # avoid reading it from reuse_stats to prevent a 100× inflation bug.
+    reuse_rate   = cache_hits / len(task_results) if task_results else 0.0
 
-    avg_latency_ms = latency.get("avg_ms", 0.0)
-    p50            = latency.get("p50_ms", 0.0)
-    p95            = latency.get("p95_ms", 0.0)
-    p99            = latency.get("p99_ms", 0.0)
+    # Compute latency percentiles from per-task total_latency_ms.
+    # AgentCoordinator.aggregate_results() only returns total_ms and
+    # avg_per_task_ms (mismatched key), so we derive all stats here.
+    _task_lats = sorted(r.get("total_latency_ms", 0.0) for r in task_results)
+    n = len(_task_lats)
+    avg_latency_ms = sum(_task_lats) / n if n else 0.0
+    p50            = _task_lats[int(n * 0.50)]      if n else 0.0
+    p95            = _task_lats[min(int(n * 0.95), n - 1)] if n else 0.0
+    p99            = _task_lats[min(int(n * 0.99), n - 1)] if n else 0.0
     total_ms       = latency.get("total_ms", 0.0)
 
     # --- stopwatch.csv --------------------------------------------------

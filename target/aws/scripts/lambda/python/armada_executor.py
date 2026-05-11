@@ -189,10 +189,30 @@ def handler(event, context):
         rank, world_size, workflow_id,
     )
 
-    # Decode embedding from base64 (encoded by armada_init)
-    embedding = np.frombuffer(
-        base64.b64decode(event["embedding_b64"]), dtype=np.float32
-    )
+    # Decode embedding — either inline (small payloads) or from Redis (offloaded).
+    # armada_init offloads embedding_b64 to Redis when Redis is available,
+    # replacing it with embedding_key to keep the SFN payload under 6MB.
+    # FMI path (Phase 2) will broadcast embeddings peer-to-peer instead.
+    embedding_key = event.get("embedding_key")
+    if embedding_key:
+        redis_host = os.environ.get("REDIS_HOST", "localhost")
+        redis_port = int(os.environ.get("REDIS_PORT", 6379))
+        try:
+            import redis as _redis
+            _rc = _redis.Redis(host=redis_host, port=redis_port, decode_responses=False)
+            raw = _rc.get(embedding_key)
+            if raw is None:
+                raise ValueError(f"Embedding key {embedding_key} not found in Redis")
+            embedding = np.frombuffer(base64.b64decode(raw), dtype=np.float32)
+            logger.debug("Retrieved embedding from Redis key %s", embedding_key)
+        except Exception as e:
+            logger.error("Failed to retrieve embedding from Redis: %s", e)
+            raise
+    else:
+        # Inline fallback (small payloads / backward compatibility)
+        embedding = np.frombuffer(
+            base64.b64decode(event["embedding_b64"]), dtype=np.float32
+        )
     embedding_metadata = event["embedding_metadata"]
 
     # Resolve config — task payload carries model/threshold; infra from env

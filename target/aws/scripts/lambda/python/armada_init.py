@@ -111,7 +111,46 @@ def handler(event, context):
     # so armada_executor and armada_aggregate receive them via the Map state.
     # S3 script coordinates are handled by lambda_entry.py via env vars
     # (or event payload override) — no need to propagate per-task.
+    # --- Embedding offload to Redis -----------------------------------------
+    # Lambda Step Functions payloads are capped at 256KB (input) / 6MB (output).
+    # Passing embedding_b64 inline for large task counts (64+ tasks × 1024 dims)
+    # can exceed this limit and cause HTTP 413 errors.
+    #
+    # Non-FMI path: store each embedding in Redis keyed by
+    #   embedding:{workflow_id}:{rank}
+    # and replace embedding_b64 in the payload with embedding_key.
+    # The executor retrieves the embedding from Redis before routing.
+    #
+    # FMI path (Phase 2): embeddings are broadcast peer-to-peer via TCPunch,
+    # eliminating the Redis round-trip entirely. The FMI path is the key
+    # research contribution — Redis offload is the non-FMI baseline.
+    #
+    # This architectural split is documented in docs/ARCHITECTURE_DECISIONS.md.
+    redis_host = os.environ.get("REDIS_HOST", "")
+    redis_port = int(os.environ.get("REDIS_PORT", 6379))
+    workflow_id = result["workflow_id"]
+    offload_to_redis = bool(redis_host)
+
+    if offload_to_redis:
+        try:
+            import redis as _redis
+            _rc = _redis.Redis(host=redis_host, port=redis_port, decode_responses=False)
+            _ttl = 3600  # 1 hour — embeddings only needed for one experiment run
+        except Exception as e:
+            logger.warning("Redis unavailable for embedding offload, keeping inline: %s", e)
+            offload_to_redis = False
+
     for i, payload in enumerate(result["task_payloads"]):
+        if offload_to_redis and "embedding_b64" in payload:
+            emb_key = f"embedding:{workflow_id}:{i}"
+            try:
+                _rc.setex(emb_key, _ttl, payload["embedding_b64"].encode())
+                payload["embedding_key"] = emb_key
+                del payload["embedding_b64"]  # remove from SFN payload
+            except Exception as e:
+                logger.warning("Failed to offload embedding %d to Redis: %s", i, e)
+                payload["embedding_key"] = None  # executor will use inline fallback
+
         payload["scaling"]          = scaling
         payload["world_size"]       = world_size
         payload["rank"]             = i
