@@ -179,10 +179,28 @@ def handler(event, context):
     from communicator.fmi_bridge import FMIBridge  # noqa: E402
 
     # --- Main logic -----------------------------------------------------
-    task_description = event["task_description"]
     workflow_id = event["workflow_id"]
-    rank = event.get("rank", 0)
-    world_size = event.get("world_size", 1)
+    rank        = event.get("rank", 0)
+    world_size  = event.get("world_size", 1)
+
+    # Task description is stored in Redis by armada_init (task:{wf}:{rank})
+    # to keep SFN state small at large world sizes. Fall back to inline value
+    # for direct invocations (local dev, smoke tests).
+    task_description = event.get("task_description", "")
+    if not task_description:
+        _td_host = os.environ.get("REDIS_HOST", "")
+        if _td_host:
+            try:
+                import redis as _redis_td
+                _rc_td = _redis_td.Redis(
+                    host=_td_host,
+                    port=int(os.environ.get("REDIS_PORT", 6379)),
+                    decode_responses=True,
+                    socket_connect_timeout=2,
+                )
+                task_description = _rc_td.get(f"task:{workflow_id}:{rank}") or ""
+            except Exception as _e:
+                logger.warning("Failed to fetch task description from Redis: %s", _e)
 
     logger.info(
         "armada_executor rank=%d/%d workflow=%s",
@@ -279,8 +297,15 @@ def handler(event, context):
     if fmi.available and world_size > 1:
         fmi.finalize()
 
-    result["task_description"] = task_description
     result["rank"] = rank
-    result["workflow_id"] = workflow_id
+
+    # Strip fields that would push $.task_results over the 256 KB SFN limit:
+    #   response        — 2-5 KB each × 1024 tasks = way over limit
+    #   task_description — 300 chars × 1024 = 307 KB alone; stored in Redis
+    #   workflow_id     — redundant; top-level state carries it
+    #   context_id      — 36-char UUID not needed by armada_aggregate
+    # armada_aggregate fetches task_description from Redis using rank.
+    for _field in ("response", "task_description", "workflow_id", "context_id"):
+        result.pop(_field, None)
 
     return result

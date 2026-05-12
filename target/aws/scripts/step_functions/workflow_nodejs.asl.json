@@ -5,7 +5,7 @@
     "ArmadaInit": {
       "Type": "Task",
       "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-init-node",
-      "ResultPath": "$.init_output",
+      "ResultPath": "$",
       "Retry": [
         {
           "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
@@ -18,7 +18,18 @@
     },
     "ProcessTasks": {
       "Type": "Map",
-      "ItemsPath": "$.init_output.body",
+      "ItemsPath": "$.body",
+      "Parameters": {
+        "rank.$":             "$$.Map.Item.Value.rank",
+        "embedding_key.$":    "$$.Map.Item.Value.embedding_key",
+        "embedding_metadata.$": "$$.Map.Item.Value.embedding_metadata",
+        "workflow_id.$":      "$.workflow_id",
+        "world_size.$":       "$.world_size",
+        "scaling.$":          "$.scaling",
+        "config.$":           "$.config",
+        "fmi_channel_type.$": "$.fmi_channel_type",
+        "fmi_hint.$":         "$.fmi_hint"
+      },
       "MaxConcurrency": 1000,
       "Iterator": {
         "StartAt": "RouteTask",
@@ -39,19 +50,33 @@
         }
       },
       "ResultPath": "$.task_results",
+      "Next": "CleanState"
+    },
+    "CleanState": {
+      "Type": "Pass",
+      "Parameters": {
+        "workflow_id.$":      "$.workflow_id",
+        "task_results.$":     "$.task_results",
+        "scaling.$":          "$.scaling",
+        "world_size.$":       "$.world_size",
+        "results_s3_dir.$":   "$.results_s3_dir",
+        "experiment_name.$":  "$.experiment_name",
+        "prepare_cost.$":     "$.prepare_cost"
+      },
+      "ResultPath": "$",
       "Next": "AggregateResults"
     },
     "AggregateResults": {
       "Type": "Task",
       "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-aggregate-node",
       "Parameters": {
-        "workflow_id.$":      "$.init_output.workflow_id",
+        "workflow_id.$":      "$.workflow_id",
         "task_results.$":     "$.task_results",
-        "scaling.$":          "$.init_output.scaling",
-        "world_size.$":       "$.init_output.world_size",
-        "results_s3_dir.$":   "$.init_output.results_s3_dir",
-        "experiment_name.$":  "$.init_output.experiment_name",
-        "prepare_cost.$":     "$.init_output.prepare_cost"
+        "scaling.$":          "$.scaling",
+        "world_size.$":       "$.world_size",
+        "results_s3_dir.$":   "$.results_s3_dir",
+        "experiment_name.$":  "$.experiment_name",
+        "prepare_cost.$":     "$.prepare_cost"
       },
       "Retry": [
         {

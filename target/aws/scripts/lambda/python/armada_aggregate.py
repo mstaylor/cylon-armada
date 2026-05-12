@@ -198,6 +198,32 @@ def handler(event, context):
     experiment_name = event.get("experiment_name", f"lambda_{scaling}_ws{world_size}")
     task_results   = event.get("task_results", [])
 
+    # Fetch task descriptions from Redis. armada_init stores them at
+    # task:{workflow_id}:{rank} to avoid passing them through SFN state.
+    # Fall back to the inline value if Redis is unavailable or key missing.
+    _redis_host = os.environ.get("REDIS_HOST", "")
+    _rc_agg = None
+    if _redis_host:
+        try:
+            import redis as _redis_mod
+            _rc_agg = _redis_mod.Redis(
+                host=_redis_host,
+                port=int(os.environ.get("REDIS_PORT", 6379)),
+                decode_responses=True,
+                socket_connect_timeout=2,
+            )
+        except Exception as _e:
+            logger.warning("armada_aggregate: Redis unavailable: %s", _e)
+
+    for r in task_results:
+        if not r.get("task_description") and _rc_agg is not None:
+            try:
+                r["task_description"] = _rc_agg.get(
+                    f"task:{workflow_id}:{r.get('rank', 0)}"
+                ) or ""
+            except Exception:
+                r["task_description"] = ""
+
     logger.info(
         "armada_aggregate: workflow=%s scaling=%s world_size=%d tasks=%d experiment=%s",
         workflow_id, scaling, world_size, len(task_results), experiment_name,
