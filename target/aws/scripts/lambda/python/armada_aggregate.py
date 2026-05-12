@@ -198,31 +198,40 @@ def handler(event, context):
     experiment_name = event.get("experiment_name", f"lambda_{scaling}_ws{world_size}")
     task_results   = event.get("task_results", [])
 
-    # Fetch task descriptions from Redis. armada_init stores them at
-    # task:{workflow_id}:{rank} to avoid passing them through SFN state.
-    # Fall back to the inline value if Redis is unavailable or key missing.
+    # Fetch full results from Redis. armada_executor stores complete per-task
+    # results at result:{workflow_id}:{rank} and returns only {"rank": r} to
+    # SFN, keeping $.task_results tiny for any world size.
+    # task_results here is a list of {"rank": r} acks from the Map state.
     _redis_host = os.environ.get("REDIS_HOST", "")
     _rc_agg = None
     if _redis_host:
         try:
+            import json as _json_agg
             import redis as _redis_mod
             _rc_agg = _redis_mod.Redis(
                 host=_redis_host,
                 port=int(os.environ.get("REDIS_PORT", 6379)),
-                decode_responses=True,
+                decode_responses=False,
                 socket_connect_timeout=2,
             )
         except Exception as _e:
             logger.warning("armada_aggregate: Redis unavailable: %s", _e)
 
-    for r in task_results:
-        if not r.get("task_description") and _rc_agg is not None:
+    if _rc_agg is not None:
+        full_results = []
+        for ack in task_results:
+            rank = ack.get("rank", 0)
             try:
-                r["task_description"] = _rc_agg.get(
-                    f"task:{workflow_id}:{r.get('rank', 0)}"
-                ) or ""
-            except Exception:
-                r["task_description"] = ""
+                raw = _rc_agg.get(f"result:{workflow_id}:{rank}")
+                if raw:
+                    full_results.append(_json_agg.loads(raw))
+                else:
+                    logger.warning("No Redis result for rank %d", rank)
+                    full_results.append(ack)
+            except Exception as _e:
+                logger.warning("Failed to fetch result %d from Redis: %s", rank, _e)
+                full_results.append(ack)
+        task_results = full_results
 
     logger.info(
         "armada_aggregate: workflow=%s scaling=%s world_size=%d tasks=%d experiment=%s",

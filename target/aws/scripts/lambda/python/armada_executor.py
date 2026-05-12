@@ -297,15 +297,33 @@ def handler(event, context):
     if fmi.available and world_size > 1:
         fmi.finalize()
 
-    result["rank"] = rank
+    result["rank"]        = rank
+    result["workflow_id"] = workflow_id
+    result["task_description"] = task_description
 
-    # Strip fields that would push $.task_results over the 256 KB SFN limit:
-    #   response        — 2-5 KB each × 1024 tasks = way over limit
-    #   task_description — 300 chars × 1024 = 307 KB alone; stored in Redis
-    #   workflow_id     — redundant; top-level state carries it
-    #   context_id      — 36-char UUID not needed by armada_aggregate
-    # armada_aggregate fetches task_description from Redis using rank.
-    for _field in ("response", "task_description", "workflow_id", "context_id"):
-        result.pop(_field, None)
+    # Store full result in Redis so armada_aggregate can retrieve it.
+    # The executor returns only {"rank": r} to the SFN Map state, keeping
+    # $.task_results tiny (~15 chars × N tasks) for any world size.
+    # Without this, body (112 KB) + task_results (205 KB for ws64) exceeds
+    # the 256 KB SFN state limit even after stripping response/context_id.
+    _res_host = os.environ.get("REDIS_HOST", "")
+    if _res_host:
+        try:
+            import json as _json
+            import redis as _redis_res
+            _rc_res = _redis_res.Redis(
+                host=_res_host,
+                port=int(os.environ.get("REDIS_PORT", 6379)),
+                decode_responses=False,
+                socket_connect_timeout=2,
+            )
+            _rc_res.setex(
+                f"result:{workflow_id}:{rank}",
+                3600,
+                _json.dumps(result).encode(),
+            )
+        except Exception as _e:
+            logger.warning("Failed to store result in Redis: %s", _e)
 
-    return result
+    # Return only rank to SFN — aggregate reads full results from Redis.
+    return {"rank": rank}

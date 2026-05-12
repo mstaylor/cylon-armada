@@ -702,12 +702,24 @@ resource "aws_iam_role_policy" "step_functions_policy" {
 # Step Functions State Machines — Lambda workflows
 # ---------------------------------------------------------------------------
 
+resource "aws_cloudwatch_log_group" "sfn_lambda_workflows" {
+  name              = "/aws/vendedlogs/states/${var.project_name}-lambda-workflows"
+  retention_in_days = 14
+  tags              = local.common_tags
+}
+
 resource "aws_sfn_state_machine" "python_workflow" {
   name     = "${var.project_name}-python-workflow"
   role_arn = aws_iam_role.step_functions_execution.arn
   type     = "EXPRESS"
 
   definition = templatefile("${path.module}/../step_functions/workflow.asl.json", local.asl_vars)
+
+  logging_configuration {
+    log_destination        = "${aws_cloudwatch_log_group.sfn_lambda_workflows.arn}:*"
+    include_execution_data = true
+    level                  = "ALL"
+  }
 
   tags = local.common_tags
 }
@@ -718,6 +730,12 @@ resource "aws_sfn_state_machine" "nodejs_workflow" {
   type     = "EXPRESS"
 
   definition = templatefile("${path.module}/../step_functions/workflow_nodejs.asl.json", local.asl_vars)
+
+  logging_configuration {
+    log_destination        = "${aws_cloudwatch_log_group.sfn_lambda_workflows.arn}:*"
+    include_execution_data = true
+    level                  = "ALL"
+  }
 
   tags = local.common_tags
 }
