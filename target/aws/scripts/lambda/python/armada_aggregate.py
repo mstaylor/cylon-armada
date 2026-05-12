@@ -75,23 +75,22 @@ def _write_results_to_s3(
     total_avoided = sum(r.get("avoided_cost_usd", 0.0) for r in task_results)
     baseline_cost = total_cost + total_avoided
     savings_pct   = (total_avoided / baseline_cost * 100) if baseline_cost > 0 else 0.0
-    cache_hits   = reuse_stats.get("cache_hits",    0)
-    llm_calls    = reuse_stats.get("llm_calls",     len(task_results))
-    # Compute reuse_rate as fraction (0–1) from task results directly.
-    # AgentCoordinator returns reuse_rate as a percentage (×100), so we
-    # avoid reading it from reuse_stats to prevent a 100× inflation bug.
-    reuse_rate   = cache_hits / len(task_results) if task_results else 0.0
+    # Compute all stats directly from task_results.
+    # The coordinator is called with acks ({rank: r}) not full results,
+    # so reuse_stats/latency from it are always 0 — don't trust them.
+    cache_hits = sum(1 for r in task_results if r.get("source") == "cache")
+    llm_calls  = len(task_results) - cache_hits
+    reuse_rate = cache_hits / len(task_results) if task_results else 0.0
 
-    # Compute latency percentiles from per-task total_latency_ms.
-    # AgentCoordinator.aggregate_results() only returns total_ms and
-    # avg_per_task_ms (mismatched key), so we derive all stats here.
     _task_lats = sorted(r.get("total_latency_ms", 0.0) for r in task_results)
     n = len(_task_lats)
     avg_latency_ms = sum(_task_lats) / n if n else 0.0
-    p50            = _task_lats[int(n * 0.50)]      if n else 0.0
+    p50            = _task_lats[int(n * 0.50)]              if n else 0.0
     p95            = _task_lats[min(int(n * 0.95), n - 1)] if n else 0.0
     p99            = _task_lats[min(int(n * 0.99), n - 1)] if n else 0.0
-    total_ms       = latency.get("total_ms", 0.0)
+    # total_ms: sum of per-task latencies (wall-clock ≈ max since tasks are parallel,
+    # but sum is consistent with prior methodology and kept for backward compat)
+    total_ms = sum(_task_lats)
 
     # --- stopwatch.csv --------------------------------------------------
     stopwatch_rows = []
@@ -222,11 +221,13 @@ def handler(event, context):
         for ack in task_results:
             rank = ack.get("rank", 0)
             try:
-                raw = _rc_agg.get(f"result:{workflow_id}:{rank}")
+                # Key matches executor: experiment_name (unique per run) avoids
+                # race conditions when concurrent runs share the same workflow_id.
+                raw = _rc_agg.get(f"result:{experiment_name}:{rank}")
                 if raw:
                     full_results.append(_json_agg.loads(raw))
                 else:
-                    logger.warning("No Redis result for rank %d", rank)
+                    logger.warning("No Redis result for %s rank %d", experiment_name, rank)
                     full_results.append(ack)
             except Exception as _e:
                 logger.warning("Failed to fetch result %d from Redis: %s", rank, _e)

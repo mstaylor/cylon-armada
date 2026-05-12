@@ -302,10 +302,8 @@ def handler(event, context):
     result["task_description"] = task_description
 
     # Store full result in Redis so armada_aggregate can retrieve it.
-    # The executor returns only {"rank": r} to the SFN Map state, keeping
-    # $.task_results tiny (~15 chars × N tasks) for any world size.
-    # Without this, body (112 KB) + task_results (205 KB for ws64) exceeds
-    # the 256 KB SFN state limit even after stripping response/context_id.
+    # Key uses experiment_name (unique per run) not workflow_id to avoid
+    # race conditions when concurrent runs share the same workflow_id.
     _res_host = os.environ.get("REDIS_HOST", "")
     if _res_host:
         try:
@@ -317,8 +315,9 @@ def handler(event, context):
                 decode_responses=False,
                 socket_connect_timeout=2,
             )
+            _experiment_name = event.get("experiment_name", workflow_id)
             _rc_res.setex(
-                f"result:{workflow_id}:{rank}",
+                f"result:{_experiment_name}:{rank}",
                 3600,
                 _json.dumps(result).encode(),
             )
