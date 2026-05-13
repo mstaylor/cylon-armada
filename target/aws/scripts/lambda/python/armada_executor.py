@@ -242,7 +242,11 @@ def handler(event, context):
     redis_port = int(os.environ.get("REDIS_PORT", 6379))
     dynamo_table = os.environ.get("DYNAMO_TABLE_NAME")  # None → DynamoDB disabled
     dynamo_endpoint_url = os.environ.get("DYNAMO_ENDPOINT_URL")
-    context_backend = os.environ.get("CONTEXT_BACKEND", "redis")
+    # context_backend is per-execution: passed via Map Parameters from armada_init.
+    # Env var is the fallback for direct invocations (local dev, smoke tests).
+    # "redis" = numpy similarity, concurrent-safe for parallel Lambda.
+    # "cylon" = Arrow SIMD, used with FMI broadcast in Phase 2.
+    context_backend = event.get("context_backend") or os.environ.get("CONTEXT_BACKEND", "redis")
 
     context_manager = ContextManager(
         dynamo_table=dynamo_table,

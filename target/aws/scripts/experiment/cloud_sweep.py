@@ -65,7 +65,7 @@ SCENARIOS_DIR = Path(__file__).parent.parent.parent.parent / "shared" / "scripts
 # Input builders — each architecture has a slightly different SFN schema
 # ---------------------------------------------------------------------------
 
-def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir, workflow_id=None, scaling="weak"):
+def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir, workflow_id=None, scaling="weak", context_backend="redis"):
     return {
         "workflow_id":      workflow_id or f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
         "tasks":            tasks,
@@ -73,6 +73,7 @@ def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3
         "world_size":       world_size,
         "results_s3_dir":   results_s3_dir,
         "experiment_name":  experiment_name,
+        "context_backend":  context_backend,
     }
 
 
@@ -89,16 +90,18 @@ def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, 
     }
 
 
-def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None, scaling="weak"):
+def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None, scaling="weak", context_backend="redis"):
     """Build the Step Functions input payload for the given architecture.
 
     workflow_id is shared across runs of the same (arch, scenario, scaling, world_size)
     so that run 2-4 can reuse contexts stored by run 1.
+    context_backend controls similarity search: "redis" (numpy, concurrent-safe) or
+    "cylon" (Arrow SIMD, for FMI broadcast path in Phase 2).
     """
     results_dir = f"results/{arch}/{scenario}/{scaling}/"
     if arch in ("lambda-python", "lambda-nodejs"):
         return _build_lambda_input(scenario, tasks, world_size, experiment_name,
-                                   results_dir, workflow_id, scaling)
+                                   results_dir, workflow_id, scaling, context_backend)
     else:
         return _build_ecs_input(scenario, tasks, world_size, experiment_name,
                                 results_dir, workflow_id, scaling)
@@ -267,6 +270,7 @@ def run_sweep(args, sweep_tag=""):
                             arch, scenario, tasks, world_size, exp_name,
                             workflow_id=shared_workflow_id,
                             scaling="weak",   # always chunk() — scaling mode encoded in task count
+                            context_backend=getattr(args, "context_backend", "redis"),
                         )
                         all_configs.append((exp_name, sfn_input))
 
@@ -329,6 +333,10 @@ def main():
                         help="Number of runs per config (for error bars)")
     parser.add_argument("--max-parallel", type=int, default=10,
                         help="Max concurrent Step Functions executions before waiting")
+    parser.add_argument("--context-backend", default="redis",
+                        choices=["redis", "cylon"],
+                        help="Context similarity backend: redis (numpy, concurrent-safe) "
+                             "or cylon (Arrow SIMD, for FMI Phase 2)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print configs without firing executions")
 

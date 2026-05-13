@@ -61,6 +61,7 @@ def handler(event, context):
 
     fmi_channel_type = event.get("fmi_channel_type", "redis")
     fmi_hint         = event.get("fmi_hint", "fast")
+    context_backend  = event.get("context_backend", "redis")
     workflow_id      = result["workflow_id"]
 
     # --- Redis client -------------------------------------------------------
@@ -137,6 +138,7 @@ def handler(event, context):
         "experiment_name":    experiment_name,
         "fmi_channel_type":   fmi_channel_type,
         "fmi_hint":           fmi_hint,
+        "context_backend":    context_backend,
         "prepare_cost":       result["prepare_cost"],
         "prepare_latency_ms": result["prepare_latency_ms"],
     }
