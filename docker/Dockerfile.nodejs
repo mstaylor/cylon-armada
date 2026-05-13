@@ -12,10 +12,9 @@ RUN apt-get update -y && \
 # zstd-sys cross-compiles C for wasm32 using clang — must be explicit
 ENV CC_wasm32_unknown_unknown=clang
 
-# Install wasm-pack (for WASM builds) and napi-rs CLI (for native addon build)
+# Install wasm-pack for WASM builds
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN rustup target add wasm32-unknown-unknown
-RUN npm install -g @napi-rs/cli
 
 ADD https://google.com cache_bust
 
@@ -41,11 +40,12 @@ RUN cd /cylon-armada-wasm && \
 # ---------------------------------------------------------------------------
 # Build cylon-node native FMI addon (napi-rs, x86_64 Linux glibc)
 # Default features: fmi + redis + s3 — all pure Rust, no external C libs.
-# Produces: cylon-node.linux-x64-gnu.node (loaded by index.js at runtime)
+# Use cargo directly to avoid @napi-rs/cli Node.js version requirements.
+# Produces: libcylon_node.so → renamed to cylon-node.linux-x64-gnu.node
 # ---------------------------------------------------------------------------
 RUN cd /cylon/rust/cylon-node && \
-    npm install && \
-    napi build --platform --release
+    cargo build --release && \
+    cp target/release/libcylon_node.so cylon-node.linux-x64-gnu.node
 
 # =============================================================================
 # Stage 2: Runtime image
