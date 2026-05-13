@@ -708,6 +708,28 @@ resource "aws_cloudwatch_log_group" "sfn_lambda_workflows" {
   tags              = local.common_tags
 }
 
+resource "aws_cloudwatch_log_resource_policy" "sfn_lambda_workflows" {
+  policy_name = "${var.project_name}-sfn-log-policy"
+  policy_document = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "delivery.logs.amazonaws.com" }
+      Action    = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource  = "${aws_cloudwatch_log_group.sfn_lambda_workflows.arn}:*"
+    },
+    {
+      Effect    = "Allow"
+      Principal = { Service = "states.amazonaws.com" }
+      Action    = ["logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
+                   "logs:DeleteLogDelivery", "logs:ListLogDeliveries",
+                   "logs:PutResourcePolicy", "logs:DescribeResourcePolicies",
+                   "logs:DescribeLogGroups"]
+      Resource  = "*"
+    }]
+  })
+}
+
 resource "aws_sfn_state_machine" "python_workflow" {
   name     = "${var.project_name}-python-workflow"
   role_arn = aws_iam_role.step_functions_execution.arn
