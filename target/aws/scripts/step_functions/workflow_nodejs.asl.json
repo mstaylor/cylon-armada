@@ -57,13 +57,14 @@
     "CleanState": {
       "Type": "Pass",
       "Parameters": {
-        "workflow_id.$":      "$.workflow_id",
-        "task_results.$":     "$.task_results",
-        "scaling.$":          "$.scaling",
-        "world_size.$":       "$.world_size",
-        "results_s3_dir.$":   "$.results_s3_dir",
-        "experiment_name.$":  "$.experiment_name",
-        "prepare_cost.$":     "$.prepare_cost"
+        "workflow_id.$":          "$.workflow_id",
+        "task_results.$":         "$.task_results",
+        "scaling.$":              "$.scaling",
+        "world_size.$":           "$.world_size",
+        "results_s3_dir.$":       "$.results_s3_dir",
+        "experiment_name.$":      "$.experiment_name",
+        "prepare_cost.$":         "$.prepare_cost",
+        "prepare_latency_ms.$":   "$.prepare_latency_ms"
       },
       "ResultPath": "$",
       "Next": "AggregateResults"
@@ -72,13 +73,14 @@
       "Type": "Task",
       "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-aggregate-node",
       "Parameters": {
-        "workflow_id.$":      "$.workflow_id",
-        "task_results.$":     "$.task_results",
-        "scaling.$":          "$.scaling",
-        "world_size.$":       "$.world_size",
-        "results_s3_dir.$":   "$.results_s3_dir",
-        "experiment_name.$":  "$.experiment_name",
-        "prepare_cost.$":     "$.prepare_cost"
+        "workflow_id.$":          "$.workflow_id",
+        "task_results.$":         "$.task_results",
+        "scaling.$":              "$.scaling",
+        "world_size.$":           "$.world_size",
+        "results_s3_dir.$":       "$.results_s3_dir",
+        "experiment_name.$":      "$.experiment_name",
+        "prepare_cost.$":         "$.prepare_cost",
+        "prepare_latency_ms.$":   "$.prepare_latency_ms"
       },
       "Retry": [
         {

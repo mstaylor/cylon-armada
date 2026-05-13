@@ -88,8 +88,11 @@ def _write_results_to_s3(
     p50            = _task_lats[int(n * 0.50)]              if n else 0.0
     p95            = _task_lats[min(int(n * 0.95), n - 1)] if n else 0.0
     p99            = _task_lats[min(int(n * 0.99), n - 1)] if n else 0.0
-    # total_ms: sum of per-task latencies (wall-clock ≈ max since tasks are parallel,
-    # but sum is consistent with prior methodology and kept for backward compat)
+    # wall_clock_ms: true end-to-end execution time.
+    # prepare_latency_ms (armada_init) + max(task latency) since Map runs tasks
+    # in parallel — the slowest task determines the Map completion time.
+    wall_clock_ms = round(prepare_latency_ms + (max(_task_lats) if _task_lats else 0.0), 2)
+    # total_ms kept for backward compatibility with pipeline (sum of per-task latencies)
     total_ms = sum(_task_lats)
 
     # --- stopwatch.csv --------------------------------------------------
@@ -139,6 +142,7 @@ def _write_results_to_s3(
         "total_cost":               total_cost,
         "baseline_cost":            baseline_cost,
         "savings_pct":              savings_pct,
+        "wall_clock_ms":            wall_clock_ms,
         "total_ms":                 total_ms,
         "avg_latency_ms":           avg_latency_ms,
         "p50_latency_ms":           p50,
@@ -190,12 +194,13 @@ def handler(event, context):
     from cost.bedrock_pricing import BedrockConfig  # noqa: E402
 
     # --- Main logic -----------------------------------------------------
-    workflow_id    = event.get("workflow_id", "")
-    scaling        = event.get("scaling", "weak")
-    world_size     = int(event.get("world_size", 1))
-    results_s3_dir = event.get("results_s3_dir", "")
-    experiment_name = event.get("experiment_name", f"lambda_{scaling}_ws{world_size}")
-    task_results   = event.get("task_results", [])
+    workflow_id       = event.get("workflow_id", "")
+    scaling           = event.get("scaling", "weak")
+    world_size        = int(event.get("world_size", 1))
+    results_s3_dir    = event.get("results_s3_dir", "")
+    experiment_name   = event.get("experiment_name", f"lambda_{scaling}_ws{world_size}")
+    task_results      = event.get("task_results", [])
+    prepare_latency_ms = float(event.get("prepare_latency_ms", 0.0))
 
     # Fetch full results from Redis. armada_executor stores complete per-task
     # results at result:{workflow_id}:{rank} and returns only {"rank": r} to

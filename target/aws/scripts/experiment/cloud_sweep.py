@@ -23,10 +23,8 @@ Usage:
 import argparse
 import json
 import logging
-import os
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -90,15 +88,20 @@ def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, 
     }
 
 
-def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None, scaling="weak", context_backend="redis"):
+def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None,
+                    scaling="weak", context_backend="redis", results_scaling=None):
     """Build the Step Functions input payload for the given architecture.
 
     workflow_id is shared across runs of the same (arch, scenario, scaling, world_size)
     so that run 2-4 can reuse contexts stored by run 1.
     context_backend controls similarity search: "redis" (numpy, concurrent-safe) or
     "cylon" (Arrow SIMD, for FMI broadcast path in Phase 2).
+    results_scaling: scaling label used for the S3 results path (defaults to scaling).
+                     Needed because SFN always uses scaling="weak" for chunk() behavior,
+                     but the results path should reflect the actual experiment type.
     """
-    results_dir = f"results/{arch}/{scenario}/{scaling}/"
+    rs = results_scaling or scaling
+    results_dir = f"results/{arch}/{scenario}/{rs}/"
     if arch in ("lambda-python", "lambda-nodejs"):
         return _build_lambda_input(scenario, tasks, world_size, experiment_name,
                                    results_dir, workflow_id, scaling, context_backend)
@@ -143,75 +146,48 @@ def sample_tasks(scenario_file: Path, n: int, seed: int = 42) -> list:
 # Execution — EXPRESS vs STANDARD handled separately
 # ---------------------------------------------------------------------------
 
-EXPRESS_ARCHS = {"lambda-python", "lambda-nodejs"}
 
-
-def _get_workflow_type(sfn_client, arn):
-    return sfn_client.describe_state_machine(stateMachineArn=arn)["type"]
-
-
-def run_express(sfn_client, arn, execution_name, sfn_input):
-    """Run an EXPRESS state machine synchronously. Returns (name, status)."""
-    try:
-        resp = sfn_client.start_sync_execution(
-            stateMachineArn=arn,
-            name=execution_name,
-            input=json.dumps(sfn_input),
-        )
-        status = resp["status"]
-    except Exception as e:
-        logger.error("EXPRESS execution failed %s: %s", execution_name, e)
-        status = "FAILED"
-    icon = "✓" if status == "SUCCEEDED" else "✗"
-    logger.info("%s %s — %s", icon, execution_name, status)
-    return execution_name, status
-
-
-def run_express_parallel(sfn_client, arn, configs, max_parallel):
-    """Run multiple EXPRESS executions in parallel threads. Returns {name: status}."""
-    results = {}
-    with ThreadPoolExecutor(max_workers=max_parallel) as pool:
-        futures = {
-            pool.submit(run_express, sfn_client, arn, name, inp): name
-            for name, inp in configs
-        }
-        for future in as_completed(futures):
-            name, status = future.result()
-            results[name] = status
-    return results
-
-
-def fire_standard(sfn_client, arn, execution_name, sfn_input):
-    """Start a STANDARD execution. Returns (name, execution_arn)."""
-    resp = sfn_client.start_execution(
+def fire_execution(sfn_client, arn, execution_name, sfn_input):
+    """Fire a state machine execution asynchronously. Returns (name,)."""
+    sfn_client.start_execution(
         stateMachineArn=arn,
         name=execution_name,
         input=json.dumps(sfn_input),
     )
-    logger.info("  → %s", execution_name)
-    return execution_name, resp["executionArn"]
+    logger.info("  → fired %s", execution_name)
 
 
-def poll_standard(sfn_client, execution_arns: dict, poll_interval: int = 30):
-    """Poll STANDARD executions until all complete. Returns {name: status}."""
-    pending = dict(execution_arns)
+def poll_s3_results(pending: dict, poll_interval: int = 20, timeout_seconds: int = 600):
+    """Poll S3 for _metrics.json completion files.
+
+    pending: {execution_name: s3_key}
+    Returns: {execution_name: "SUCCEEDED" | "FAILED"}
+    """
+    s3 = boto3.client("s3", region_name=REGION)
+    remaining = dict(pending)
     results = {}
+    elapsed = 0
 
-    while pending:
+    while remaining and elapsed < timeout_seconds:
+        time.sleep(poll_interval)
+        elapsed += poll_interval
         done = []
-        for name, arn in pending.items():
-            resp = sfn_client.describe_execution(executionArn=arn)
-            status = resp["status"]
-            if status in ("SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"):
-                results[name] = status
+        for name, key in remaining.items():
+            try:
+                s3.head_object(Bucket=RESULTS_BUCKET, Key=key)
+                results[name] = "SUCCEEDED"
                 done.append(name)
-                icon = "✓" if status == "SUCCEEDED" else "✗"
-                logger.info("%s %s — %s", icon, name, status)
+                logger.info("✓ %s — SUCCEEDED", name)
+            except Exception:
+                pass
         for name in done:
-            del pending[name]
-        if pending:
-            logger.info("%d executions still running...", len(pending))
-            time.sleep(poll_interval)
+            del remaining[name]
+        if remaining:
+            logger.info("  %d still running...", len(remaining))
+
+    for name in remaining:
+        logger.warning("✗ %s — FAILED (no S3 result after %ds)", name, timeout_seconds)
+        results[name] = "FAILED"
 
     return results
 
@@ -229,14 +205,12 @@ def run_sweep(args, sweep_tag=""):
 
     for arch in architectures:
         arn = WORKFLOW_ARNS[arch]
-        is_express = arch in EXPRESS_ARCHS
         logger.info("=" * 60)
-        logger.info("Architecture: %s (%s)", arch,
-                    "EXPRESS" if is_express else "STANDARD")
+        logger.info("Architecture: %s", arch)
         logger.info("=" * 60)
 
         # Collect all configs for this architecture
-        all_configs = []
+        all_configs  = []   # [(exp_name, sfn_input, s3_key), ...]
         for scenario in scenarios:
             scenario_file = SCENARIOS_DIR / f"{scenario}.json"
             if not scenario_file.exists():
@@ -244,21 +218,11 @@ def run_sweep(args, sweep_tag=""):
                 continue
             for scaling in args.scaling:
                 for world_size in args.world_sizes:
-                    # Weak scaling: each worker gets task_count tasks → total = task_count × world_size
-                    #   Pass task_count × world_size tasks; runner chunk()s them giving each
-                    #   worker task_count tasks. Throughput measurement.
-                    # Strong scaling: fixed total = task_count tasks split across world_size workers
-                    #   Pass task_count tasks; runner chunk()s giving each worker task_count/world_size.
-                    #   Speedup measurement.
-                    # Both use scaling="weak" in the SFN input so the runner always uses chunk().
                     if scaling == "weak":
                         n_tasks = args.task_count * world_size
                     else:
                         n_tasks = args.task_count
                     tasks = sample_tasks(scenario_file, n_tasks, seed=42)
-                    # Stable workflow_id shared across runs so run 2-4 reuse run 1's contexts.
-                    # Include sweep_tag so each new sweep starts with a cold context store
-                    # rather than inheriting cached contexts from a previous sweep.
                     shared_workflow_id = (
                         f"{arch.replace('-','_')}_{scenario}_{scaling}_ws{world_size}_{sweep_tag}"
                     )
@@ -269,41 +233,44 @@ def run_sweep(args, sweep_tag=""):
                         sfn_input = build_sfn_input(
                             arch, scenario, tasks, world_size, exp_name,
                             workflow_id=shared_workflow_id,
-                            scaling="weak",   # always chunk() — scaling mode encoded in task count
+                            scaling="weak",
                             context_backend=getattr(args, "context_backend", "redis"),
+                            results_scaling=scaling,
                         )
-                        all_configs.append((exp_name, sfn_input))
+                        # Expected S3 key written by armada_aggregate on completion
+                        rs = scaling  # results_scaling
+                        s3_key = f"results/{arch}/{scenario}/{rs}/{exp_name}_metrics.json"
+                        all_configs.append((exp_name, sfn_input, s3_key))
 
         logger.info("Firing %d executions for %s", len(all_configs), arch)
 
         if args.dry_run:
-            for name, _ in all_configs:
-                logger.info("  [dry-run] %s", name)
+            for name, _, key in all_configs:
+                logger.info("  [dry-run] %s → s3://%s/%s", name, RESULTS_BUCKET, key)
             continue
 
-        if is_express:
-            # EXPRESS — run synchronously in parallel threads
-            results = run_express_parallel(sfn, arn, all_configs, args.max_parallel)
-        else:
-            # STANDARD — fire all, then poll
-            execution_arns = {}
-            for name, sfn_input in all_configs:
-                n, exec_arn = fire_standard(sfn, arn, name, sfn_input)
-                execution_arns[n] = exec_arn
-                # Throttle if needed
-                if len(execution_arns) >= args.max_parallel:
-                    batch = poll_standard(sfn, execution_arns)
-                    failed = [n for n, s in batch.items() if s != "SUCCEEDED"]
-                    if failed:
-                        logger.warning("%d failed: %s", len(failed), failed)
-                    execution_arns = {}
-            if execution_arns:
-                results = poll_standard(sfn, execution_arns)
-            else:
-                results = {}
+        # Fire in batches of max_parallel, then poll S3 for completion
+        batch_size = args.max_parallel
+        all_results = {}
+        for i in range(0, len(all_configs), batch_size):
+            batch = all_configs[i:i + batch_size]
+            pending = {}
+            for name, sfn_input, s3_key in batch:
+                try:
+                    fire_execution(sfn, arn, name, sfn_input)
+                    pending[name] = s3_key
+                except Exception as e:
+                    logger.error("Failed to fire %s: %s", name, e)
+                    all_results[name] = "FAILED"
+            batch_results = poll_s3_results(
+                pending,
+                poll_interval=getattr(args, "poll_interval", 20),
+                timeout_seconds=getattr(args, "timeout", 600),
+            )
+            all_results.update(batch_results)
 
-        succeeded = sum(1 for s in results.values() if s == "SUCCEEDED")
-        failed    = sum(1 for s in results.values() if s != "SUCCEEDED")
+        succeeded = sum(1 for s in all_results.values() if s == "SUCCEEDED")
+        failed    = sum(1 for s in all_results.values() if s != "SUCCEEDED")
         logger.info("Architecture %s complete: %d succeeded, %d failed",
                     arch, succeeded, failed)
 
@@ -337,6 +304,10 @@ def main():
                         choices=["redis", "cylon"],
                         help="Context similarity backend: redis (numpy, concurrent-safe) "
                              "or cylon (Arrow SIMD, for FMI Phase 2)")
+    parser.add_argument("--poll-interval", type=int, default=20,
+                        help="Seconds between S3 result polls (default 20)")
+    parser.add_argument("--timeout", type=int, default=600,
+                        help="Max seconds to wait per batch for S3 results (default 600)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print configs without firing executions")
 
