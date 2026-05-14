@@ -75,7 +75,7 @@ class FMIBridge:
                  rendezvous_host="", rendezvous_port=10000,
                  redis_host="", redis_port=6379,
                  comm_name="cylon_armada", maxtimeout=120000,
-                 enableping=False):
+                 enableping=False, nonblocking=True):
         self.world_size = int(world_size)
         self.rank = int(rank)
         self.channel_type = channel_type
@@ -96,7 +96,7 @@ class FMIBridge:
                 maxtimeout=int(maxtimeout),
                 resolveip=True,
                 comm_name=comm_name,
-                nonblocking=False,
+                nonblocking=nonblocking,
                 redis_host=redis_host,
                 redis_port=int(redis_port),
                 redis_namespace=comm_name,
@@ -136,9 +136,13 @@ class FMIBridge:
         workflow_id = payload.get("workflow_id", "")
         comm_name = f"cylon_armada_{workflow_id}" if workflow_id else "cylon_armada"
         # Map 'tcpunch' → 'direct' for pycylon compatibility.
-        # pycylon FMIConfig uses 'direct' for the TCPunch channel type.
         raw_channel = payload.get("fmi_channel_type", "direct")
         channel_type = "direct" if raw_channel in ("tcpunch", "direct") else raw_channel
+        # nonblocking=True: async connection attempts allow simultaneous SYN
+        # exchange — required for TCP hole punching. nonblocking=False causes
+        # sequential blocking which breaks the TCPunch timing window.
+        fmi_options = payload.get("fmi_options", "nonblocking")
+        nonblocking = (fmi_options != "blocking")
         return cls(
             world_size=int(payload.get("world_size", 1)),
             rank=int(payload.get("rank", 0)),
@@ -149,6 +153,7 @@ class FMIBridge:
             redis_port=int(os.environ.get("REDIS_PORT", 6379)),
             comm_name=comm_name,
             maxtimeout=300000,
+            nonblocking=nonblocking,
         )
 
     @property
