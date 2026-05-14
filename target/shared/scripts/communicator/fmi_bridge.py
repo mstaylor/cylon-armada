@@ -130,14 +130,25 @@ class FMIBridge:
     @classmethod
     def from_payload(cls, payload):
         """Create FMIBridge from a Step Functions task payload."""
+        # Include workflow_id in comm_name to isolate FMI sessions per experiment.
+        # Without this, concurrent invocations with different workflow_ids collide
+        # on the rendezvous server and get assigned wrong ranks.
+        workflow_id = payload.get("workflow_id", "")
+        comm_name = f"cylon_armada_{workflow_id}" if workflow_id else "cylon_armada"
+        # Map 'tcpunch' → 'direct' for pycylon compatibility.
+        # pycylon FMIConfig uses 'direct' for the TCPunch channel type.
+        raw_channel = payload.get("fmi_channel_type", "direct")
+        channel_type = "direct" if raw_channel in ("tcpunch", "direct") else raw_channel
         return cls(
             world_size=int(payload.get("world_size", 1)),
             rank=int(payload.get("rank", 0)),
-            channel_type=payload.get("fmi_channel_type", "redis"),
+            channel_type=channel_type,
             rendezvous_host=os.environ.get("RENDEZVOUS_HOST", ""),
             rendezvous_port=int(os.environ.get("RENDEZVOUS_PORT", 10000)),
             redis_host=os.environ.get("REDIS_HOST", ""),
             redis_port=int(os.environ.get("REDIS_PORT", 6379)),
+            comm_name=comm_name,
+            maxtimeout=300000,
         )
 
     @property

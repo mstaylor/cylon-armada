@@ -63,8 +63,10 @@ SCENARIOS_DIR = Path(__file__).parent.parent.parent.parent / "shared" / "scripts
 # Input builders — each architecture has a slightly different SFN schema
 # ---------------------------------------------------------------------------
 
-def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir, workflow_id=None, scaling="weak", context_backend="redis"):
-    return {
+def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3_dir,
+                        workflow_id=None, scaling="weak", context_backend="redis",
+                        fmi_channel="direct"):
+    payload = {
         "workflow_id":      workflow_id or f"sweep-{experiment_name}-{str(uuid.uuid4())[:8]}",
         "tasks":            tasks,
         "scaling":          scaling,
@@ -73,6 +75,9 @@ def _build_lambda_input(scenario, tasks, world_size, experiment_name, results_s3
         "experiment_name":  experiment_name,
         "context_backend":  context_backend,
     }
+    if context_backend == "cylon":
+        payload["fmi_channel_type"] = fmi_channel
+    return payload
 
 
 def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, workflow_id=None, scaling="weak"):
@@ -89,7 +94,8 @@ def _build_ecs_input(scenario, tasks, world_size, experiment_name, results_dir, 
 
 
 def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow_id=None,
-                    scaling="weak", context_backend="redis", results_scaling=None):
+                    scaling="weak", context_backend="redis", results_scaling=None,
+                    fmi_channel="direct"):
     """Build the Step Functions input payload for the given architecture.
 
     workflow_id is shared across runs of the same (arch, scenario, scaling, world_size)
@@ -104,7 +110,8 @@ def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow
     results_dir = f"results/{arch}/{scenario}/{rs}/"
     if arch in ("lambda-python", "lambda-nodejs"):
         return _build_lambda_input(scenario, tasks, world_size, experiment_name,
-                                   results_dir, workflow_id, scaling, context_backend)
+                                   results_dir, workflow_id, scaling, context_backend,
+                                   fmi_channel)
     else:
         return _build_ecs_input(scenario, tasks, world_size, experiment_name,
                                 results_dir, workflow_id, scaling)
@@ -236,6 +243,7 @@ def run_sweep(args, sweep_tag=""):
                             scaling="weak",
                             context_backend=getattr(args, "context_backend", "redis"),
                             results_scaling=scaling,
+                            fmi_channel=getattr(args, "fmi_channel", "direct"),
                         )
                         # Expected S3 key written by armada_aggregate on completion
                         rs = scaling  # results_scaling
@@ -304,6 +312,10 @@ def main():
                         choices=["redis", "cylon"],
                         help="Context similarity backend: redis (numpy, concurrent-safe) "
                              "or cylon (Arrow SIMD, for FMI Phase 2)")
+    parser.add_argument("--fmi-channel", default="direct",
+                        choices=["direct", "redis", "s3"],
+                        help="FMI channel type for cylon backend: direct (TCPunch P2P), "
+                             "redis, or s3 (default: direct)")
     parser.add_argument("--poll-interval", type=int, default=20,
                         help="Seconds between S3 result polls (default 20)")
     parser.add_argument("--timeout", type=int, default=600,

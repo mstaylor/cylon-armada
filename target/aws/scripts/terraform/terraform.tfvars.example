@@ -30,9 +30,12 @@ s3_scripts_prefix = "cylon-armada/scripts/"
 vpc_id              = "vpc-0f0b356963256cc2c"
 ecs_task_subnet_ids = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
 
-# Lambda VPC config (optional — only needed if Lambda must reach VPC resources directly)
-# subnet_ids         = ["subnet-xxxxxxxx", "subnet-yyyyyyyy"]
-# security_group_ids = ["sg-xxxxxxxx"]
+# Lambda VPC config — required for FMI TCPunch peer-to-peer connections.
+# Lambda in default VPC public subnets gets real public IPs (MapPublicIpOnLaunch=true),
+# enabling direct peer connections without NAT traversal issues.
+# Default VPC: vpc-0f0b356963256cc2c (us-east-1)
+subnet_ids         = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c", "subnet-0421d192ce7adeb7e"]
+security_group_ids = ["sg-0da3e3dcebe706315"]
 
 # Redis — Option 1: existing host (ElastiCache or external)
 # redis_host         = "your-redis-host.cache.amazonaws.com"
