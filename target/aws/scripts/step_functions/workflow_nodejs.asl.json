@@ -28,7 +28,6 @@
         "scaling.$":          "$.scaling",
         "config.$":           "$.config",
         "fmi_channel_type.$": "$.fmi_channel_type",
-        "fmi_hint.$":         "$.fmi_hint",
         "experiment_name.$":  "$.experiment_name",
         "context_backend.$":  "$.context_backend"
       },
