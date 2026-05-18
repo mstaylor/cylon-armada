@@ -143,10 +143,16 @@ export async function handler(event, context) {
 
     const modulePath = resolveModulePath(handlerModule);
 
-    // Cache modules for warm starts, but invalidate if S3 downloaded new scripts
-    if (!_cachedModules[handlerModule] || (_downloaded && modulePath.startsWith(LOCAL_DIR))) {
-        // Use file:// URL for dynamic import of absolute paths
-        _cachedModules[handlerModule] = await import(`file://${modulePath}`);
+    // Always re-import S3-downloaded modules — Node.js ESM cache persists across
+    // warm invocations, so appending the file mtime as a query param busts the cache
+    // when scripts are updated on S3 without an image rebuild.
+    if (!_cachedModules[handlerModule] || modulePath.startsWith(LOCAL_DIR)) {
+        const { statSync } = await import('node:fs');
+        let cacheBuster = '';
+        try {
+            cacheBuster = `?v=${statSync(modulePath).mtimeMs}`;
+        } catch (_) {}
+        _cachedModules[handlerModule] = await import(`file://${modulePath}${cacheBuster}`);
     }
 
     const mod = _cachedModules[handlerModule];
