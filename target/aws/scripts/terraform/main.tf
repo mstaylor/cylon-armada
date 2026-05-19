@@ -44,6 +44,8 @@ locals {
     S3_SCRIPTS_BUCKET            = var.scripts_bucket_name
     S3_SCRIPTS_PREFIX            = var.s3_scripts_prefix
     CYLON_SESSION_ID             = var.project_name
+    RUST_LOG                     = var.rust_log
+    FMI_MAX_TIMEOUT              = tostring(var.fmi_max_timeout)
   }
 
   # Env vars shared by all ECS tasks (static; dynamic fields injected per-run

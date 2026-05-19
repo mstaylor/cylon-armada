@@ -193,7 +193,19 @@ variable "scripts_bucket_name" {
 variable "s3_scripts_prefix" {
   description = "S3 key prefix for the scripts folder (shared + lambda handlers)"
   type        = string
-  default     = "scripts/"
+  default     = "cylon-armada/scripts-v3/"
+}
+
+variable "rust_log" {
+  description = "Rust log level for cylon-node FMI diagnostics (e.g. info, debug)"
+  type        = string
+  default     = "info"
+}
+
+variable "fmi_max_timeout" {
+  description = "FMI communicator max timeout in milliseconds"
+  type        = number
+  default     = 300000
 }
 
 variable "results_bucket_name" {

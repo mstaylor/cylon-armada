@@ -23,7 +23,9 @@ results_bucket_name = "staylor.dev2"
 #   aws s3 sync target/shared/scripts/ s3://staylor.dev2/cylon-armada/scripts/
 #   aws s3 sync target/aws/scripts/lambda/python/ s3://staylor.dev2/cylon-armada/scripts/lambda/
 # Can also be overridden per-invocation via event payload fields.
-s3_scripts_prefix = "cylon-armada/scripts/"
+s3_scripts_prefix = "cylon-armada/scripts-v3/"
+rust_log          = "info"
+fmi_max_timeout   = 300000
 
 # VPC — required for ECS Redis service and (optionally) Lambda VPC config
 # Default VPC subnets (us-east-1a/1c) — survive terraform destroy
