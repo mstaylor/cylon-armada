@@ -50,7 +50,12 @@ function createFmiCommunicator(event) {
     const worldSize = parseInt(event.world_size || 1);
     if (worldSize <= 1) return null;
     const workflowId = event.workflow_id || '';
-    const commName = workflowId ? `cylon_armada_${workflowId}` : 'cylon_armada';
+    // Use experiment_name (unique per run) as commName so the Redis INCR rank
+    // counter resets each run. workflow_id is shared across runs 1-4 for context
+    // reuse — using it as commName causes INCR to accumulate so run 2+ workers
+    // get ranks >= world_size and hang waiting at the rendezvous forever.
+    const commNameBase = event.experiment_name || workflowId;
+    const commName = commNameBase ? `cylon_armada_${commNameBase}` : 'cylon_armada';
     const maxTimeout = parseInt(process.env.FMI_MAX_TIMEOUT || 300000);
     try {
         const comm = cylon.Communicator.createFmi({

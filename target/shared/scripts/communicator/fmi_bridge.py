@@ -130,11 +130,15 @@ class FMIBridge:
     @classmethod
     def from_payload(cls, payload):
         """Create FMIBridge from a Step Functions task payload."""
-        # Include workflow_id in comm_name to isolate FMI sessions per experiment.
-        # Without this, concurrent invocations with different workflow_ids collide
-        # on the rendezvous server and get assigned wrong ranks.
+        # Use experiment_name (unique per run) as comm_name so the Redis INCR rank
+        # counter resets for each run. workflow_id is shared across runs 1-4 to
+        # enable context reuse, but if used as comm_name the INCR accumulates and
+        # run 2+ workers get ranks >= world_size, orphaning them at the rendezvous.
+        # experiment_name is unique per run (includes run number in tag).
+        experiment_name = payload.get("experiment_name", "")
         workflow_id = payload.get("workflow_id", "")
-        comm_name = f"cylon_armada_{workflow_id}" if workflow_id else "cylon_armada"
+        comm_name_base = experiment_name or workflow_id
+        comm_name = f"cylon_armada_{comm_name_base}" if comm_name_base else "cylon_armada"
         # Map 'tcpunch' → 'direct' for pycylon compatibility.
         raw_channel = payload.get("fmi_channel_type", "direct")
         channel_type = "direct" if raw_channel in ("tcpunch", "direct") else raw_channel
