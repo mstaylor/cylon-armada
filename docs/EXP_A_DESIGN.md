@@ -1,30 +1,26 @@
-# Experiment A / A2 — Zero-Copy Data Plane Benchmark: Design
+# Experiment A / A2 Zero-Copy Data Plane Benchmark Design
 
 **Status:** proposed (pre-implementation review)
 **Validates:** Contribution C1 (zero-copy Arrow data plane), Arrow schema compatibility.
 **Proposal refs:** Table VIII row A/A2; Validation §Experiment A; IV1 (dim), IV2 (batch size), payload-schema-type axis.
 
----
-
 ## 1. What the proposal asks for
 
-**Experiment A — Zero-Copy Data Plane Throughput Benchmark.** Compare the Apache Arrow/Cylon
+**Experiment A, Zero-Copy Data Plane Throughput Benchmark.** Compare the Apache Arrow/Cylon
 zero-copy data plane against serialization-based baselines (JSON, Pickle, Protobuf). Metrics:
-**throughput** and **memory copies**. Expected: Arrow outperforms JSON, Pickle, Protobuf — largest
-gain vs JSON, smaller but measurable vs Protobuf. The comparison isolates the benefit of *reduced
-memory copies*.
+**throughput** and **memory copies**. Expected: Arrow outperforms JSON, Pickle, and Protobuf, with
+the largest gain vs JSON and a smaller but measurable gain vs Protobuf. The comparison isolates the
+benefit of *reduced memory copies*.
 
-**Experiment A2 — Arrow Schema Compatibility.** Validate the zero-copy edge condition
+**Experiment A2, Arrow Schema Compatibility.** Validate the zero-copy edge condition
 `schema_out(Oi) == schema_in(Oj)` across the operator DAG. Plus the proposal's payload-schema-type
 axis: dense fixed (`FixedSizeList<Float32>` embeddings) vs variable-length nested (`LargeUtf8`
-document chunks) — Arrow's zero-copy advantage is strongest for dense, weakest for variable.
-
----
+document chunks). Arrow's zero-copy advantage is strongest for dense, weakest for variable.
 
 ## 2. Representative workload payload
 
 The dominant operator payload (>90% of edges) is the **embedding batch**: `N × D` float32 stored as
-Arrow `FixedSizeList<Float32>[D]` — the schema held by `ContextTable`
+Arrow `FixedSizeList<Float32>[D]`, the schema held by `ContextTable`
 (`cpp/src/context/context_table.cpp:46-61`). The benchmark serializes this structure through the
 same code paths the framework uses for inter-operator transfer, so measured throughput reflects the
 framework's data plane rather than an arbitrary payload.
@@ -36,13 +32,13 @@ framework's data plane rather than an arbitrary payload.
 
 **Data-scale axis (separate sweep).** The node/agent axis (Experiment B/E, `N ≤ 64`) and the
 *data* axis are distinct dimensions and are argued separately. To exercise the data plane at the
-row counts characteristic of the prior Cylon data-engineering work — and to substantiate the
-petabyte-class motivation rather than only the 1 TB memory-bounded subset — Experiment A adds a
+row counts characteristic of the prior Cylon data-engineering work, and to substantiate the
+petabyte-class motivation rather than only the 1 TB memory-bounded subset, Experiment A adds a
 single-node data-scale sweep on the same code paths:
 
-- Corpus size `R ∈ {10^4, 10^5, 10^6, 10^7}` embedding rows (10K → 10M), with `R` extended toward
-  10^8–10^9 on the HPC/EC2-EFA arm where memory permits.
-- Reported as throughput vs `R` and as bytes-transferred, holding `D` fixed at 1024.
+- Corpus size `R ∈ {10^4, 10^5, 10^6, 10^7}` embedding rows (10K to 10M), with `R` extended toward
+  10^8 to 10^9 on the HPC/EC2-EFA arm where memory permits.
+- Reported as throughput vs `R` and as bytes transferred, holding `D` fixed at 1024.
 
 This lets the throughput result hold the *substrate constant* while varying data volume by four to
 five orders of magnitude, so the "modest node count" observation does not carry over to the data
@@ -71,22 +67,22 @@ separate Arrow-IPC itself from ContextTable overhead.
 | `usable_access_ms` | time to obtain an `(N,D)` float32 you can run SIMD on (Arrow = O(1) view; others materialize) |
 | `wire_bytes` | serialized payload size |
 | `payload_bytes` | logical size `N*D*4` |
-| **`throughput_roundtrip_MBps`** | `payload_bytes / roundtrip_s` — **the headline metric** |
+| **`throughput_roundtrip_MBps`** | `payload_bytes / roundtrip_s`, **the headline metric** |
 | `throughput_serialize_MBps`, `throughput_deserialize_MBps` | directional throughput |
 | **`memory_copies`** | structural count on deserialize path: arrow_ipc=0, tobytes=1, pickle=1, json=2 (documented) |
-| `deserialize_peak_kb` | `tracemalloc` peak during deserialize — **empirical backing** for the copy claim |
+| `deserialize_peak_kb` | `tracemalloc` peak during deserialize, **empirical backing** for the copy claim |
 | `speedup_vs_json` | derived headline number |
 
 Rigor: `np.random.default_rng(42)` payloads (repo seed convention), `--warmup 3 --reps 20`, report
 median + p95. `--runs N` writes `run_{n}/` subdirs for cross-run std (matches runner convention).
 
-## 5. A2 — schema compatibility
+## 5. A2 Schema Compatibility
 
 Define the 5 operators as `(pattern, schema_in, schema_out)` per the proposal contracts, build the
 pipeline DAG, and check every edge for `schema_out(Oi)` Arrow-compatibility with `schema_in(Oj)`.
-Output: a compatibility matrix (zero-copy-eligible edges / total) + which edges need serialization.
+Output: a compatibility matrix (zero-copy-eligible edges / total) plus which edges need serialization.
 
-## 6. Architecture — reuse, don't duplicate
+## 6. Architecture and Code Reuse
 
 Findings from the codebase study drive these decisions:
 
@@ -94,7 +90,7 @@ Findings from the codebase study drive these decisions:
   standalone entry script, reusing only the generic `ExperimentBenchmark` (start/stop/record/save +
   S3). This is the exact precedent of the Node.js SIMD benchmarks.
 - **Charts: new function, not the cost/reuse ones** (none are metric-agnostic). Keep the existing
-  cost/reuse aggregator + `chart_generator.py` **untouched** — a foreign metric family should not be
+  cost/reuse aggregator + `chart_generator.py` **untouched**. A foreign metric family should not be
   forced through them. New `chart_zerocopy.py` matches the existing style constants
   (`FONT_SIZE=12`, `figsize=(10,6)`, `dpi=300`, svg, the palette dicts).
 - **The compiled `ContextTable` extension runs locally** (confirmed) with `LD_LIBRARY_PATH=$CONDA/lib` +
@@ -112,13 +108,13 @@ Findings from the codebase study drive these decisions:
 | `target/aws/scripts/lambda/python/armada_benchmark.py` | Thin Lambda handler → `exp_a_zerocopy.run()` → S3 |
 | Terraform block: `cylon-armada-benchmark` Lambda | Dedicated fn, `HANDLER_MODULE=armada_benchmark`, **10240 MB** (proposal's canonical config). *User applies.* |
 
-Output dir: fresh `results/exp_a_zerocopy/` — **does not touch** the protected domain data
+Output dir: fresh `results/exp_a_zerocopy/`. It **does not touch** the protected domain data
 (seismology / mixed_scientific / epidemiology / hydrology).
 
 ## 7. Success criteria
 
 1. `arrow_ipc` round-trips through the compiled `ContextTable` (`to_ipc`/`from_ipc`), and the
-   embedding column returns as `FixedSizeList<Float32>` without a copy — verified locally in `cylon_dev`.
+   embedding column returns as `FixedSizeList<Float32>` without a copy, verified locally in `cylon_dev`.
 2. Measured `throughput_roundtrip_MBps`: `arrow_ipc` > `pickle`/`tobytes` > `json`, with a clear,
    chartable gap; `memory_copies` and `deserialize_peak_kb` corroborate (Arrow lowest).
 3. A2: schema-compat matrix shows dense-embedding edges are zero-copy-eligible; variable `LargeUtf8`
