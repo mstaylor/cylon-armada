@@ -195,7 +195,7 @@ context reuse metrics + cost savings
 
 The key research contribution: Cosmic AI demonstrated that serverless FMI works
 for HPC-scale astronomy inference. cylon-armada demonstrates that the same FMI
-substrate can drive **cost reduction through context reuse** — a different axis
+infrastructure can drive **cost reduction through context reuse**, a different axis
 of optimization on the same workload.
 
 ---

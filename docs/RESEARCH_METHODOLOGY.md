@@ -4,19 +4,36 @@
 
 ---
 
+> **Platform note (June 2026):** the proposal now delivers the core contribution on
+> **high-performance infrastructure first** (Rivanna + EC2/EFA, Phase 1), with serverless as a
+> studied follow-on (Phase 2). See `EXPERIMENT_STATUS.md` for the phase model and the
+> Experiment A–L / H1–H5 map. The mechanics below (similarity search, payloads, query catalogue)
+> are platform-independent and unchanged.
+
 ## 1. The Core Research Question
 
-> **Can a distributed serverless HPC framework reduce LLM inference cost and latency
-> through context reuse, and does peer-to-peer communication (FMI/TCPunch) outperform
-> a Redis intermediary as the mechanism for sharing that context?**
+> **How can agentic AI workflows — integrating document preprocessing, embedding, vector
+> retrieval, multi-agent reasoning, and memory management — be modeled as formal distributed
+> communication operators over a zero-copy Arrow data plane, such that mapping workflow
+> components to HPC-grade Cylon collectives enables resource-deterministic, high-performance
+> execution on high-performance clusters and serverless backends alike, achieving measurable
+> pipeline speedup and throughput gains in the embedding and memory-update stages while
+> maintaining identical LLM generation throughput versus a stateless baseline?**
 
 This is an empirical systems research question. The experiments **create a controlled
-distributed AI workload and measure** four quantities across varying degrees of parallelism:
+distributed AI workload and measure** the quantities below across varying degrees of
+parallelism, each tied to a hypothesis (H1–H5) and experiment (A–L) in `EXPERIMENT_STATUS.md`:
 
-1. **Cache hit rate** — what fraction of LLM calls were avoided by reusing a prior response
-2. **Average task latency** — time per individual inference request (ms)
-3. **Wall-clock time** — total workflow completion time across all parallel workers (ms)
-4. **Cost** — actual USD spent on Bedrock API calls vs. the counterfactual baseline cost
+1. **End-to-end pipeline speedup S(N)** vs. **Ray/Plasma** (primary baseline) and a stateless
+   HTTP orchestrator (diagnostic) — Experiment E, Formula 2
+2. **Data movement** — bytes transferred per workflow; validates D(P\*) ≤ D(P_stateless)/N — Experiment D, Formula 1
+3. **Collective latency & execution-time variance** (coefficient of variation CV = σ/µ) — Experiments B, C (H1)
+4. **LLM generation throughput** (tokens/s, time-to-first-token) — confirmed *unchanged* — Experiment H (H3)
+5. **Semantic reuse** — cache hit-rate h, per-task LLM-cost reduction, recall vs FAISS — Experiment J (H4)
+
+Cache hit rate, task latency, wall-clock time, and Bedrock cost are still recorded as
+supporting metrics, but the cost-reduction headline of the earlier framing is now one outcome
+of the data-orchestration contribution rather than the thesis itself.
 
 ---
 

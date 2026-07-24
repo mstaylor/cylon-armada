@@ -40,7 +40,7 @@ single-node data-scale sweep on the same code paths:
   10^8 to 10^9 on the HPC/EC2-EFA arm where memory permits.
 - Reported as throughput vs `R` and as bytes transferred, holding `D` fixed at 1024.
 
-This lets the throughput result hold the *substrate constant* while varying data volume by four to
+This lets the throughput result hold the *platform constant* while varying data volume by four to
 five orders of magnitude, so the "modest node count" observation does not carry over to the data
 dimension. The scalability of the underlying Cylon collective layer at billions of rows is
 **inherited from prior published work** and cited as foundation, not re-derived here (see
@@ -106,7 +106,9 @@ Findings from the codebase study drive these decisions:
 | `target/shared/scripts/experiment/examples/run_exp_a.sh` | Local wrapper: sets the two env exports, runs in `cylon_dev` |
 | `target/shared/scripts/results/chart_zerocopy.py` | New charts (throughput-by-format, memory-copies, schema-compat matrix) in the existing style |
 | `target/aws/scripts/lambda/python/armada_benchmark.py` | Thin Lambda handler → `exp_a_zerocopy.run()` → S3 |
-| Terraform block: `cylon-armada-benchmark` Lambda | Dedicated fn, `HANDLER_MODULE=armada_benchmark`, **10240 MB** (proposal's canonical config). *User applies.* |
+| `target/aws/scripts/step_functions/workflow_benchmark.asl.json` | Benchmark state machine: Task state invoking the benchmark Lambda (single-node), consistent with the existing `workflow*.asl.json` set |
+| Driver: `cloud_sweep`-style starter | Starts the benchmark state-machine execution and polls S3 for results (mirrors `target/aws/scripts/experiment/cloud_sweep.py`) |
+| Terraform block: `cylon-armada-benchmark` Lambda + state machine | Dedicated fn, `HANDLER_MODULE=armada_benchmark`, **10240 MB** (proposal's canonical config), plus the benchmark state machine. *User applies.* |
 
 Output dir: fresh `results/exp_a_zerocopy/`. It **does not touch** the protected domain data
 (seismology / mixed_scientific / epidemiology / hydrology).
@@ -130,4 +132,8 @@ Output dir: fresh `results/exp_a_zerocopy/`. It **does not touch** the protected
   `cylon_dev`).
 - One dedicated 10 GB benchmark Lambda (one `terraform apply`) is acceptable; it's reused for Exp J's
   L3 test later.
-- Single-node microbenchmark → invoked directly with `aws lambda invoke`, no Step Functions.
+- The benchmark is orchestrated through **AWS Step Functions**, consistent with every other
+  experiment in the framework: a dedicated benchmark state machine invokes the benchmark Lambda
+  (single-node, so a plain Task state rather than a Map), and a `cloud_sweep`-style driver starts the
+  execution and collects results from S3. This keeps Experiment A on the same deployed orchestration
+  layer as Experiments B/E rather than on a one-off invocation path.
