@@ -42,3 +42,17 @@ credentials.json
 # Docker
 docker/*.tar
 docker/wasm/
+
+# Terraform — local provider caches, state, and plans (never versioned)
+# .terraform/ holds downloaded provider binaries (hundreds of MB each) and must
+# not be committed; state files can contain secrets. Applies to all modules
+# (terraform/, terraform-ec2/, terraform-gpu/).
+# Note: .terraform.lock.hcl is intentionally NOT ignored — the provider
+# dependency lock file should be committed so runs are reproducible.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
