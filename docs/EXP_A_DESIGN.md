@@ -182,7 +182,12 @@ hot-reload from S3.
 
 ```bash
 # 1. Rebuild + push the Python image (C++/Cython IPC changes + new serialization deps)
-docker build -t cylon-armada-python -f docker/Dockerfile.python .
+#    --platform=linux/amd64 is required: the image is x86_64 by design (x86_64
+#    Miniconda; Lambda/ECS run cpu_architecture = X86_64). On an arm64 build host
+#    (Apple Silicon / Parallels) the plain build pulls an arm64 base and the
+#    x86_64 Miniconda installer fails with "rosetta error ... ld-linux-x86-64.so.2";
+#    the flag forces the amd64 base so it builds (emulated on arm64, native on x86).
+docker build --platform=linux/amd64 -t cylon-armada-python -f docker/Dockerfile.python .
 #    docker tag + push to ECR :python-latest  (per your ECR login)
 
 # 2. Sync shared scripts + the benchmark handler to S3 (hot-reload; no rebuild for py-only edits)
