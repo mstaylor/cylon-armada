@@ -1,0 +1,19 @@
+{
+  "workflow_id": "manual-seismology-ws1",
+  "tasks": [
+    "Assess the seismic hazard for a site 15 km from an active strike-slip fault with a slip rate of 8 mm/yr and maximum credible earthquake M7.2. Estimate the 475-year return period PGA."
+  ],
+  "scaling": "weak",
+  "world_size": 1,
+  "context_backend": "cylon",
+  "fmi_channel_type": "direct",
+  "results_s3_dir": "results/lambda-nodejs/seismology/weak/",
+  "experiment_name": "lambda_nodejs_seismology_weak_ws1_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

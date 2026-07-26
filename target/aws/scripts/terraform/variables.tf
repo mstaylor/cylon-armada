@@ -58,6 +58,18 @@ variable "lambda_timeout" {
   default     = 300
 }
 
+variable "benchmark_memory_mb" {
+  description = "Memory for the Experiment A/A2 zero-copy benchmark Lambda (MB). Proposal pins this to the 10 GB / Firecracker configuration."
+  type        = number
+  default     = 10240
+}
+
+variable "benchmark_timeout" {
+  description = "Timeout for the Experiment A/A2 benchmark Lambda (seconds). The full serialization matrix (warmup + reps across N x D) can run long, so this is higher than the default Lambda timeout."
+  type        = number
+  default     = 900
+}
+
 # ---------------------------------------------------------------------------
 # ECS — existing clusters (data sources, not created by Terraform)
 # ---------------------------------------------------------------------------

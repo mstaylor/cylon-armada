@@ -190,7 +190,9 @@ arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromRecordBatch(
   table->schema_ = batch->schema();
   table->batch_ = batch;
   table->builders_ = ContextBuilders::Create(table->embedding_dim_);
-  table->RebuildIndex();
+  // Defer the O(N) index build to first keyed access (EnsureIndex). A freshly
+  // loaded batch has no tombstones, so Size() stays correct without the index.
+  table->index_valid_ = false;
   return table;
 }
 
@@ -218,6 +220,7 @@ Status ContextTable::Put(const std::string& context_id,
   }
 
   // Tombstone old row if key exists — O(1)
+  EnsureIndex();
   auto it = index_.find(context_id);
   if (it != index_.end()) {
     deleted_.insert(it->second);
@@ -238,6 +241,7 @@ Status ContextTable::Put(const std::string& context_id,
 
 std::optional<std::shared_ptr<arrow::RecordBatch>> ContextTable::Get(
     const std::string& context_id) {
+  EnsureIndex();
   auto it = index_.find(context_id);
   if (it == index_.end()) {
     return std::nullopt;
@@ -249,6 +253,7 @@ std::optional<std::shared_ptr<arrow::RecordBatch>> ContextTable::Get(
 
 Status ContextTable::GetRow(const std::string& context_id,
                             std::shared_ptr<arrow::RecordBatch>* out) {
+  EnsureIndex();
   auto it = index_.find(context_id);
   if (it == index_.end()) {
     *out = nullptr;
@@ -260,6 +265,7 @@ Status ContextTable::GetRow(const std::string& context_id,
 }
 
 Status ContextTable::Remove(const std::string& context_id) {
+  EnsureIndex();
   auto it = index_.find(context_id);
   if (it == index_.end()) {
     return {Code::KeyError, "context_id not found: " + context_id};
@@ -380,7 +386,12 @@ std::vector<simd::SearchResult> ContextTable::Search(
 // ---------------------------------------------------------------------------
 
 int64_t ContextTable::Size() const {
-  return static_cast<int64_t>(index_.size());
+  if (index_valid_) {
+    return static_cast<int64_t>(index_.size());
+  }
+  // Index deferred after a bulk load: no tombstones exist yet (any Put/Remove
+  // would have validated the index first), so active count == total rows.
+  return (batch_ ? batch_->num_rows() : 0) + builder_count_;
 }
 
 int64_t ContextTable::TotalRows() const {
@@ -470,6 +481,7 @@ Status ContextTable::Compact() {
 void ContextTable::RebuildIndex() {
   index_.clear();
   deleted_.clear();
+  index_valid_ = true;
   if (!batch_ || batch_->num_rows() == 0) {
     return;
   }
@@ -487,11 +499,17 @@ void ContextTable::RebuildIndex() {
   }
 }
 
+void ContextTable::EnsureIndex() {
+  if (!index_valid_) {
+    RebuildIndex();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Arrow IPC Serialization
 // ---------------------------------------------------------------------------
 
-Status ContextTable::ToIpc(std::vector<uint8_t>* data) {
+Status ContextTable::ToIpcBuffer(std::shared_ptr<arrow::Buffer>* out) {
   { auto s = MaterializeIfDirty(); if (!s.is_ok()) return s; }
 
   // Filter tombstoned rows
@@ -536,21 +554,27 @@ Status ContextTable::ToIpc(std::vector<uint8_t>* data) {
   if (!buffer_result.ok()) {
     return {Code::ExecutionError, buffer_result.status().ToString()};
   }
-  auto buffer = std::move(*buffer_result);
+  *out = std::move(*buffer_result);
+  return Status::OK();
+}
+
+Status ContextTable::ToIpc(std::vector<uint8_t>* data) {
+  // Delegate to the zero-copy buffer variant, then materialize into the vector
+  // for C++ callers (Redis/S3 persistence) that expect owned bytes.
+  std::shared_ptr<arrow::Buffer> buffer;
+  { auto s = ToIpcBuffer(&buffer); if (!s.is_ok()) return s; }
   data->resize(buffer->size());
   std::memcpy(data->data(), buffer->data(), buffer->size());
   return Status::OK();
 }
 
-arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromIpc(
-    const uint8_t* data, int64_t size) {
-  // Copy the data so the ContextTable owns the buffer — the caller's
-  // memory (Python bytes, Redis response) may be freed before us.
-  ARROW_ASSIGN_OR_RAISE(auto owned_buffer, arrow::AllocateBuffer(size));
-  std::memcpy(owned_buffer->mutable_data(), data, size);
-  auto buffer = std::shared_ptr<arrow::Buffer>(std::move(owned_buffer));
+arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromIpcBuffer(
+    std::shared_ptr<arrow::Buffer> buffer) {
+  // Zero-copy: read directly from the supplied buffer. The batches produced by
+  // the IPC reader reference this buffer, and FromRecordBatch stores the batch,
+  // so the buffer stays alive via Arrow's shared_ptr chain. The caller must pass
+  // an owned buffer (the copy is its responsibility, unlike FromIpc below).
   auto input = std::make_shared<arrow::io::BufferReader>(buffer);
-
   auto reader_result = arrow::ipc::RecordBatchStreamReader::Open(input);
   ARROW_RETURN_NOT_OK(reader_result.status());
   auto reader = std::move(*reader_result);
@@ -561,6 +585,27 @@ arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromIpc(
     return arrow::Status::Invalid("Empty IPC stream");
   }
   return FromRecordBatch(batch);
+}
+
+arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromIpc(
+    const uint8_t* data, int64_t size) {
+  // Copy the data so the ContextTable owns the buffer — the caller's raw
+  // memory (Python bytes, Redis response) may be freed before us. Then delegate
+  // to the zero-copy reader.
+  ARROW_ASSIGN_OR_RAISE(auto owned_buffer, arrow::AllocateBuffer(size));
+  std::memcpy(owned_buffer->mutable_data(), data, size);
+  auto buffer = std::shared_ptr<arrow::Buffer>(std::move(owned_buffer));
+  return FromIpcBuffer(buffer);
+}
+
+Status ContextTable::MakeFromIpcBuffer(std::shared_ptr<arrow::Buffer> buffer,
+                                       std::shared_ptr<ContextTable>* out) {
+  auto result = FromIpcBuffer(std::move(buffer));
+  if (!result.ok()) {
+    return {Code::ExecutionError, result.status().ToString()};
+  }
+  *out = std::move(*result);
+  return Status::OK();
 }
 
 // ---------------------------------------------------------------------------

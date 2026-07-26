@@ -26,6 +26,11 @@ output "python_aggregate_arn" {
   value       = aws_lambda_function.python_aggregate.arn
 }
 
+output "python_benchmark_arn" {
+  description = "ARN of the Experiment A/A2 zero-copy benchmark Lambda (10 GB)"
+  value       = aws_lambda_function.python_benchmark.arn
+}
+
 # ---------------------------------------------------------------------------
 # Lambda ARNs — Node.js
 # ---------------------------------------------------------------------------
@@ -81,6 +86,11 @@ output "python_workflow_arn" {
 output "nodejs_workflow_arn" {
   description = "ARN of the Node.js Lambda Step Functions state machine"
   value       = aws_sfn_state_machine.nodejs_workflow.arn
+}
+
+output "benchmark_workflow_arn" {
+  description = "ARN of the Experiment A/A2 benchmark state machine"
+  value       = aws_sfn_state_machine.benchmark_workflow.arn
 }
 
 output "model_parallel_workflow_arn" {

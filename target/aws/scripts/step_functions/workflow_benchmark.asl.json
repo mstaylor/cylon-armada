@@ -1,0 +1,20 @@
+{
+  "Comment": "Experiment A / A2 zero-copy data plane benchmark. Single-node microbenchmark: one Task invokes cylon-armada-benchmark (10 GB Lambda), which runs the full serialization matrix and writes result CSVs to S3. No Map fan-out — the data axis is swept inside the Lambda, not across workers.",
+  "StartAt": "RunBenchmark",
+  "States": {
+    "RunBenchmark": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:cylon-armada-benchmark",
+      "Comment": "No Parameters block: the whole execution input is forwarded to the Lambda, which applies defaults for any omitted field. This avoids the SFN 'references a field the input does not send' failure for optional keys (batch_sizes, dims, etc.).",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "End": true
+    }
+  }
+}

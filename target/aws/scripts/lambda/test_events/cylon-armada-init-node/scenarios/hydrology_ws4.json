@@ -1,0 +1,22 @@
+{
+  "workflow_id": "test-hydrology-ws4",
+  "tasks": [
+    "Analyze the flood risk for a watershed with drainage area 245 km\u00b2, mean annual precipitation 1120 mm, land cover 65% forested, and soil type predominantly clay loam. Estimate the 100-year return period peak discharge.",
+    "Assess the flood hazard for a catchment of 238 km\u00b2 receiving 1090 mm annual rainfall, with 62% forest cover and clay loam soils. Calculate the expected peak flow for a 100-year event.",
+    "Evaluate the hydrological response of a 312 km\u00b2 watershed with 890 mm annual precipitation, 45% agricultural land use, and sandy loam soils. How does the land use affect runoff coefficient?",
+    "Analyze the runoff characteristics of a 298 km\u00b2 catchment receiving 920 mm annual rainfall, with 48% cropland and sandy loam soil. Estimate the curve number and peak discharge."
+  ],
+  "world_size": 4,
+  "scaling": "weak",
+  "context_backend": "cylon",
+  "fmi_channel_type": "direct",
+  "experiment_name": "test_hydrology_weak_ws4",
+  "results_s3_dir": "results/lambda-nodejs/hydrology/weak/",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

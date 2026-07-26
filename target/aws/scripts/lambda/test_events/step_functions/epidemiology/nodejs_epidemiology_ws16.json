@@ -1,0 +1,34 @@
+{
+  "workflow_id": "manual-epidemiology-ws16",
+  "tasks": [
+    "Model the spread of an influenza-like illness with R0=1.8, mean generation time 3.2 days, in a metropolitan area of 2.1 million. Estimate peak timing and attack rate under no intervention.",
+    "Analyze the epidemic trajectory for a respiratory pathogen with R0=1.9, serial interval 3.0 days, in an urban population of 2.0 million. Predict the infection peak and final size.",
+    "Evaluate the effectiveness of a vaccination campaign achieving 60% coverage with a vaccine of 85% efficacy against a pathogen with R0=2.5. What is the herd immunity threshold?",
+    "Assess the impact of vaccinating 55% of the population with a 90% effective vaccine against a disease with R0=2.3. Does coverage achieve herd immunity?",
+    "Model the impact of school closures on disease transmission in a community with 18% school-age population. The pathogen has R0=1.6 with 40% of transmission occurring in schools.",
+    "Analyze how closing schools (affecting 20% of the population) reduces transmission of a respiratory illness with R0=1.7, assuming 35% of contacts occur in educational settings.",
+    "Estimate the contact tracing capacity needed to contain an outbreak with 50 initial cases, R0=2.0, and a 4-day serial interval. What fraction of contacts must be traced within 48 hours?",
+    "Assess the feasibility of contact tracing for an emerging pathogen with 65 initial cases, R0=2.2, and 3.5-day generation time. How many contact tracers per case are required?",
+    "Model the spatial spread of a vector-borne disease with Aedes aegypti density of 12 per household, average flight range 200m, and extrinsic incubation period of 10 days in a tropical city of 500K.",
+    "Analyze the geographic diffusion pattern of a mosquito-borne illness in a city of 480K, with vector density 14 per household, 180m dispersal range, and 12-day extrinsic incubation.",
+    "Evaluate the cost-effectiveness of three non-pharmaceutical interventions for COVID-19: universal masking (50% reduction), social distancing (30% reduction), and workplace closures (25% reduction).",
+    "Compare the epidemiological impact of mask mandates, capacity limits, and remote work policies for a respiratory pathogen in a county of 350K residents.",
+    "Model the emergence of antiviral resistance in an influenza epidemic treated with oseltamivir. Initial resistance frequency is 0.1%, with a fitness cost of 5% and treatment coverage of 30%.",
+    "Analyze the evolutionary dynamics of drug resistance during an influenza outbreak where 25% of cases receive antivirals. Resistance mutation confers 3% fitness cost but full treatment escape.",
+    "Assess the impact of population age structure on disease severity for a pathogen with age-dependent IFR: 0.01% (0-19), 0.1% (20-49), 1% (50-69), 5% (70+). Compare young vs aging populations.",
+    "Analyze how demographic differences (median age 28 vs 42) affect hospitalization burden for a respiratory pathogen with age-stratified severity rates."
+  ],
+  "scaling": "weak",
+  "world_size": 16,
+  "context_backend": "cylon",
+  "fmi_channel_type": "direct",
+  "results_s3_dir": "results/lambda-nodejs/epidemiology/weak/",
+  "experiment_name": "lambda_nodejs_epidemiology_weak_ws16_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

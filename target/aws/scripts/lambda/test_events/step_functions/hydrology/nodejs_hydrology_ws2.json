@@ -1,0 +1,20 @@
+{
+  "workflow_id": "manual-hydrology-ws2",
+  "tasks": [
+    "Analyze the flood risk for a watershed with drainage area 245 km\u00b2, mean annual precipitation 1120 mm, land cover 65% forested, and soil type predominantly clay loam. Estimate the 100-year return period peak discharge.",
+    "Assess the flood hazard for a catchment of 238 km\u00b2 receiving 1090 mm annual rainfall, with 62% forest cover and clay loam soils. Calculate the expected peak flow for a 100-year event."
+  ],
+  "scaling": "weak",
+  "world_size": 2,
+  "context_backend": "cylon",
+  "fmi_channel_type": "direct",
+  "results_s3_dir": "results/lambda-nodejs/hydrology/weak/",
+  "experiment_name": "lambda_nodejs_hydrology_weak_ws2_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

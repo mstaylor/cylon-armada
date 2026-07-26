@@ -21,8 +21,8 @@ locals {
   }
 
   redis_endpoint = (
-    var.create_ecs_redis    ? var.redis_hostname :
-    var.create_elasticache  ? aws_elasticache_cluster.redis[0].cache_nodes[0].address :
+    var.create_ecs_redis ? var.redis_hostname :
+    var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address :
     var.redis_host
   )
 
@@ -51,19 +51,19 @@ locals {
   # Env vars shared by all ECS tasks (static; dynamic fields injected per-run
   # via Step Functions ContainerOverrides)
   ecs_env = [
-    { name = "BEDROCK_LLM_MODEL_ID",         value = var.bedrock_llm_model_id },
-    { name = "BEDROCK_EMBEDDING_MODEL_ID",    value = var.bedrock_embedding_model_id },
-    { name = "BEDROCK_EMBEDDING_DIMENSIONS",  value = tostring(var.bedrock_embedding_dimensions) },
-    { name = "SIMILARITY_THRESHOLD",          value = tostring(var.similarity_threshold) },
-    { name = "CONTEXT_BACKEND",               value = var.context_backend },
-    { name = "REDIS_HOST",                    value = local.redis_endpoint },
-    { name = "REDIS_PORT",                    value = tostring(var.redis_port) },
-    { name = "DYNAMO_TABLE_NAME",             value = aws_dynamodb_table.context_store.name },
-    { name = "RESULTS_BUCKET",                value = var.results_bucket_name },
-    { name = "AWS_DEFAULT_REGION",            value = var.aws_region },
-    { name = "RENDEZVOUS_HOST",               value = var.rendezvous_host },
-    { name = "RENDEZVOUS_PORT",               value = tostring(var.rendezvous_port) },
-    { name = "CYLON_SESSION_ID",              value = var.project_name },
+    { name = "BEDROCK_LLM_MODEL_ID", value = var.bedrock_llm_model_id },
+    { name = "BEDROCK_EMBEDDING_MODEL_ID", value = var.bedrock_embedding_model_id },
+    { name = "BEDROCK_EMBEDDING_DIMENSIONS", value = tostring(var.bedrock_embedding_dimensions) },
+    { name = "SIMILARITY_THRESHOLD", value = tostring(var.similarity_threshold) },
+    { name = "CONTEXT_BACKEND", value = var.context_backend },
+    { name = "REDIS_HOST", value = local.redis_endpoint },
+    { name = "REDIS_PORT", value = tostring(var.redis_port) },
+    { name = "DYNAMO_TABLE_NAME", value = aws_dynamodb_table.context_store.name },
+    { name = "RESULTS_BUCKET", value = var.results_bucket_name },
+    { name = "AWS_DEFAULT_REGION", value = var.aws_region },
+    { name = "RENDEZVOUS_HOST", value = var.rendezvous_host },
+    { name = "RENDEZVOUS_PORT", value = tostring(var.rendezvous_port) },
+    { name = "CYLON_SESSION_ID", value = var.project_name },
   ]
 
   # Template variables for Lambda Step Functions ASL files
@@ -215,8 +215,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Resource = "arn:aws:logs:*:*:*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
+        Effect = "Allow"
+        Action = ["bedrock:InvokeModel"]
         Resource = [
           "arn:aws:bedrock:*::foundation-model/*",
           "arn:aws:bedrock:*:${var.account_id}:inference-profile/*"
@@ -320,8 +320,8 @@ resource "aws_iam_role_policy" "ecs_task_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
+        Effect = "Allow"
+        Action = ["bedrock:InvokeModel"]
         Resource = [
           "arn:aws:bedrock:*::foundation-model/*",
           "arn:aws:bedrock:*:${var.account_id}:inference-profile/*"
@@ -402,7 +402,7 @@ resource "aws_ecs_task_definition" "python_armada" {
     essential = true
 
     entryPoint = ["/opt/conda/bin/conda", "run", "--no-capture-output", "-n", "cylon_dev"]
-    command     = ["python", "/cylon-armada/armada_ecs_runner.py"]
+    command    = ["python", "/cylon-armada/armada_ecs_runner.py"]
 
     environment = local.ecs_env
 
@@ -494,6 +494,43 @@ resource "aws_lambda_function" "python_aggregate" {
 
   environment {
     variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_aggregate" })
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# Lambda Function — Experiment A / A2 zero-copy data plane benchmark
+#
+# Single-node microbenchmark (no Map fan-out): one invocation runs the whole
+# serialization matrix and writes result CSVs to S3. Pinned to the proposal's
+# 10 GB / Firecracker configuration via benchmark_memory_mb. Reuses the same
+# execution role and lambda_env as the other Python functions; the benchmark
+# also serves Experiment J's L3 test later, so it is a durable dedicated fn.
+# ---------------------------------------------------------------------------
+
+resource "aws_lambda_function" "python_benchmark" {
+  function_name = "${var.project_name}-benchmark"
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
+  memory_size   = var.benchmark_memory_mb
+  timeout       = var.benchmark_timeout
+
+  image_config {
+    command = ["lambda_entry.handler"]
+  }
+
+  environment {
+    variables = merge(local.lambda_env, { HANDLER_MODULE = "armada_benchmark" })
   }
 
   dynamic "vpc_config" {
@@ -653,6 +690,7 @@ resource "aws_iam_role_policy" "step_functions_policy" {
           aws_lambda_function.python_init.arn,
           aws_lambda_function.python_executor.arn,
           aws_lambda_function.python_aggregate.arn,
+          aws_lambda_function.python_benchmark.arn,
           aws_lambda_function.nodejs_init.arn,
           aws_lambda_function.nodejs_executor.arn,
           aws_lambda_function.nodejs_aggregate.arn,
@@ -690,10 +728,10 @@ resource "aws_iam_role_policy" "step_functions_policy" {
       },
       # CloudWatch logs for Express workflows
       {
-        Effect   = "Allow"
-        Action   = ["logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
-                    "logs:DeleteLogDelivery", "logs:ListLogDeliveries", "logs:PutResourcePolicy",
-                    "logs:DescribeResourcePolicies", "logs:DescribeLogGroups"]
+        Effect = "Allow"
+        Action = ["logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
+          "logs:DeleteLogDelivery", "logs:ListLogDeliveries", "logs:PutResourcePolicy",
+        "logs:DescribeResourcePolicies", "logs:DescribeLogGroups"]
         Resource = ["*"]
       },
     ]
@@ -719,15 +757,15 @@ resource "aws_cloudwatch_log_resource_policy" "sfn_lambda_workflows" {
       Principal = { Service = "delivery.logs.amazonaws.com" }
       Action    = ["logs:CreateLogStream", "logs:PutLogEvents"]
       Resource  = "${aws_cloudwatch_log_group.sfn_lambda_workflows.arn}:*"
-    },
-    {
-      Effect    = "Allow"
-      Principal = { Service = "states.amazonaws.com" }
-      Action    = ["logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
-                   "logs:DeleteLogDelivery", "logs:ListLogDeliveries",
-                   "logs:PutResourcePolicy", "logs:DescribeResourcePolicies",
-                   "logs:DescribeLogGroups"]
-      Resource  = "*"
+      },
+      {
+        Effect    = "Allow"
+        Principal = { Service = "states.amazonaws.com" }
+        Action = ["logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
+          "logs:DeleteLogDelivery", "logs:ListLogDeliveries",
+          "logs:PutResourcePolicy", "logs:DescribeResourcePolicies",
+        "logs:DescribeLogGroups"]
+        Resource = "*"
     }]
   })
 }
@@ -770,6 +808,19 @@ resource "aws_sfn_state_machine" "model_parallel_workflow" {
   type     = "EXPRESS"
 
   definition = templatefile("${path.module}/../step_functions/workflow_model_parallel.asl.json", local.asl_vars)
+
+  tags = local.common_tags
+}
+
+# Experiment A / A2 benchmark — single Task, no Map. STANDARD (not EXPRESS) so a
+# long matrix run is not capped by the 5-minute Express limit; the benchmark
+# Lambda timeout (benchmark_timeout) is the real bound.
+resource "aws_sfn_state_machine" "benchmark_workflow" {
+  name     = "${var.project_name}-benchmark-workflow"
+  role_arn = aws_iam_role.step_functions_execution.arn
+  type     = "STANDARD"
+
+  definition = templatefile("${path.module}/../step_functions/workflow_benchmark.asl.json", local.asl_vars)
 
   tags = local.common_tags
 }
@@ -931,11 +982,11 @@ resource "aws_lambda_function" "rendezvous_test" {
 
   environment {
     variables = {
-      HANDLER_MODULE    = "rendezvous_test"
-      RENDEZVOUS_HOST   = var.rendezvous_host
-      RENDEZVOUS_PORT   = tostring(var.rendezvous_port)
-      REDIS_HOST        = local.redis_endpoint
-      REDIS_PORT        = tostring(var.redis_port)
+      HANDLER_MODULE  = "rendezvous_test"
+      RENDEZVOUS_HOST = var.rendezvous_host
+      RENDEZVOUS_PORT = tostring(var.rendezvous_port)
+      REDIS_HOST      = local.redis_endpoint
+      REDIS_PORT      = tostring(var.redis_port)
     }
   }
 

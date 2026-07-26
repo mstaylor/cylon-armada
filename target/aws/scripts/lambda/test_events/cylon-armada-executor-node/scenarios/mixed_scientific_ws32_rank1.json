@@ -1,0 +1,25 @@
+{
+  "workflow_id": "test-mixed_scientific-ws32",
+  "rank": 1,
+  "world_size": 32,
+  "embedding_key": "embedding:test-mixed_scientific-ws32:1",
+  "embedding_metadata": {
+    "token_count": 20,
+    "latency_ms": 300.0,
+    "dimensions": 1024,
+    "model_id": "amazon.titan-embed-text-v2:0"
+  },
+  "scaling": "weak",
+  "context_backend": "cylon",
+  "fmi_channel_type": "direct",
+  "experiment_name": "test_mixed_scientific_weak_ws32",
+  "results_s3_dir": "results/lambda-nodejs/mixed_scientific/weak/",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  },
+  "_note": "Run armada_init first to populate Redis keys for workflow_id=test-mixed_scientific-ws32"
+}

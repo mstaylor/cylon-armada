@@ -57,6 +57,14 @@ WORKFLOW_ARNS = {
 ALL_ARCHITECTURES = list(WORKFLOW_ARNS.keys())
 ALL_SCENARIOS     = ["hydrology", "epidemiology", "seismology", "mixed_scientific"]
 
+# Experiment A / A2 zero-copy benchmark: a single-node state machine with a
+# different input schema (no scenarios / world_size / scaling). Kept separate
+# from WORKFLOW_ARNS so `--arch all` reuse sweeps never fire it by accident;
+# reached explicitly via `--arch benchmark`.
+BENCHMARK_WORKFLOW_ARN = (
+    f"arn:aws:states:{REGION}:{ACCOUNT_ID}:stateMachine:cylon-armada-benchmark-workflow"
+)
+
 SCENARIOS_DIR = Path(__file__).parent.parent.parent.parent / "shared" / "scripts" / "experiment" / "scenarios"
 
 # ---------------------------------------------------------------------------
@@ -115,6 +123,31 @@ def build_sfn_input(arch, scenario, tasks, world_size, experiment_name, workflow
     else:
         return _build_ecs_input(scenario, tasks, world_size, experiment_name,
                                 results_dir, workflow_id, scaling)
+
+
+# ---------------------------------------------------------------------------
+# Experiment A / A2 benchmark input — single-node, no scenarios/world_size
+# ---------------------------------------------------------------------------
+
+def build_benchmark_input(experiment_name, results_s3_dir, batch_sizes, dims,
+                          warmup, reps, seed, matrix_runs):
+    """Payload for the cylon-armada-benchmark state machine.
+
+    Forwarded verbatim to armada_benchmark.handler, which applies its own
+    defaults for any omitted key. matrix_runs is the number of times the whole
+    matrix repeats *inside one Lambda* (writes run_N/ keys); the sweep-level
+    --runs fires separate executions (cold-Lambda variance) instead.
+    """
+    return {
+        "experiment_name": experiment_name,
+        "results_s3_dir":  results_s3_dir,
+        "batch_sizes":     batch_sizes,
+        "dims":            dims,
+        "warmup":          warmup,
+        "reps":            reps,
+        "seed":            seed,
+        "runs":            matrix_runs,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +317,79 @@ def run_sweep(args, sweep_tag=""):
 
 
 # ---------------------------------------------------------------------------
+# Benchmark sweep (Experiment A / A2) — fires the single-node state machine
+# ---------------------------------------------------------------------------
+
+def run_benchmark_sweep(args, sweep_tag=""):
+    """Fire the Experiment A/A2 benchmark state machine `--runs` times and poll
+    S3 for each run's results CSV. No scenario/world_size/scaling loop — the
+    data axis (N x D) is swept inside the Lambda."""
+    sfn = boto3.client("stepfunctions", region_name=REGION)
+    arn = BENCHMARK_WORKFLOW_ARN
+    tag = f"_{sweep_tag}" if sweep_tag else ""
+    results_prefix = args.results_prefix.rstrip("/")
+
+    logger.info("=" * 60)
+    logger.info("Experiment A / A2 zero-copy benchmark")
+    logger.info("  batch_sizes=%s dims=%s warmup=%d reps=%d matrix_runs=%d",
+                args.batch_sizes, args.dims, args.warmup, args.reps, args.matrix_runs)
+    logger.info("=" * 60)
+
+    all_configs = []  # [(exp_name, sfn_input, s3_key), ...]
+    for run in range(1, args.runs + 1):
+        exp_name = f"benchmark_exp_a_run{run}{tag}"[:80]
+        results_s3_dir = f"{results_prefix}/"
+        sfn_input = build_benchmark_input(
+            experiment_name=exp_name,
+            results_s3_dir=results_s3_dir,
+            batch_sizes=args.batch_sizes,
+            dims=args.dims,
+            warmup=args.warmup,
+            reps=args.reps,
+            seed=args.seed + run - 1,
+            matrix_runs=args.matrix_runs,
+        )
+        # Completion marker: the results CSV the handler writes. With matrix_runs>1
+        # the handler nests under run_N/, so the last matrix run is the marker.
+        run_seg = "" if args.matrix_runs == 1 else f"run_{args.matrix_runs}/"
+        s3_key = f"{results_prefix}/{run_seg}{exp_name}_exp_a_zerocopy_results.csv"
+        all_configs.append((exp_name, sfn_input, s3_key))
+
+    logger.info("Firing %d benchmark execution(s)", len(all_configs))
+
+    if args.dry_run:
+        for name, sfn_input, key in all_configs:
+            logger.info("  [dry-run] %s → s3://%s/%s", name, RESULTS_BUCKET, key)
+            logger.info("            input=%s", json.dumps(sfn_input))
+        return
+
+    batch_size = args.max_parallel
+    all_results = {}
+    for i in range(0, len(all_configs), batch_size):
+        batch = all_configs[i:i + batch_size]
+        pending = {}
+        for name, sfn_input, s3_key in batch:
+            try:
+                fire_execution(sfn, arn, name, sfn_input)
+                pending[name] = s3_key
+            except Exception as e:
+                logger.error("Failed to fire %s: %s", name, e)
+                all_results[name] = "FAILED"
+        # The benchmark Lambda runs up to its 900s timeout, so poll at least
+        # that long regardless of the shared --timeout default (600s).
+        batch_results = poll_s3_results(
+            pending,
+            poll_interval=getattr(args, "poll_interval", 20),
+            timeout_seconds=max(getattr(args, "timeout", 600), 900),
+        )
+        all_results.update(batch_results)
+
+    succeeded = sum(1 for s in all_results.values() if s == "SUCCEEDED")
+    failed    = sum(1 for s in all_results.values() if s != "SUCCEEDED")
+    logger.info("Benchmark sweep complete: %d succeeded, %d failed", succeeded, failed)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -291,8 +397,9 @@ def main():
     parser = argparse.ArgumentParser(description="Phase 1 cloud experiment sweep")
 
     parser.add_argument("--arch", required=True,
-                        choices=ALL_ARCHITECTURES + ["all"],
-                        help="Architecture to sweep, or 'all'")
+                        choices=ALL_ARCHITECTURES + ["all", "benchmark"],
+                        help="Architecture to sweep, 'all' (reuse workflows), or "
+                             "'benchmark' (Experiment A/A2 zero-copy state machine)")
     parser.add_argument("--scenario", default="all",
                         choices=ALL_SCENARIOS + ["all"],
                         help="Scenario to run, or 'all'")
@@ -323,7 +430,36 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Print configs without firing executions")
 
+    # --- Experiment A / A2 benchmark options (only used with --arch benchmark) ---
+    bench = parser.add_argument_group("benchmark (--arch benchmark)")
+    bench.add_argument("--batch-sizes", type=int, nargs="+", default=[100, 500, 1000, 5000],
+                       help="Embedding batch sizes N (default: 100 500 1000 5000)")
+    bench.add_argument("--dims", type=int, nargs="+", default=[256, 512, 1024],
+                       help="Embedding dimensions D (default: 256 512 1024)")
+    bench.add_argument("--warmup", type=int, default=3,
+                       help="Warmup reps discarded before timing (default 3)")
+    bench.add_argument("--reps", type=int, default=20,
+                       help="Measured reps per cell (default 20)")
+    bench.add_argument("--seed", type=int, default=42,
+                       help="Base RNG seed; run k uses seed+k-1 (default 42)")
+    bench.add_argument("--matrix-runs", type=int, default=1,
+                       help="Times the whole matrix repeats inside one Lambda "
+                            "(writes run_N/ keys); use --runs for separate executions")
+    bench.add_argument("--results-prefix", default="results/benchmark/exp_a",
+                       help="S3 prefix for benchmark result CSVs "
+                            "(default: results/benchmark/exp_a)")
+
     args = parser.parse_args()
+
+    # Unique sweep tag prevents ExecutionAlreadyExists on retries
+    sweep_tag = datetime.utcnow().strftime("%m%d%H%M")
+
+    # Experiment A / A2 benchmark: separate flow (no scenarios/world_size/scaling).
+    if args.arch == "benchmark":
+        logger.info("Benchmark plan: %d execution(s) (dry_run=%s, tag=%s)",
+                    args.runs, args.dry_run, sweep_tag)
+        run_benchmark_sweep(args, sweep_tag)
+        return
 
     total = (
         (len(ALL_ARCHITECTURES) if args.arch == "all" else 1) *
@@ -332,8 +468,6 @@ def main():
         len(args.scaling) *
         args.runs
     )
-    # Unique sweep tag prevents ExecutionAlreadyExists on retries
-    sweep_tag = datetime.utcnow().strftime("%m%d%H%M")
     logger.info("Sweep plan: %d total executions (dry_run=%s, tag=%s)",
                 total, args.dry_run, sweep_tag)
 

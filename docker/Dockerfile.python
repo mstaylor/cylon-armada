@@ -84,7 +84,11 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
     pip install langchain-aws langchain-core cython cloudmesh-common pandas \
-        llama-index-core llama-index-embeddings-bedrock
+        llama-index-core llama-index-embeddings-bedrock \
+        protobuf flatbuffers
+# protobuf + flatbuffers: runtime deps for Experiment A serialization baselines.
+# The generated code (proto/*_pb2.py, flatbuffers *.py) is committed and
+# hot-reloaded from S3, so flatc/protoc are build-time only and not needed here.
 
 # ---------------------------------------------------------------------------
 # Copy cylon-armada source code

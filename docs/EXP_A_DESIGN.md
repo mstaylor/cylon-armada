@@ -50,14 +50,18 @@ dimension. The scalability of the underlying Cylon collective layer at billions 
 
 | Format | What it is | Why it's here |
 |--------|-----------|---------------|
-| **`arrow_ipc`** | `ContextTable.to_ipc()` / `ContextTable.from_ipc()` (C++ Arrow IPC stream) | The proposed zero-copy data plane; deserialization reads directly into the FixedSizeList buffer |
-| **`base64_tobytes`** | `base64(np.tobytes)` → `np.frombuffer` | The framework's current FMI transfer encoding (`run_action.py:90`); included so the comparison reflects the existing implementation |
+| **`arrow_ipc`** | Arrow RecordBatch IPC stream (`pa.ipc.new_stream`) | The proposed zero-copy data-plane edge; deserialization reads directly into the FixedSizeList buffer. This is what crosses an operator edge (the proposal's Arrow-IPC hypothesis), not the ContextTable store snapshot |
 | **`json`** | `json.dumps(list)` → `json.loads` → `np.array` | JSON-over-HTTP baseline (proposal); corresponds to the metadata path (`manager.py:245`) |
 | **`pickle`** | `pickle.dumps(arr, HIGHEST_PROTOCOL)` → `pickle.loads` | Pickle-over-gRPC baseline (proposal) |
-| **`protobuf`** | `EmbeddingBatch { int32 n; int32 dim; repeated float values [packed]; }` | Binary-serialization baseline (proposal); expected smaller but measurable gain vs Arrow. `_pb2.py` pre-generated and committed so the harness needs no `protoc` at run time |
+| **`protobuf`** | `EmbeddingBatch { int32 n; int32 dim; repeated float values [packed]; }` | Protobuf-over-gRPC baseline (proposal). Python protobuf marshals repeated floats element-wise (slow); the proposal notes this is a GIL artifact and proposes a native Go comparison. `_pb2.py` committed so the harness needs no `protoc` at run time |
+| **`flatbuffers`** | zero-copy `[float]` vector (`fbs/embedding_batch.fbs`) | FlatBuffers-over-gRPC baseline (proposal). The zero-copy binary format; isolates Arrow's columnar-layout advantage from generic zero-copy binary. Generated code committed so no `flatc` at run time |
 
-Secondary isolation variant: `arrow_ipc_pyarrow` (pure `pa.ipc.new_stream` on a RecordBatch) to
-separate Arrow-IPC itself from ContextTable overhead.
+Supplementary formats (not proposal Exp A baselines, kept for transparency):
+
+| Format | What it is | Why it's here |
+|--------|-----------|---------------|
+| `base64_tobytes` | `base64(np.tobytes)` → `np.frombuffer` | The framework's current FMI transfer encoding (`run_action.py:90`) |
+| `contexttable_ipc` | `ContextTable.to_ipc()` / `from_ipc()` (full 10-column store) | The store snapshot, not the data-plane edge. Transferred zero-copy (`pyarrow_wrap_buffer` + `MakeFromIpcBuffer`) with the O(N) context_id index build deferred to first keyed access. Above pickle at D=1024, near the bare RecordBatch. The ContextTable is the subject of Experiment J |
 
 ## 4. Metrics (per format × N × D × payload-type)
 
@@ -105,10 +109,10 @@ Findings from the codebase study drive these decisions:
 | `target/shared/scripts/experiment/exp_a_zerocopy.py` | Benchmark A + A2. Importable `run(config)->list[dict]`; `__main__` for local. Reuses `ExperimentBenchmark` |
 | `target/shared/scripts/experiment/examples/run_exp_a.sh` | Local wrapper: sets the two env exports, runs in `cylon_dev` |
 | `target/shared/scripts/results/chart_zerocopy.py` | New charts (throughput-by-format, memory-copies, schema-compat matrix) in the existing style |
-| `target/aws/scripts/lambda/python/armada_benchmark.py` | Thin Lambda handler → `exp_a_zerocopy.run()` → S3 |
-| `target/aws/scripts/step_functions/workflow_benchmark.asl.json` | Benchmark state machine: Task state invoking the benchmark Lambda (single-node), consistent with the existing `workflow*.asl.json` set |
-| Driver: `cloud_sweep`-style starter | Starts the benchmark state-machine execution and polls S3 for results (mirrors `target/aws/scripts/experiment/cloud_sweep.py`) |
-| Terraform block: `cylon-armada-benchmark` Lambda + state machine | Dedicated fn, `HANDLER_MODULE=armada_benchmark`, **10240 MB** (proposal's canonical config), plus the benchmark state machine. *User applies.* |
+| `target/aws/scripts/lambda/python/armada_benchmark.py` | Thin Lambda handler → `exp_a_zerocopy.run()` → S3. Single-node, no Map. Applies defaults for every event field; records the configured Lambda memory as provenance |
+| `target/aws/scripts/step_functions/workflow_benchmark.asl.json` | Benchmark state machine: a single Task (no Map) invoking the benchmark Lambda, `STANDARD` type. Forwards the whole input (no `Parameters` block) so optional fields never trip the SFN missing-field failure |
+| Driver: `cloud_sweep.py --arch benchmark` | The existing sweep driver, extended with a `benchmark` arch (kept out of `--arch all`) that skips the scenario/world-size loop, fires `cylon-armada-benchmark-workflow`, and polls S3 for each run's results CSV. Reuses `fire_execution` + `poll_s3_results` |
+| Terraform block: `cylon-armada-benchmark` Lambda + state machine | Dedicated fn, `HANDLER_MODULE=armada_benchmark`, **10240 MB** via `benchmark_memory_mb`, `benchmark_timeout` 900 s; plus the `benchmark_workflow` state machine and its SFN invoke permission. *User applies.* |
 
 Output dir: fresh `results/exp_a_zerocopy/`. It **does not touch** the protected domain data
 (seismology / mixed_scientific / epidemiology / hydrology).
@@ -137,3 +141,91 @@ Output dir: fresh `results/exp_a_zerocopy/`. It **does not touch** the protected
   (single-node, so a plain Task state rather than a Map), and a `cloud_sweep`-style driver starts the
   execution and collects results from S3. This keeps Experiment A on the same deployed orchestration
   layer as Experiments B/E rather than on a one-off invocation path.
+
+## 9. How to run
+
+Four stages: validate locally, deploy, fire on AWS, collect and chart. All paths write the
+same CSVs, so the same `results.pipeline` step charts local and cloud runs alike.
+
+### 9.1 Local (develop and validate in `cylon_dev`)
+
+Two env exports (dynamic loader + package path), then run the benchmark as a module:
+
+```bash
+source ~/miniconda3/etc/profile.d/conda.sh && conda activate cylon_dev
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH            # finds libcylon_armada.so
+export PYTHONPATH=/home/parallels/cylon-armada/python:$PYTHONPATH   # finds the cylon_armada pkg
+cd target/shared/scripts
+
+python -m experiment.exp_a_zerocopy \
+    --batch-sizes 100 500 1000 5000 --dims 256 512 1024 \
+    --warmup 3 --reps 20 --runs 3 \
+    --output experiment/results/exp_a_zerocopy
+```
+
+Locally `protobuf` and `flatbuffers` are skipped unless installed (`pip install protobuf
+flatbuffers`) — 5 formats vs the 7 the Docker image runs. `arrow_ipc`/`contexttable_ipc` need
+the compiled extension (the two exports above); a path miss is never a "rebuild required" problem.
+
+Charts + tweakable notebook from the local results:
+
+```bash
+python -m results.pipeline --experiment zerocopy \
+    --local-dir experiment/results/exp_a_zerocopy --chart-format png
+```
+
+### 9.2 Deploy (make it live on AWS)
+
+A code fix is not live until the artifact path is updated (Code Change Rule 5). The C++/Cython
+IPC changes and the `protobuf`/`flatbuffers` deps travel in the image; Python-only edits
+hot-reload from S3.
+
+```bash
+# 1. Rebuild + push the Python image (C++/Cython IPC changes + new serialization deps)
+docker build -t cylon-armada-python -f docker/Dockerfile.python .
+#    docker tag + push to ECR :python-latest  (per your ECR login)
+
+# 2. Sync shared scripts + the benchmark handler to S3 (hot-reload; no rebuild for py-only edits)
+aws s3 sync target/shared/scripts/            s3://<scripts-bucket>/<prefix>/
+aws s3 sync target/aws/scripts/lambda/python/ s3://<scripts-bucket>/<prefix>/lambda/
+
+# 3. Create the 10 GB benchmark Lambda + benchmark state machine
+cd target/aws/scripts/terraform && terraform apply
+```
+
+Verify the benchmark Lambda's `S3_SCRIPTS_PREFIX` matches the prefix you synced to — prefix drift
+has silently served stale code before (CLAUDE.md, Debugging table).
+
+### 9.3 Cloud run (fire the benchmark state machine)
+
+Always dry-run first (prints the payloads and the S3 completion keys, fires nothing):
+
+```bash
+cd target/aws/scripts/experiment
+python cloud_sweep.py --arch benchmark --runs 4 \
+    --batch-sizes 100 500 1000 5000 --dims 256 512 1024 \
+    --warmup 3 --reps 20 --dry-run
+
+python cloud_sweep.py --arch benchmark --runs 4 \
+    --batch-sizes 100 500 1000 5000 --dims 256 512 1024 --warmup 3 --reps 20
+```
+
+`--runs N` fires N separate executions (cold-Lambda variance for error bars); `--matrix-runs M`
+repeats the whole matrix inside one Lambda (writes `run_M/` keys). The driver polls S3 for each
+run's `..._exp_a_zerocopy_results.csv`. Results land under
+`s3://<results-bucket>/results/benchmark/exp_a/` (override with `--results-prefix`).
+
+### 9.4 Collect and chart the cloud results
+
+```bash
+aws s3 sync s3://<results-bucket>/results/benchmark/exp_a/ \
+    experiment/results/exp_a_zerocopy_cloud/
+python -m results.pipeline --experiment zerocopy \
+    --local-dir experiment/results/exp_a_zerocopy_cloud --chart-format png
+```
+
+### 9.5 Cost note
+
+The benchmark Lambda bills only per invocation — no idle cost — so it can stay applied (it is
+reused for Experiment J's L3 test). Experiment A adds no GPU/EC2, so there is nothing here to
+tear down; the continuously billing `terraform-gpu` / `terraform-ec2` modules are separate.

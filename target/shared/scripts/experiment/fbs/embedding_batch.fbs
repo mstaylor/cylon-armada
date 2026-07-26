@@ -1,0 +1,17 @@
+// Experiment A zero-copy binary baseline: a dense embedding batch.
+// FlatBuffers stores the float vector inline so it can be read back without
+// deserialization (zero-copy), the same property Arrow provides. This isolates
+// Arrow's columnar-layout contribution from the generic zero-copy-binary
+// advantage (proposal Experiment A).
+//
+// Namespace is deliberately NOT `cylon_armada` to avoid colliding with the
+// real compiled package on sys.path.
+namespace expa_fbs;
+
+table EmbeddingBatch {
+  n:int;
+  dim:int;
+  values:[float];
+}
+
+root_type EmbeddingBatch;

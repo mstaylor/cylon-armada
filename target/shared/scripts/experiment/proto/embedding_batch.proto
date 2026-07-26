@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+// Experiment A binary-serialization baseline: a dense embedding batch.
+// Mirrors the ContextTable payload (N rows of `dim` float32) as a packed
+// repeated float, so the protobuf format is compared on the same logical data
+// the framework moves between operators.
+package cylon_armada.exp_a;
+
+message EmbeddingBatch {
+  int32 n = 1;                                // number of rows
+  int32 dim = 2;                              // embedding dimensionality
+  repeated float values = 3 [packed = true]; // row-major, length n*dim
+}

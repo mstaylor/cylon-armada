@@ -1,0 +1,21 @@
+{
+  "workflow_id": "manual-epidemiology-ws4",
+  "tasks": [
+    "Model the spread of an influenza-like illness with R0=1.8, mean generation time 3.2 days, in a metropolitan area of 2.1 million. Estimate peak timing and attack rate under no intervention.",
+    "Analyze the epidemic trajectory for a respiratory pathogen with R0=1.9, serial interval 3.0 days, in an urban population of 2.0 million. Predict the infection peak and final size.",
+    "Evaluate the effectiveness of a vaccination campaign achieving 60% coverage with a vaccine of 85% efficacy against a pathogen with R0=2.5. What is the herd immunity threshold?",
+    "Assess the impact of vaccinating 55% of the population with a 90% effective vaccine against a disease with R0=2.3. Does coverage achieve herd immunity?"
+  ],
+  "scaling": "weak",
+  "world_size": 4,
+  "context_backend": "redis",
+  "results_s3_dir": "results/lambda-python/epidemiology/weak/",
+  "experiment_name": "lambda_python_epidemiology_weak_ws4_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

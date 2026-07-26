@@ -491,8 +491,13 @@ class ContextManager:
         self._cylon["table"] = CylonContextTable.from_ipc(ipc_data)
         logger.info("Loaded ContextTable from IPC: %d entries", self._cylon["table"].size)
 
-    def to_ipc(self) -> Optional[bytes]:
-        """Serialize ContextTable to Arrow IPC bytes."""
+    def to_ipc(self):
+        """Serialize ContextTable to Arrow IPC.
+
+        Returns a zero-copy ``pyarrow.Buffer`` (or ``None`` if not the cylon
+        backend). The Buffer supports the buffer protocol, so it works anywhere
+        bytes were used (``redis.set``, ``bytes(buf)``, ``load_from_ipc``).
+        """
         if self._cylon is None:
             return None
         return self._cylon["table"].to_ipc()

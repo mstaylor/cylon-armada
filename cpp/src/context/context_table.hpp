@@ -86,6 +86,12 @@ class ContextTable {
 
   static Status MakeFromIpc(const uint8_t* data, int64_t size,
                             std::shared_ptr<ContextTable>* out);
+  // Zero-copy variant: reads directly from an existing Arrow buffer without the
+  // defensive copy MakeFromIpc makes. Safe only when the buffer outlives the
+  // ContextTable; the resulting batch_ references it via Arrow's shared_ptr
+  // chain, so passing an owned buffer (e.g. a pyarrow.Buffer) keeps it alive.
+  static Status MakeFromIpcBuffer(std::shared_ptr<arrow::Buffer> buffer,
+                                  std::shared_ptr<ContextTable>* out);
 
   /// Insert or update a context entry. O(1).
   Status Put(const std::string& context_id,
@@ -119,9 +125,17 @@ class ContextTable {
 
   Status Compact();
   Status ToIpc(std::vector<uint8_t>* data);
+  // Zero-copy variant: hands back the Arrow IPC buffer directly (no copy into a
+  // std::vector). Used by the Python binding via pyarrow_wrap_buffer so to_ipc()
+  // returns a zero-copy pyarrow.Buffer. ToIpc(vector) delegates to this.
+  Status ToIpcBuffer(std::shared_ptr<arrow::Buffer>* out);
 
   static arrow::Result<std::shared_ptr<ContextTable>> FromIpc(
       const uint8_t* data, int64_t size);
+  // Zero-copy read from an owned buffer (no defensive copy). FromIpc delegates
+  // to this after copying raw bytes into an owned buffer.
+  static arrow::Result<std::shared_ptr<ContextTable>> FromIpcBuffer(
+      std::shared_ptr<arrow::Buffer> buffer);
 
   Status Broadcast(const std::shared_ptr<CylonContext>& ctx, int root = 0);
   Status AllGather(const std::shared_ptr<CylonContext>& ctx);
@@ -131,6 +145,9 @@ class ContextTable {
 
   static std::shared_ptr<arrow::Schema> MakeSchema(int embedding_dim);
   void RebuildIndex();
+  /// Build the context_id index if it was deferred by a bulk load (from_ipc).
+  /// Keyed operations (Put/Get/Remove) call this before touching index_.
+  void EnsureIndex();
 
   /// Flush builders into the main batch if dirty.
   Status MaterializeIfDirty();
@@ -139,6 +156,10 @@ class ContextTable {
   std::unique_ptr<ContextBuilders> builders_;
   bool dirty_ = false;
   int64_t builder_count_ = 0;
+  // False after a bulk load (FromRecordBatch) that deferred RebuildIndex, so the
+  // O(N) index build is paid on first keyed access rather than on load. Put
+  // maintains the index incrementally, so it is true during the builder path.
+  bool index_valid_ = true;
   std::shared_ptr<arrow::Schema> schema_;
   std::unordered_map<std::string, int64_t> index_;
   std::unordered_set<int64_t> deleted_;

@@ -73,6 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
                         default="context_reuse_results",
                         help="Notebook filename (without .ipynb)")
 
+    # Experiment family: which chart/notebook set to produce.
+    parser.add_argument("--experiment", type=str, default="reuse",
+                        choices=["reuse", "zerocopy"],
+                        help="reuse = cost/reuse charts (download/aggregate/charts/notebook); "
+                             "zerocopy = Experiment A/A2 charts (charts/notebook on the results dir)")
+
     # Steps
     parser.add_argument("--step", type=str, action="append", choices=STEPS,
                         help="Run specific step(s). Default: all steps.")
@@ -138,6 +144,41 @@ def run_pipeline(config: PipelineConfig, steps: list, local_dir: str = None) -> 
         logger.info("Notebook saved to %s", notebook_path)
 
 
+def run_zerocopy_pipeline(results_dir: str, steps: list, chart_format: str = "svg",
+                          chart_dpi: int = 300, notebook_name: str = "exp_a_zerocopy_charts") -> None:
+    """Experiment A / A2 visuals pipeline: charts -> notebook on a results dir.
+
+    exp_a_zerocopy.py already writes final CSVs (medians computed in-run), so
+    there is no download/aggregate — the charts and notebook read the CSVs in
+    `results_dir` directly. Charts land in `results_dir/charts`; the notebook is
+    written to `results_dir` with relative paths so it runs from there.
+    """
+    from .chart_zerocopy import generate_zerocopy_charts
+    from .notebook_generator import generate_zerocopy_notebook
+
+    results_csv = os.path.join(results_dir, "exp_a_zerocopy_results.csv")
+    if not os.path.exists(results_csv):
+        logger.error("No exp_a_zerocopy_results.csv in %s — run exp_a_zerocopy.py first.", results_dir)
+        return
+    charts_dir = os.path.join(results_dir, "charts")
+
+    if "charts" in steps:
+        logger.info("=== Step: Zero-copy charts ===")
+        written = generate_zerocopy_charts(results_dir, charts_dir, chart_format, chart_dpi)
+        logger.info("Wrote %d chart(s) to %s", len(written), charts_dir)
+
+    if "notebook" in steps:
+        logger.info("=== Step: Zero-copy notebook ===")
+        notebook_path = os.path.join(results_dir, f"{notebook_name}.ipynb")
+        generate_zerocopy_notebook(
+            results_csv="exp_a_zerocopy_results.csv",   # relative: run from results_dir
+            a2_csv="exp_a2_schema_compat.csv",
+            output_path=notebook_path,
+            output_chart_dir="charts",
+        )
+        logger.info("Notebook saved to %s", notebook_path)
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -146,6 +187,23 @@ def main():
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    steps = args.step if args.step else STEPS
+
+    # Zero-copy family (Experiment A / A2): simpler charts->notebook flow on the
+    # results dir; bypasses the cost/reuse config + aggregate machinery.
+    if args.experiment == "zerocopy":
+        if not args.local_dir:
+            parser.error("--local-dir (the exp_a_zerocopy results dir) is required for --experiment zerocopy")
+        run_zerocopy_pipeline(
+            results_dir=args.local_dir,
+            steps=steps,
+            chart_format=args.chart_format,
+            chart_dpi=args.chart_dpi,
+            notebook_name=(args.notebook_name if args.notebook_name != "context_reuse_results"
+                           else "exp_a_zerocopy_charts"),
+        )
+        return
 
     # Build config
     if args.config:

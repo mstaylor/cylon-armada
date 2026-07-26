@@ -23,7 +23,7 @@ from libc.stdint cimport int64_t, uint8_t
 from pycylon.common.status cimport CStatus
 from pycylon.ctx.context cimport CCylonContext, CylonContext
 from pycylon.api.lib cimport pycylon_unwrap_context
-from pyarrow.lib cimport CRecordBatch, pyarrow_wrap_batch
+from pyarrow.lib cimport CRecordBatch, CBuffer, pyarrow_wrap_batch, pyarrow_wrap_buffer, pyarrow_unwrap_buffer
 
 # CContextMetadata, CContextTable, CSearchResult, CSaveToRedis, CLoadFromRedis,
 # CSaveToS3, CLoadFromS3 are declared in context_table.pxd (same package) and
@@ -170,31 +170,50 @@ cdef class ContextTable:
             raise Exception(f"Compact failed: {status.get_msg().decode()}")
 
     def to_ipc(self):
-        """Serialize to Arrow IPC bytes.
+        """Serialize to Arrow IPC as a zero-copy ``pyarrow.Buffer``.
 
-        Returns:
-            bytes object containing the Arrow IPC stream.
+        Returns a ``pyarrow.Buffer`` viewing the Arrow-owned IPC bytes with no
+        copy (via ``pyarrow_wrap_buffer``). The Buffer supports the Python buffer
+        protocol, so it drops in wherever bytes were used (``redis.set``,
+        ``bytes(buf)``, ``from_ipc``). The previous ``bytes(data)`` path copied a
+        std::vector element-by-element (O(N), ~19ms for a 4MB buffer).
         """
-        cdef vector[uint8_t] data
-        cdef CStatus status = self.table_ptr.get().ToIpc(&data)
+        cdef shared_ptr[CBuffer] buf
+        cdef CStatus status = self.table_ptr.get().ToIpcBuffer(&buf)
         if not status.is_ok():
             raise Exception(f"ToIpc failed: {status.get_msg().decode()}")
-        return bytes(data)
+        return pyarrow_wrap_buffer(buf)
 
     @staticmethod
-    def from_ipc(bytes data not None):
+    def from_ipc(data not None):
         """Deserialize from Arrow IPC bytes.
 
         Args:
-            data: bytes object from to_ipc().
+            data: any buffer-protocol object from to_ipc() — a ``pyarrow.Buffer``
+                (zero-copy) or ``bytes``/``memoryview``.
 
         Returns:
             A new ContextTable.
         """
-        cdef const uint8_t* ptr = <const uint8_t*> data
-        cdef int64_t size = len(data)
         cdef shared_ptr[CContextTable] c_table
-        cdef CStatus status = CContextTable.MakeFromIpc(ptr, size, &c_table)
+        cdef CStatus status
+        cdef shared_ptr[CBuffer] cbuf
+        cdef const uint8_t[:] view
+        cdef int64_t size
+
+        if isinstance(data, pa.Buffer):
+            # Zero-copy: hold the Arrow buffer by reference (no defensive copy).
+            # Safe because the ContextTable keeps it alive via Arrow's shared_ptr.
+            cbuf = pyarrow_unwrap_buffer(data)
+            status = CContextTable.MakeFromIpcBuffer(cbuf, &c_table)
+        else:
+            # bytes / memoryview: the source may be freed, so MakeFromIpc copies.
+            # Normalize to unsigned-char format so the typed memoryview matches.
+            view = memoryview(data).cast('B')
+            size = view.shape[0]
+            if size == 0:
+                raise Exception("FromIpc failed: empty buffer")
+            status = CContextTable.MakeFromIpc(&view[0], size, &c_table)
         if not status.is_ok():
             raise Exception(f"FromIpc failed: {status.get_msg().decode()}")
 

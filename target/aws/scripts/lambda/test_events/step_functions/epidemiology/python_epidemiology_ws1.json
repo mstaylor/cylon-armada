@@ -1,0 +1,18 @@
+{
+  "workflow_id": "manual-epidemiology-ws1",
+  "tasks": [
+    "Model the spread of an influenza-like illness with R0=1.8, mean generation time 3.2 days, in a metropolitan area of 2.1 million. Estimate peak timing and attack rate under no intervention."
+  ],
+  "scaling": "weak",
+  "world_size": 1,
+  "context_backend": "redis",
+  "results_s3_dir": "results/lambda-python/epidemiology/weak/",
+  "experiment_name": "lambda_python_epidemiology_weak_ws1_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

@@ -21,7 +21,7 @@ from libc.stdint cimport int64_t, uint8_t
 from pycylon.common.status cimport CStatus
 from pycylon.ctx.context cimport CCylonContext
 
-from pyarrow.lib cimport CRecordBatch, CSchema
+from pyarrow.lib cimport CRecordBatch, CSchema, CBuffer
 
 
 cdef extern from "cylon/simd/simd_ops.hpp" namespace "cylon::simd":
@@ -42,6 +42,10 @@ cdef extern from "cylon_armada/context/context_table.hpp" namespace "cylon::cont
     cdef cppclass CContextTable "cylon::context::ContextTable":
         @staticmethod
         CStatus MakeEmpty(int embedding_dim, shared_ptr[CContextTable]* out)
+
+        @staticmethod
+        CStatus MakeFromIpcBuffer(shared_ptr[CBuffer] buffer,
+                                  shared_ptr[CContextTable]* out)
 
         @staticmethod
         CStatus MakeFromIpc(const uint8_t* data, int64_t size,
@@ -72,6 +76,7 @@ cdef extern from "cylon_armada/context/context_table.hpp" namespace "cylon::cont
         shared_ptr[CRecordBatch] GetWorkflow(const string& workflow_id)
 
         CStatus ToIpc(vector[uint8_t]* data)
+        CStatus ToIpcBuffer(shared_ptr[CBuffer]* out)
 
         CStatus Broadcast(const shared_ptr[CCylonContext]& ctx, int root)
         CStatus AllGather(const shared_ptr[CCylonContext]& ctx)

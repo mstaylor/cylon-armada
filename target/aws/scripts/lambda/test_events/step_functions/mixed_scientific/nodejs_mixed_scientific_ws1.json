@@ -1,0 +1,19 @@
+{
+  "workflow_id": "manual-mixed_scientific-ws1",
+  "tasks": [
+    "Analyze the photometric redshift prediction z=0.45 for an elliptical galaxy with SDSS magnitudes u=22.1, g=20.9, r=20.3, i=19.7, z=19.1. Classify the galaxy type."
+  ],
+  "scaling": "weak",
+  "world_size": 1,
+  "context_backend": "cylon",
+  "fmi_channel_type": "direct",
+  "results_s3_dir": "results/lambda-nodejs/mixed_scientific/weak/",
+  "experiment_name": "lambda_nodejs_mixed_scientific_weak_ws1_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

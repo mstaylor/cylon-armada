@@ -1,0 +1,178 @@
+{
+  "epidemiology": [
+    {
+      "ws": 1,
+      "n_tasks": 1,
+      "nodejs": "epidemiology/nodejs_epidemiology_ws1.json",
+      "python": "epidemiology/python_epidemiology_ws1.json"
+    },
+    {
+      "ws": 2,
+      "n_tasks": 2,
+      "nodejs": "epidemiology/nodejs_epidemiology_ws2.json",
+      "python": "epidemiology/python_epidemiology_ws2.json"
+    },
+    {
+      "ws": 4,
+      "n_tasks": 4,
+      "nodejs": "epidemiology/nodejs_epidemiology_ws4.json",
+      "python": "epidemiology/python_epidemiology_ws4.json"
+    },
+    {
+      "ws": 8,
+      "n_tasks": 8,
+      "nodejs": "epidemiology/nodejs_epidemiology_ws8.json",
+      "python": "epidemiology/python_epidemiology_ws8.json"
+    },
+    {
+      "ws": 16,
+      "n_tasks": 16,
+      "nodejs": "epidemiology/nodejs_epidemiology_ws16.json",
+      "python": "epidemiology/python_epidemiology_ws16.json"
+    },
+    {
+      "ws": 32,
+      "n_tasks": 32,
+      "nodejs": "epidemiology/nodejs_epidemiology_ws32.json",
+      "python": "epidemiology/python_epidemiology_ws32.json"
+    },
+    {
+      "ws": 64,
+      "n_tasks": 32,
+      "nodejs": "epidemiology/nodejs_epidemiology_ws64.json",
+      "python": "epidemiology/python_epidemiology_ws64.json"
+    }
+  ],
+  "hydrology": [
+    {
+      "ws": 1,
+      "n_tasks": 1,
+      "nodejs": "hydrology/nodejs_hydrology_ws1.json",
+      "python": "hydrology/python_hydrology_ws1.json"
+    },
+    {
+      "ws": 2,
+      "n_tasks": 2,
+      "nodejs": "hydrology/nodejs_hydrology_ws2.json",
+      "python": "hydrology/python_hydrology_ws2.json"
+    },
+    {
+      "ws": 4,
+      "n_tasks": 4,
+      "nodejs": "hydrology/nodejs_hydrology_ws4.json",
+      "python": "hydrology/python_hydrology_ws4.json"
+    },
+    {
+      "ws": 8,
+      "n_tasks": 8,
+      "nodejs": "hydrology/nodejs_hydrology_ws8.json",
+      "python": "hydrology/python_hydrology_ws8.json"
+    },
+    {
+      "ws": 16,
+      "n_tasks": 16,
+      "nodejs": "hydrology/nodejs_hydrology_ws16.json",
+      "python": "hydrology/python_hydrology_ws16.json"
+    },
+    {
+      "ws": 32,
+      "n_tasks": 32,
+      "nodejs": "hydrology/nodejs_hydrology_ws32.json",
+      "python": "hydrology/python_hydrology_ws32.json"
+    },
+    {
+      "ws": 64,
+      "n_tasks": 32,
+      "nodejs": "hydrology/nodejs_hydrology_ws64.json",
+      "python": "hydrology/python_hydrology_ws64.json"
+    }
+  ],
+  "seismology": [
+    {
+      "ws": 1,
+      "n_tasks": 1,
+      "nodejs": "seismology/nodejs_seismology_ws1.json",
+      "python": "seismology/python_seismology_ws1.json"
+    },
+    {
+      "ws": 2,
+      "n_tasks": 2,
+      "nodejs": "seismology/nodejs_seismology_ws2.json",
+      "python": "seismology/python_seismology_ws2.json"
+    },
+    {
+      "ws": 4,
+      "n_tasks": 4,
+      "nodejs": "seismology/nodejs_seismology_ws4.json",
+      "python": "seismology/python_seismology_ws4.json"
+    },
+    {
+      "ws": 8,
+      "n_tasks": 8,
+      "nodejs": "seismology/nodejs_seismology_ws8.json",
+      "python": "seismology/python_seismology_ws8.json"
+    },
+    {
+      "ws": 16,
+      "n_tasks": 16,
+      "nodejs": "seismology/nodejs_seismology_ws16.json",
+      "python": "seismology/python_seismology_ws16.json"
+    },
+    {
+      "ws": 32,
+      "n_tasks": 32,
+      "nodejs": "seismology/nodejs_seismology_ws32.json",
+      "python": "seismology/python_seismology_ws32.json"
+    },
+    {
+      "ws": 64,
+      "n_tasks": 32,
+      "nodejs": "seismology/nodejs_seismology_ws64.json",
+      "python": "seismology/python_seismology_ws64.json"
+    }
+  ],
+  "mixed_scientific": [
+    {
+      "ws": 1,
+      "n_tasks": 1,
+      "nodejs": "mixed_scientific/nodejs_mixed_scientific_ws1.json",
+      "python": "mixed_scientific/python_mixed_scientific_ws1.json"
+    },
+    {
+      "ws": 2,
+      "n_tasks": 2,
+      "nodejs": "mixed_scientific/nodejs_mixed_scientific_ws2.json",
+      "python": "mixed_scientific/python_mixed_scientific_ws2.json"
+    },
+    {
+      "ws": 4,
+      "n_tasks": 4,
+      "nodejs": "mixed_scientific/nodejs_mixed_scientific_ws4.json",
+      "python": "mixed_scientific/python_mixed_scientific_ws4.json"
+    },
+    {
+      "ws": 8,
+      "n_tasks": 8,
+      "nodejs": "mixed_scientific/nodejs_mixed_scientific_ws8.json",
+      "python": "mixed_scientific/python_mixed_scientific_ws8.json"
+    },
+    {
+      "ws": 16,
+      "n_tasks": 16,
+      "nodejs": "mixed_scientific/nodejs_mixed_scientific_ws16.json",
+      "python": "mixed_scientific/python_mixed_scientific_ws16.json"
+    },
+    {
+      "ws": 32,
+      "n_tasks": 32,
+      "nodejs": "mixed_scientific/nodejs_mixed_scientific_ws32.json",
+      "python": "mixed_scientific/python_mixed_scientific_ws32.json"
+    },
+    {
+      "ws": 64,
+      "n_tasks": 48,
+      "nodejs": "mixed_scientific/nodejs_mixed_scientific_ws64.json",
+      "python": "mixed_scientific/python_mixed_scientific_ws64.json"
+    }
+  ]
+}

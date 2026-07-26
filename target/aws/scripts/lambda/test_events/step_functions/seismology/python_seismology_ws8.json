@@ -1,0 +1,25 @@
+{
+  "workflow_id": "manual-seismology-ws8",
+  "tasks": [
+    "Assess the seismic hazard for a site 15 km from an active strike-slip fault with a slip rate of 8 mm/yr and maximum credible earthquake M7.2. Estimate the 475-year return period PGA.",
+    "Evaluate the earthquake hazard at a location 18 km from a strike-slip fault slipping at 7.5 mm/yr with Mmax=7.0. Calculate the probabilistic ground motion for 10% exceedance in 50 years.",
+    "Analyze the ground motion prediction for a M6.5 earthquake at 25 km epicentral distance on a VS30=360 m/s site. Compare NGA-West2 GMPE estimates for PGA and SA at 0.2s and 1.0s.",
+    "Estimate ground shaking from a M6.3 event at 28 km distance on a site with VS30=380 m/s using multiple ground motion models. Quantify epistemic uncertainty in spectral acceleration.",
+    "Characterize the seismogenic potential of a 120 km thrust fault segment with 3 mm/yr slip rate and paleoseismic evidence of 4 events in the last 8000 years. Estimate recurrence interval.",
+    "Analyze the earthquake recurrence for a 135 km reverse fault with 2.8 mm/yr slip rate. Paleoseismic trenching reveals 5 surface-rupturing events over 10,000 years. Fit a renewal model.",
+    "Model the aftershock sequence following a M7.0 mainshock using the modified Omori-Utsu law. Predict the number of M\u22654.0 aftershocks in the first 30 days.",
+    "Forecast aftershock activity for a M6.8 mainshock using ETAS (Epidemic-Type Aftershock Sequence) parameters. Estimate the probability of a M\u22655.5 event within 7 days."
+  ],
+  "scaling": "weak",
+  "world_size": 8,
+  "context_backend": "redis",
+  "results_s3_dir": "results/lambda-python/seismology/weak/",
+  "experiment_name": "lambda_python_seismology_weak_ws8_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

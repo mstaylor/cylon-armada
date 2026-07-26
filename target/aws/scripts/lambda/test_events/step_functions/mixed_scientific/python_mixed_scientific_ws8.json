@@ -1,0 +1,25 @@
+{
+  "workflow_id": "manual-mixed_scientific-ws8",
+  "tasks": [
+    "Analyze the photometric redshift prediction z=0.45 for an elliptical galaxy with SDSS magnitudes u=22.1, g=20.9, r=20.3, i=19.7, z=19.1. Classify the galaxy type.",
+    "Evaluate the redshift estimate z=0.43 for a galaxy with magnitudes u=22.3, g=21.0, r=20.4, i=19.8, z=19.2. Is this consistent with an elliptical morphology?",
+    "Assess the AstroMAE model accuracy for a batch of 256 galaxies with mean predicted redshift z=0.31, MAE=0.021. How does this compare to spectroscopic requirements?",
+    "Analyze the cost-effectiveness of serverless inference for 500K galaxy images at $0.38 per 12.6GB partition versus HPC GPU at $2.50/hour.",
+    "For a spiral galaxy with color indices u-g=0.89, g-r=0.58, r-i=0.55, i-z=0.32, classify the morphological type and estimate the star formation rate.",
+    "Evaluate the photometric redshift bias for a sample of 1000 galaxies at z>1.0. What systematic effects cause catastrophic outliers?",
+    "Model the flood risk for a 280 km\u00b2 watershed with 1050 mm annual precipitation, 58% forest cover, and clay loam soils. Estimate the 100-year peak discharge.",
+    "Assess the flood hazard for a 265 km\u00b2 catchment receiving 1080 mm rainfall, with 60% forested land and clay soils. Calculate the design flood for a 100-year event."
+  ],
+  "scaling": "weak",
+  "world_size": 8,
+  "context_backend": "redis",
+  "results_s3_dir": "results/lambda-python/mixed_scientific/weak/",
+  "experiment_name": "lambda_python_mixed_scientific_weak_ws8_manual",
+  "config": {
+    "llm_model_id": "amazon.nova-lite-v1:0",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0",
+    "embedding_dimensions": 1024,
+    "similarity_threshold": 0.85,
+    "region": "us-east-1"
+  }
+}

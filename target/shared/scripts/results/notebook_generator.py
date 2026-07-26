@@ -18,7 +18,10 @@ def _make_cell(cell_type: str, source: str, **kwargs) -> dict:
     cell = {
         "cell_type": cell_type,
         "metadata": kwargs.get("metadata", {}),
-        "source": source.split("\n") if isinstance(source, str) else source,
+        # nbformat joins the source list with "" (no separators), so each element
+        # must keep its trailing newline. keepends=True preserves them; a plain
+        # split("\n") would strip them and run all lines together.
+        "source": source.splitlines(keepends=True) if isinstance(source, str) else source,
     }
     if cell_type == "code":
         cell["execution_count"] = None
@@ -216,3 +219,189 @@ def generate_notebook(
         json.dump(notebook, f, indent=2)
 
     logger.info("Notebook saved: %s", output_path)
+
+
+# ---------------------------------------------------------------------------
+# Experiment A / A2 — zero-copy data plane notebook
+#
+# The zero-copy metric family (throughput by serialization format, memory
+# copies) does not fit the cost/reuse cells above, so it has its own cells and
+# generator, mirroring how chart_zerocopy.py parallels chart_generator.py. Cells
+# reuse _make_cell and the same style/structure.
+# ---------------------------------------------------------------------------
+
+def _zc_cell_imports() -> str:
+    # Inline backend (not Agg): this notebook is meant to be opened and tweaked
+    # in Jupyter, so figures must render inline. The cells also savefig() to
+    # charts/, so files are refreshed either way. Under headless nbconvert the
+    # ipython kernel defaults to the inline backend, so this works there too.
+    return """%matplotlib inline
+import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
+from IPython.display import display
+
+plt.rcParams.update({
+    'font.size': 12, 'axes.titlesize': 14, 'axes.labelsize': 12,
+    'xtick.labelsize': 10, 'ytick.labelsize': 10, 'legend.fontsize': 10,
+    'figure.figsize': (10, 6),
+})
+
+# Semantic colors: proposed system green, naive text red, zero-copy binary orange.
+FORMAT_COLORS = {
+    'arrow_ipc': '#2ca02c', 'contexttable_ipc': '#17becf', 'flatbuffers': '#ff7f0e',
+    'pickle': '#7f7f7f', 'protobuf': '#8c564b', 'base64_tobytes': '#9467bd', 'json': '#d62728',
+}
+# Display order (zero-copy formats grouped first). Reorder to taste.
+FORMAT_ORDER = ['arrow_ipc', 'contexttable_ipc', 'flatbuffers', 'pickle',
+                'base64_tobytes', 'protobuf', 'json']
+"""
+
+
+def _zc_cell_load_data(results_csv: str, a2_csv: str) -> str:
+    return f"""df = pd.read_csv('{results_csv}')
+a2 = pd.read_csv('{a2_csv}')
+# Representative (largest) cell for the bar charts.
+N_REP = int(df['n'].max())
+D_REP = int(df[df['n'] == N_REP]['d'].max())
+cell = df[(df['n'] == N_REP) & (df['d'] == D_REP)].set_index('format')
+fmts = [f for f in FORMAT_ORDER if f in cell.index]
+print(f"formats: {{list(df['format'].unique())}}")
+print(f"representative cell: N={{N_REP}}, D={{D_REP}}")
+display(df.head(10))
+"""
+
+
+def _zc_cell_throughput_by_format() -> str:
+    return """vals = [cell.loc[f, 'throughput_roundtrip_MBps'] for f in fmts]
+sp = [cell.loc[f, 'speedup_vs_json'] for f in fmts]
+colors = [FORMAT_COLORS.get(f, '#333') for f in fmts]
+
+fig, ax = plt.subplots()
+y = range(len(fmts))
+ax.barh(list(y), vals, color=colors, alpha=0.85)
+ax.set_yticks(list(y)); ax.set_yticklabels(fmts); ax.invert_yaxis()
+ax.set_xscale('log')
+ax.set_xlabel('Round-trip throughput (MB/s, log scale)')
+ax.set_title(f'Zero-copy data plane throughput by format  (N={N_REP}, D={D_REP})')
+for i, (v, s) in enumerate(zip(vals, sp)):
+    lbl = f'{v:,.0f} MB/s' + (f'  ({s:,.0f}x vs JSON)' if pd.notna(s) else '')
+    ax.text(v * 1.05, i, lbl, va='center', fontsize=9)
+ax.grid(axis='x', alpha=0.3, which='both'); ax.set_xlim(right=max(vals) * 12)
+plt.tight_layout(); plt.savefig('charts/exp_a_throughput_by_format.svg', bbox_inches='tight'); plt.show()
+"""
+
+
+def _zc_cell_memory_copies() -> str:
+    return """peaks = [max(cell.loc[f, 'deserialize_peak_kb'], 0.1) for f in fmts]
+copies = [cell.loc[f, 'memory_copies'] for f in fmts]
+colors = [FORMAT_COLORS.get(f, '#333') for f in fmts]
+payload_kb = N_REP * D_REP * 4 / 1024
+
+fig, ax = plt.subplots()
+x = range(len(fmts))
+ax.bar(list(x), peaks, color=colors, alpha=0.85); ax.set_yscale('log')
+ax.set_xticks(list(x)); ax.set_xticklabels(fmts, rotation=30, ha='right')
+ax.set_ylabel('Deserialize peak allocation (KB, log scale)')
+ax.set_title(f'Memory copies on read  (N={N_REP}, D={D_REP}; payload = {payload_kb:,.0f} KB)')
+ax.axhline(payload_kb, color='#555', ls='--', lw=1, alpha=0.7)
+ax.text(len(fmts) - 0.5, payload_kb * 1.1, '1x payload', fontsize=9, ha='right', color='#555')
+for i, (p, c) in enumerate(zip(peaks, copies)):
+    ax.text(i, p * 1.3, f"{int(c)} cop{'y' if int(c) == 1 else 'ies'}", ha='center', fontsize=9)
+ax.grid(axis='y', alpha=0.3, which='both')
+plt.tight_layout(); plt.savefig('charts/exp_a_memory_copies.svg', bbox_inches='tight'); plt.show()
+"""
+
+
+def _zc_cell_throughput_scaling() -> str:
+    return """dims = sorted(df['d'].unique())
+present = [f for f in FORMAT_ORDER if f in set(df['format'])]
+fig, ax = plt.subplots()
+for f in present:
+    ys = []
+    for dd in dims:
+        cand = df[(df['format'] == f) & (df['d'] == dd)]
+        ys.append(cand.sort_values('n').iloc[-1]['throughput_roundtrip_MBps'] if len(cand) else None)
+    ax.plot(dims, ys, marker='o', label=f, color=FORMAT_COLORS.get(f, '#333'), lw=2)
+ax.set_yscale('log'); ax.set_xticks(dims)
+ax.set_xlabel('Embedding dimension D'); ax.set_ylabel('Round-trip throughput (MB/s, log scale)')
+ax.set_title('Throughput vs embedding dimension')
+ax.legend(ncol=2); ax.grid(alpha=0.3, which='both')
+plt.tight_layout(); plt.savefig('charts/exp_a_throughput_scaling.svg', bbox_inches='tight'); plt.show()
+"""
+
+
+def _zc_cell_schema_compat() -> str:
+    return """fig, ax = plt.subplots(figsize=(10, max(3, 0.9 * len(a2) + 1))); ax.axis('off')
+tbl, colcolors = [], []
+for _, e in a2.iterrows():
+    zc = bool(e['zero_copy_eligible']); compat = bool(e['arrow_compatible'])
+    status = 'zero-copy' if zc else ('compatible' if compat else 'needs serialization')
+    tbl.append([e['edge'], e['payload_class'], status])
+    colcolors.append('#2ca02c' if zc else ('#ff7f0e' if compat else '#d62728'))
+t = ax.table(cellText=tbl, colLabels=['Operator edge', 'Payload class', 'Transfer'],
+             loc='center', cellLoc='left')
+t.auto_set_font_size(False); t.set_fontsize(12); t.scale(1, 1.8)
+for i, c in enumerate(colcolors):
+    t[i + 1, 2].set_facecolor(c); t[i + 1, 2].set_alpha(0.35)
+ax.set_title('A2: Arrow schema compatibility across the operator DAG', pad=20)
+plt.tight_layout(); plt.savefig('charts/exp_a2_schema_compat.svg', bbox_inches='tight'); plt.show()
+"""
+
+
+def _zc_cell_summary_table() -> str:
+    return """cols = ['format', 'n', 'd', 'wire_ratio', 'roundtrip_ms',
+        'throughput_roundtrip_MBps', 'memory_copies', 'deserialize_peak_kb', 'speedup_vs_json']
+available = [c for c in cols if c in df.columns]
+display(df[available].sort_values(['d', 'throughput_roundtrip_MBps'], ascending=[True, False]))
+"""
+
+
+def generate_zerocopy_notebook(
+    results_csv: str,
+    a2_csv: str,
+    output_path: str,
+    output_chart_dir: str = "charts",
+) -> None:
+    """Generate a tweakable Jupyter notebook for the Experiment A / A2 charts.
+
+    Cells contain self-contained plotting code (no dependency on chart_zerocopy),
+    so charts can be adjusted by hand. Run the notebook from the results directory
+    (e.g. results/exp_a_zerocopy) so the relative CSV and chart paths resolve.
+    """
+    cells = [
+        _make_cell("markdown",
+                   "# Experiment A / A2: Zero-Copy Data Plane Charts\n\n"
+                   "Tweakable notebook. Each chart's plotting code is inline and self-contained "
+                   "— edit colors, labels, scales, and figure sizes here, then re-run the cell. "
+                   "Run this notebook from its own directory so the relative paths resolve."),
+        _make_cell("code", _zc_cell_imports()),
+        _make_cell("code", _zc_cell_load_data(results_csv, a2_csv)),
+        _make_cell("markdown", "## Throughput by format (log scale)"),
+        _make_cell("code", _zc_cell_throughput_by_format()),
+        _make_cell("markdown", "## Memory copies on read"),
+        _make_cell("code", _zc_cell_memory_copies()),
+        _make_cell("markdown", "## Throughput vs embedding dimension"),
+        _make_cell("code", _zc_cell_throughput_scaling()),
+        _make_cell("markdown", "## A2 schema compatibility matrix"),
+        _make_cell("code", _zc_cell_schema_compat()),
+        _make_cell("markdown", "## Summary table"),
+        _make_cell("code", _zc_cell_summary_table()),
+    ]
+
+    notebook = {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python", "version": "3.11.0"},
+        },
+        "cells": cells,
+    }
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    os.makedirs(os.path.join(os.path.dirname(output_path) or ".", output_chart_dir), exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(notebook, f, indent=2)
+
+    logger.info("Zero-copy notebook saved: %s", output_path)
