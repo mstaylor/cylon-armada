@@ -184,6 +184,25 @@ cdef class ContextTable:
             raise Exception(f"ToIpc failed: {status.get_msg().decode()}")
         return pyarrow_wrap_buffer(buf)
 
+    def to_ipc_into(self, scratch not None):
+        """Serialize into a pre-allocated, reusable ``pyarrow.Buffer`` (no alloc).
+
+        The buffer-pooled transfer path: a caller keeps one mutable Buffer and
+        reuses it across serializations, so the pages stay resident instead of
+        being re-allocated and re-faulted each time. ``scratch`` must be a mutable
+        ``pyarrow.Buffer`` at least as large as a ``to_ipc()`` result for this
+        table (the size is deterministic for a fixed schema + row count). Returns
+        ``scratch``; ``from_ipc`` reads it (the IPC stream stops at its
+        end-of-stream marker, so any trailing capacity is ignored). This is the
+        ContextTable analog of arrow_ipc's FixedSizeBufferWriter reuse.
+        """
+        cdef shared_ptr[CBuffer] cbuf = pyarrow_unwrap_buffer(scratch)
+        cdef int64_t size = 0
+        cdef CStatus status = self.table_ptr.get().ToIpcInto(cbuf, &size)
+        if not status.is_ok():
+            raise Exception(f"ToIpcInto failed: {status.get_msg().decode()}")
+        return scratch
+
     @staticmethod
     def from_ipc(data not None):
         """Deserialize from Arrow IPC bytes.

@@ -3,6 +3,16 @@
 /* BEGIN: Cython Metadata
 {
     "distutils": {
+        "define_macros": [
+            [
+                "BUILD_CYLON_REDIS",
+                "1"
+            ],
+            [
+                "BUILD_CYLON_FMI",
+                "1"
+            ]
+        ],
         "depends": [
             "/home/parallels/cylon/cpp/src/cylon/code.hpp",
             "/home/parallels/cylon/cpp/src/cylon/column.hpp",
@@ -82,7 +92,7 @@
         ],
         "include_dirs": [
             "/home/parallels/miniconda3/envs/cylon_dev/include",
-            "/home/parallels/cylon-armada/cpp/build/include",
+            "/home/parallels/miniconda3/envs/cylon_dev/include",
             "/home/parallels/miniconda3/envs/cylon_dev/include",
             "/home/parallels/miniconda3/envs/cylon_dev/lib/python3.11/site-packages/pyarrow/include",
             "/home/parallels/miniconda3/envs/cylon_dev/lib/python3.11/site-packages/numpy/core/include",
@@ -104,7 +114,7 @@
         ],
         "library_dirs": [
             "/home/parallels/miniconda3/envs/cylon_dev/lib",
-            "/home/parallels/cylon-armada/cpp/build/lib",
+            "/home/parallels/miniconda3/envs/cylon_dev/lib",
             "/home/parallels/miniconda3/envs/cylon_dev/lib",
             "/home/parallels/miniconda3/envs/cylon_dev/lib",
             "/home/parallels/miniconda3/envs/cylon_dev/lib"
@@ -1553,6 +1563,7 @@ static int __Pyx_init_co_variables(void) {
 #include "../../../../cpp/src/cylon/indexing/indexer.hpp"
 #include "../../../../cpp/src/cylon/table.hpp"
 #include "../../../../cpp/src/cylon/column.hpp"
+#include "../../../../cpp/src/cylon/net/fmi/fmi_communicator.hpp"
 #include "../../../../cpp/src/cylon/io/csv_read_config.hpp"
 #include <stdlib.h>
 #ifdef _OPENMP
@@ -1791,6 +1802,8 @@ static const char* const __pyx_f[] = {
   "pycylon/indexing/cyindex.pxd",
   "pycylon/data/table.pxd",
   "pycylon/data/column.pxd",
+  "pycylon/net/fmi_config.pxd",
+  "pycylon/net/fmi_communicator.pxd",
   "pycylon/net/mpi_communicator.pxd",
   "pycylon/io/csv_read_config.pxd",
 };
@@ -2152,6 +2165,8 @@ struct __pyx_obj_7pycylon_8indexing_7cyindex_ArrowILocIndexer;
 struct __pyx_obj_7pycylon_4data_5table_SortOptions;
 struct __pyx_obj_7pycylon_4data_5table_Table;
 struct __pyx_obj_7pycylon_4data_6column_Column;
+struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig;
+struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator;
 struct __pyx_obj_7pycylon_3net_16mpi_communicator_MPICommunicator;
 struct __pyx_obj_7pycylon_2io_15csv_read_config_CSVReadOptions;
 struct __pyx_obj_12cylon_armada_13context_table_ContextTable;
@@ -3684,6 +3699,33 @@ struct __pyx_obj_7pycylon_4data_6column_Column {
 };
 
 
+/* "pycylon/net/fmi_config.pxd":64
+ * 
+ * 
+ *     cdef class FMIConfig(CommConfig):             # <<<<<<<<<<<<<<
+ *         cdef:
+ *             shared_ptr[CFMIConfig] fmi_config_shd_ptr
+*/
+struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig {
+  struct __pyx_obj_7pycylon_3net_11comm_config_CommConfig __pyx_base;
+  std::shared_ptr<cylon::net::FMIConfig>  fmi_config_shd_ptr;
+};
+
+
+/* "pycylon/net/fmi_communicator.pxd":36
+ * 
+ * 
+ *     cdef class FMICommunicator(Communicator):             # <<<<<<<<<<<<<<
+ *         cdef:
+ *             shared_ptr[CFMICommunicator] fmi_comm_shd_ptr
+*/
+struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator {
+  struct __pyx_obj_7pycylon_3net_12communicator_Communicator __pyx_base;
+  struct __pyx_vtabstruct_7pycylon_3net_16fmi_communicator_FMICommunicator *__pyx_vtab;
+  std::shared_ptr<cylon::net::FMICommunicator>  fmi_comm_shd_ptr;
+};
+
+
 /* "pycylon/net/mpi_communicator.pxd":37
  * 
  * 
@@ -3712,7 +3754,7 @@ struct __pyx_obj_7pycylon_2io_15csv_read_config_CSVReadOptions {
 };
 
 
-/* "cylon_armada/context_table.pxd":110
+/* "cylon_armada/context_table.pxd":111
  * 
  * 
  * cdef class ContextTable:             # <<<<<<<<<<<<<<
@@ -5057,6 +5099,20 @@ struct __pyx_vtabstruct_7pycylon_4data_6column_Column {
 static struct __pyx_vtabstruct_7pycylon_4data_6column_Column *__pyx_vtabptr_7pycylon_4data_6column_Column;
 
 
+/* "pycylon/net/fmi_communicator.pxd":36
+ * 
+ * 
+ *     cdef class FMICommunicator(Communicator):             # <<<<<<<<<<<<<<
+ *         cdef:
+ *             shared_ptr[CFMICommunicator] fmi_comm_shd_ptr
+*/
+
+struct __pyx_vtabstruct_7pycylon_3net_16fmi_communicator_FMICommunicator {
+  void (*init)(struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator *, std::shared_ptr<cylon::net::FMICommunicator>  const &);
+};
+static struct __pyx_vtabstruct_7pycylon_3net_16fmi_communicator_FMICommunicator *__pyx_vtabptr_7pycylon_3net_16fmi_communicator_FMICommunicator;
+
+
 /* "pycylon/net/mpi_communicator.pxd":37
  * 
  * 
@@ -6200,14 +6256,14 @@ static CYTHON_INLINE int __Pyx_PyLong_As_int(PyObject *);
 /* CIntFromPy.proto */
 static CYTHON_INLINE int64_t __Pyx_PyLong_As_int64_t(PyObject *);
 
+/* CIntToPy.proto */
+static CYTHON_INLINE PyObject* __Pyx_PyLong_From_int(int value);
+
 /* CIntFromPy.proto */
 static CYTHON_INLINE unsigned PY_LONG_LONG __Pyx_PyLong_As_unsigned_PY_LONG_LONG(PyObject *);
 
 /* CIntToPy.proto */
 static CYTHON_INLINE PyObject* __Pyx_PyLong_From_int64_t(int64_t value);
-
-/* CIntToPy.proto */
-static CYTHON_INLINE PyObject* __Pyx_PyLong_From_int(int value);
 
 /* CppExceptionConversion.proto */
 #ifndef __Pyx_CppExn2PyErr
@@ -6574,6 +6630,10 @@ static std::shared_ptr< arrow::Table>  (*__pyx_f_7pyarrow_3lib_pyarrow_unwrap_ta
 
 /* Module declarations from "pycylon.data.column" */
 
+/* Module declarations from "pycylon.net.fmi_config" */
+
+/* Module declarations from "pycylon.net.fmi_communicator" */
+
 /* Module declarations from "pycylon.net.mpi_communicator" */
 
 /* Module declarations from "pycylon.io.csv_read_config" */
@@ -6582,6 +6642,8 @@ static std::shared_ptr< arrow::Table>  (*__pyx_f_7pyarrow_3lib_pyarrow_unwrap_ta
 static int (*__pyx_f_7pycylon_3api_3lib_pyclon_is_context)(PyObject *); /*proto*/
 static std::shared_ptr<cylon::CylonContext>  (*__pyx_f_7pycylon_3api_3lib_pycylon_unwrap_context)(PyObject *); /*proto*/
 static std::shared_ptr<cylon::net::MPIConfig>  (*__pyx_f_7pycylon_3api_3lib_pycylon_unwrap_mpi_config)(PyObject *); /*proto*/
+static std::shared_ptr<cylon::net::FMIConfig>  (*__pyx_f_7pycylon_3api_3lib_pycylon_unwrap_fmi_config)(PyObject *); /*proto*/
+static PyObject *(*__pyx_f_7pycylon_3api_3lib_pycylon_wrap_fmi_communicator)(std::shared_ptr<cylon::net::FMICommunicator>  const &); /*proto*/
 static PyObject *(*__pyx_f_7pycylon_3api_3lib_pycylon_wrap_mci_communicator)(std::shared_ptr<cylon::net::MPICommunicator>  const &); /*proto*/
 static std::shared_ptr<cylon::Table>  (*__pyx_f_7pycylon_3api_3lib_pycylon_unwrap_table)(PyObject *); /*proto*/
 static std::shared_ptr<cylon::DataType>  (*__pyx_f_7pycylon_3api_3lib_pycylon_unwrap_data_type)(PyObject *); /*proto*/
@@ -6720,15 +6782,20 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_8search(
 static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_10get_workflow(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, PyObject *__pyx_v_workflow_id); /* proto */
 static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_12compact(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
 static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_14to_ipc(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_ipc(PyObject *__pyx_v_data); /* proto */
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arrow(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16to_ipc_into(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, PyObject *__pyx_v_scratch); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18from_ipc(PyObject *__pyx_v_data); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20to_arrow(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
 static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_4size___get__(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
 static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_10total_rows___get__(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
 static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_13embedding_dim___get__(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadcast(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx, int __pyx_v_root); /* proto */
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_gather(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx); /* proto */
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_24__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_26__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22broadcast(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx, int __pyx_v_root); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_24all_gather(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_26__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_28__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_save_context_to_redis(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table, PyObject *__pyx_v_key, PyObject *__pyx_v_redis_addr, int __pyx_v_ttl_seconds); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_2load_context_from_redis(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_key, PyObject *__pyx_v_redis_addr); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_4save_context_to_s3(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table, PyObject *__pyx_v_bucket, PyObject *__pyx_v_key, PyObject *__pyx_v_region); /* proto */
+static PyObject *__pyx_pf_12cylon_armada_13context_table_6load_context_from_s3(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_bucket, PyObject *__pyx_v_key, PyObject *__pyx_v_region); /* proto */
 static PyObject *__pyx_tp_new_12cylon_armada_13context_table_ContextTable(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_tp_new_array(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_tp_new_Enum(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
@@ -6867,6 +6934,8 @@ typedef struct {
   PyTypeObject *__pyx_ptype_7pycylon_4data_5table_SortOptions;
   PyTypeObject *__pyx_ptype_7pycylon_4data_5table_Table;
   PyTypeObject *__pyx_ptype_7pycylon_4data_6column_Column;
+  PyTypeObject *__pyx_ptype_7pycylon_3net_10fmi_config_FMIConfig;
+  PyTypeObject *__pyx_ptype_7pycylon_3net_16fmi_communicator_FMICommunicator;
   PyTypeObject *__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator;
   PyTypeObject *__pyx_ptype_7pycylon_2io_15csv_read_config_CSVReadOptions;
   PyObject *__pyx_type_12cylon_armada_13context_table_ContextTable;
@@ -6883,9 +6952,9 @@ typedef struct {
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_pop;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_values;
   PyObject *__pyx_slice[1];
-  PyObject *__pyx_tuple[4];
-  PyObject *__pyx_codeobj_tab[13];
-  PyObject *__pyx_string_tab[212];
+  PyObject *__pyx_tuple[6];
+  PyObject *__pyx_codeobj_tab[18];
+  PyObject *__pyx_string_tab[236];
   PyObject *__pyx_number_tab[7];
 /* #### Code section: module_state_contents ### */
 /* CommonTypesMetaclass.module_state_decls */
@@ -6948,197 +7017,221 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 #define __pyx_kp_u_Indirect_dimensions_not_supporte __pyx_string_tab[18]
 #define __pyx_kp_u_Invalid_mode_expected_c_or_fortr __pyx_string_tab[19]
 #define __pyx_kp_u_Invalid_shape_in_axis __pyx_string_tab[20]
-#define __pyx_kp_u_MemoryView_of __pyx_string_tab[21]
-#define __pyx_kp_u_Note_that_Cython_is_deliberately __pyx_string_tab[22]
-#define __pyx_kp_u_Out_of_bounds_on_buffer_access_a __pyx_string_tab[23]
-#define __pyx_kp_u_Put_failed __pyx_string_tab[24]
-#define __pyx_kp_u_Remove_failed __pyx_string_tab[25]
-#define __pyx_kp_u_Step_may_not_be_zero_axis_d __pyx_string_tab[26]
-#define __pyx_kp_u_ToIpc_failed __pyx_string_tab[27]
-#define __pyx_kp_u_Unable_to_convert_item_to_object __pyx_string_tab[28]
-#define __pyx_kp_u__2 __pyx_string_tab[29]
-#define __pyx_kp_u__3 __pyx_string_tab[30]
-#define __pyx_kp_u__4 __pyx_string_tab[31]
-#define __pyx_kp_u__5 __pyx_string_tab[32]
-#define __pyx_kp_u__6 __pyx_string_tab[33]
-#define __pyx_kp_u__7 __pyx_string_tab[34]
-#define __pyx_kp_u_add_note __pyx_string_tab[35]
-#define __pyx_kp_u_and __pyx_string_tab[36]
-#define __pyx_kp_u_at_0x __pyx_string_tab[37]
-#define __pyx_kp_u_collections_abc __pyx_string_tab[38]
-#define __pyx_kp_u_contiguous_and_direct __pyx_string_tab[39]
-#define __pyx_kp_u_contiguous_and_indirect __pyx_string_tab[40]
-#define __pyx_kp_u_cylon_armada_context_table_pyx __pyx_string_tab[41]
-#define __pyx_kp_u_disable __pyx_string_tab[42]
-#define __pyx_kp_u_embedding_must_be_a_1_D_array __pyx_string_tab[43]
-#define __pyx_kp_u_enable __pyx_string_tab[44]
-#define __pyx_kp_u_gc __pyx_string_tab[45]
-#define __pyx_kp_u_got __pyx_string_tab[46]
-#define __pyx_kp_u_got_differing_extents_in_dimensi __pyx_string_tab[47]
-#define __pyx_kp_u_isenabled __pyx_string_tab[48]
-#define __pyx_kp_u_itemsize_0_for_cython_array __pyx_string_tab[49]
-#define __pyx_kp_u_no_default___reduce___due_to_non __pyx_string_tab[50]
-#define __pyx_kp_u_object __pyx_string_tab[51]
-#define __pyx_kp_u_query_must_be_a_1_D_array __pyx_string_tab[52]
-#define __pyx_kp_u_strided_and_direct __pyx_string_tab[53]
-#define __pyx_kp_u_strided_and_direct_or_indirect __pyx_string_tab[54]
-#define __pyx_kp_u_strided_and_indirect __pyx_string_tab[55]
-#define __pyx_kp_u_stringsource __pyx_string_tab[56]
-#define __pyx_kp_u_unable_to_allocate_array_data __pyx_string_tab[57]
-#define __pyx_kp_u_unable_to_allocate_shape_and_str __pyx_string_tab[58]
-#define __pyx_n_u_ASCII __pyx_string_tab[59]
-#define __pyx_n_u_B __pyx_string_tab[60]
-#define __pyx_n_u_Buffer __pyx_string_tab[61]
-#define __pyx_n_u_ContextTable __pyx_string_tab[62]
-#define __pyx_n_u_ContextTable___reduce_cython __pyx_string_tab[63]
-#define __pyx_n_u_ContextTable___setstate_cython __pyx_string_tab[64]
-#define __pyx_n_u_ContextTable_all_gather __pyx_string_tab[65]
-#define __pyx_n_u_ContextTable_broadcast __pyx_string_tab[66]
-#define __pyx_n_u_ContextTable_compact __pyx_string_tab[67]
-#define __pyx_n_u_ContextTable_from_ipc __pyx_string_tab[68]
-#define __pyx_n_u_ContextTable_get __pyx_string_tab[69]
-#define __pyx_n_u_ContextTable_get_workflow __pyx_string_tab[70]
-#define __pyx_n_u_ContextTable_put __pyx_string_tab[71]
-#define __pyx_n_u_ContextTable_remove __pyx_string_tab[72]
-#define __pyx_n_u_ContextTable_search __pyx_string_tab[73]
-#define __pyx_n_u_ContextTable_to_arrow __pyx_string_tab[74]
-#define __pyx_n_u_ContextTable_to_ipc __pyx_string_tab[75]
-#define __pyx_n_u_Ellipsis __pyx_string_tab[76]
-#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[77]
-#define __pyx_n_u_Sequence __pyx_string_tab[78]
-#define __pyx_n_u_View_MemoryView __pyx_string_tab[79]
-#define __pyx_n_u_abc __pyx_string_tab[80]
-#define __pyx_n_u_all_gather __pyx_string_tab[81]
-#define __pyx_n_u_allocate_buffer __pyx_string_tab[82]
-#define __pyx_n_u_ascontiguousarray __pyx_string_tab[83]
-#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[84]
-#define __pyx_n_u_base __pyx_string_tab[85]
-#define __pyx_n_u_batch __pyx_string_tab[86]
-#define __pyx_n_u_broadcast __pyx_string_tab[87]
-#define __pyx_n_u_buf __pyx_string_tab[88]
-#define __pyx_n_u_c __pyx_string_tab[89]
-#define __pyx_n_u_c_table __pyx_string_tab[90]
-#define __pyx_n_u_cast __pyx_string_tab[91]
-#define __pyx_n_u_cbuf __pyx_string_tab[92]
-#define __pyx_n_u_class __pyx_string_tab[93]
-#define __pyx_n_u_class_getitem __pyx_string_tab[94]
-#define __pyx_n_u_cline_in_traceback __pyx_string_tab[95]
-#define __pyx_n_u_compact __pyx_string_tab[96]
-#define __pyx_n_u_context_id __pyx_string_tab[97]
-#define __pyx_n_u_cost_usd __pyx_string_tab[98]
-#define __pyx_n_u_count __pyx_string_tab[99]
-#define __pyx_n_u_ctx __pyx_string_tab[100]
-#define __pyx_n_u_ctx_ptr __pyx_string_tab[101]
-#define __pyx_n_u_ctypes __pyx_string_tab[102]
-#define __pyx_n_u_cylon_armada_context_table __pyx_string_tab[103]
-#define __pyx_n_u_data __pyx_string_tab[104]
-#define __pyx_n_u_dict __pyx_string_tab[105]
-#define __pyx_n_u_dim __pyx_string_tab[106]
-#define __pyx_n_u_dtype __pyx_string_tab[107]
-#define __pyx_n_u_dtype_is_object __pyx_string_tab[108]
-#define __pyx_n_u_emb_ptr __pyx_string_tab[109]
-#define __pyx_n_u_embedding __pyx_string_tab[110]
-#define __pyx_n_u_embedding_dim __pyx_string_tab[111]
-#define __pyx_n_u_encode __pyx_string_tab[112]
-#define __pyx_n_u_enumerate __pyx_string_tab[113]
-#define __pyx_n_u_error __pyx_string_tab[114]
-#define __pyx_n_u_flags __pyx_string_tab[115]
-#define __pyx_n_u_float32 __pyx_string_tab[116]
-#define __pyx_n_u_format __pyx_string_tab[117]
-#define __pyx_n_u_fortran __pyx_string_tab[118]
-#define __pyx_n_u_from_ipc __pyx_string_tab[119]
-#define __pyx_n_u_func __pyx_string_tab[120]
-#define __pyx_n_u_get __pyx_string_tab[121]
-#define __pyx_n_u_get_workflow __pyx_string_tab[122]
-#define __pyx_n_u_getstate __pyx_string_tab[123]
-#define __pyx_n_u_id __pyx_string_tab[124]
-#define __pyx_n_u_import __pyx_string_tab[125]
-#define __pyx_n_u_index __pyx_string_tab[126]
-#define __pyx_n_u_input_tokens __pyx_string_tab[127]
-#define __pyx_n_u_is_coroutine __pyx_string_tab[128]
-#define __pyx_n_u_items __pyx_string_tab[129]
-#define __pyx_n_u_itemsize __pyx_string_tab[130]
-#define __pyx_n_u_main __pyx_string_tab[131]
-#define __pyx_n_u_memview __pyx_string_tab[132]
-#define __pyx_n_u_meta __pyx_string_tab[133]
-#define __pyx_n_u_mode __pyx_string_tab[134]
-#define __pyx_n_u_model_id __pyx_string_tab[135]
-#define __pyx_n_u_module __pyx_string_tab[136]
-#define __pyx_n_u_name __pyx_string_tab[137]
-#define __pyx_n_u_name_2 __pyx_string_tab[138]
-#define __pyx_n_u_ndim __pyx_string_tab[139]
-#define __pyx_n_u_new __pyx_string_tab[140]
-#define __pyx_n_u_np __pyx_string_tab[141]
-#define __pyx_n_u_numpy __pyx_string_tab[142]
-#define __pyx_n_u_obj __pyx_string_tab[143]
-#define __pyx_n_u_out __pyx_string_tab[144]
-#define __pyx_n_u_output_tokens __pyx_string_tab[145]
-#define __pyx_n_u_pa __pyx_string_tab[146]
-#define __pyx_n_u_pack __pyx_string_tab[147]
-#define __pyx_n_u_pop __pyx_string_tab[148]
-#define __pyx_n_u_put __pyx_string_tab[149]
-#define __pyx_n_u_pyarrow __pyx_string_tab[150]
-#define __pyx_n_u_pyx_checksum __pyx_string_tab[151]
-#define __pyx_n_u_pyx_state __pyx_string_tab[152]
-#define __pyx_n_u_pyx_type __pyx_string_tab[153]
-#define __pyx_n_u_pyx_unpickle_Enum __pyx_string_tab[154]
-#define __pyx_n_u_pyx_vtable __pyx_string_tab[155]
-#define __pyx_n_u_q_ptr __pyx_string_tab[156]
-#define __pyx_n_u_qualname __pyx_string_tab[157]
-#define __pyx_n_u_query __pyx_string_tab[158]
-#define __pyx_n_u_r __pyx_string_tab[159]
-#define __pyx_n_u_ravel __pyx_string_tab[160]
-#define __pyx_n_u_reduce __pyx_string_tab[161]
-#define __pyx_n_u_reduce_cython __pyx_string_tab[162]
-#define __pyx_n_u_reduce_ex __pyx_string_tab[163]
-#define __pyx_n_u_register __pyx_string_tab[164]
-#define __pyx_n_u_remove __pyx_string_tab[165]
-#define __pyx_n_u_response __pyx_string_tab[166]
-#define __pyx_n_u_results __pyx_string_tab[167]
-#define __pyx_n_u_root __pyx_string_tab[168]
-#define __pyx_n_u_search __pyx_string_tab[169]
-#define __pyx_n_u_self __pyx_string_tab[170]
-#define __pyx_n_u_set_name __pyx_string_tab[171]
-#define __pyx_n_u_setdefault __pyx_string_tab[172]
-#define __pyx_n_u_setstate __pyx_string_tab[173]
-#define __pyx_n_u_setstate_cython __pyx_string_tab[174]
-#define __pyx_n_u_shape __pyx_string_tab[175]
-#define __pyx_n_u_similarity __pyx_string_tab[176]
-#define __pyx_n_u_size __pyx_string_tab[177]
-#define __pyx_n_u_start __pyx_string_tab[178]
-#define __pyx_n_u_staticmethod __pyx_string_tab[179]
-#define __pyx_n_u_status __pyx_string_tab[180]
-#define __pyx_n_u_step __pyx_string_tab[181]
-#define __pyx_n_u_stop __pyx_string_tab[182]
-#define __pyx_n_u_struct __pyx_string_tab[183]
-#define __pyx_n_u_table __pyx_string_tab[184]
-#define __pyx_n_u_test __pyx_string_tab[185]
-#define __pyx_n_u_threshold __pyx_string_tab[186]
-#define __pyx_n_u_to_arrow __pyx_string_tab[187]
-#define __pyx_n_u_to_ipc __pyx_string_tab[188]
-#define __pyx_n_u_top_k __pyx_string_tab[189]
-#define __pyx_n_u_unpack __pyx_string_tab[190]
-#define __pyx_n_u_update __pyx_string_tab[191]
-#define __pyx_n_u_values __pyx_string_tab[192]
-#define __pyx_n_u_view __pyx_string_tab[193]
-#define __pyx_n_u_wf __pyx_string_tab[194]
-#define __pyx_n_u_workflow_id __pyx_string_tab[195]
-#define __pyx_n_u_x __pyx_string_tab[196]
-#define __pyx_kp_b_PyObject_std_shared_ptr_arrow_Bu __pyx_string_tab[197]
-#define __pyx_kp_b_iso88591_A_21Gq_d_D_AQ_4vV1_1_1_xr __pyx_string_tab[198]
-#define __pyx_kp_b_iso88591_A_21Gq_d_D_AYa_4vV1_1_1_xr __pyx_string_tab[199]
-#define __pyx_kp_b_iso88591_A_AWF_IV1_5_c_AQ_s_1_22GuGST_G1 __pyx_string_tab[200]
-#define __pyx_kp_b_iso88591_A_O_gQ_L_q_L_q_A_Q_L_B_F_IV1_9F __pyx_string_tab[201]
-#define __pyx_kp_b_iso88591_A_QfBa_4AV1A_Qe5_4vQa_uCq_iq_aq __pyx_string_tab[202]
-#define __pyx_kp_b_iso88591_A_d_D_4uD_1 __pyx_string_tab[203]
-#define __pyx_kp_b_iso88591_A_d_D_4vV1_1_vXRwa __pyx_string_tab[204]
-#define __pyx_kp_b_iso88591_A_d_D_G1_4vV1_V82WA __pyx_string_tab[205]
-#define __pyx_kp_b_iso88591_A_d_D_a_wa_4uD_1 __pyx_string_tab[206]
-#define __pyx_kp_b_iso88591_A_d_D_aq_4vV1_1_V82WA_1 __pyx_string_tab[207]
-#define __pyx_kp_b_iso88591_A_d_D_gT_4vV1_1O6_7_4s_a_1 __pyx_string_tab[208]
-#define __pyx_kp_b_iso88591_Q __pyx_string_tab[209]
-#define __pyx_kp_b_std_shared_ptr_cylon_CylonContex __pyx_string_tab[210]
-#define __pyx_n_b_O __pyx_string_tab[211]
+#define __pyx_kp_u_LoadFromRedis_failed __pyx_string_tab[21]
+#define __pyx_kp_u_LoadFromS3_failed __pyx_string_tab[22]
+#define __pyx_kp_u_MemoryView_of __pyx_string_tab[23]
+#define __pyx_kp_u_Note_that_Cython_is_deliberately __pyx_string_tab[24]
+#define __pyx_kp_u_Out_of_bounds_on_buffer_access_a __pyx_string_tab[25]
+#define __pyx_kp_u_Put_failed __pyx_string_tab[26]
+#define __pyx_kp_u_Remove_failed __pyx_string_tab[27]
+#define __pyx_kp_u_SaveToRedis_failed __pyx_string_tab[28]
+#define __pyx_kp_u_SaveToS3_failed __pyx_string_tab[29]
+#define __pyx_kp_u_Step_may_not_be_zero_axis_d __pyx_string_tab[30]
+#define __pyx_kp_u_ToIpcInto_failed __pyx_string_tab[31]
+#define __pyx_kp_u_ToIpc_failed __pyx_string_tab[32]
+#define __pyx_kp_u_Unable_to_convert_item_to_object __pyx_string_tab[33]
+#define __pyx_kp_u__2 __pyx_string_tab[34]
+#define __pyx_kp_u__3 __pyx_string_tab[35]
+#define __pyx_kp_u__4 __pyx_string_tab[36]
+#define __pyx_kp_u__5 __pyx_string_tab[37]
+#define __pyx_kp_u__6 __pyx_string_tab[38]
+#define __pyx_kp_u__7 __pyx_string_tab[39]
+#define __pyx_kp_u_add_note __pyx_string_tab[40]
+#define __pyx_kp_u_and __pyx_string_tab[41]
+#define __pyx_kp_u_at_0x __pyx_string_tab[42]
+#define __pyx_kp_u_collections_abc __pyx_string_tab[43]
+#define __pyx_kp_u_contiguous_and_direct __pyx_string_tab[44]
+#define __pyx_kp_u_contiguous_and_indirect __pyx_string_tab[45]
+#define __pyx_kp_u_cylon_armada_context_table_pyx __pyx_string_tab[46]
+#define __pyx_kp_u_disable __pyx_string_tab[47]
+#define __pyx_kp_u_embedding_must_be_a_1_D_array __pyx_string_tab[48]
+#define __pyx_kp_u_enable __pyx_string_tab[49]
+#define __pyx_kp_u_gc __pyx_string_tab[50]
+#define __pyx_kp_u_got __pyx_string_tab[51]
+#define __pyx_kp_u_got_differing_extents_in_dimensi __pyx_string_tab[52]
+#define __pyx_kp_u_isenabled __pyx_string_tab[53]
+#define __pyx_kp_u_itemsize_0_for_cython_array __pyx_string_tab[54]
+#define __pyx_kp_u_no_default___reduce___due_to_non __pyx_string_tab[55]
+#define __pyx_kp_u_object __pyx_string_tab[56]
+#define __pyx_kp_u_query_must_be_a_1_D_array __pyx_string_tab[57]
+#define __pyx_kp_u_strided_and_direct __pyx_string_tab[58]
+#define __pyx_kp_u_strided_and_direct_or_indirect __pyx_string_tab[59]
+#define __pyx_kp_u_strided_and_indirect __pyx_string_tab[60]
+#define __pyx_kp_u_stringsource __pyx_string_tab[61]
+#define __pyx_kp_u_tcp_localhost_6379 __pyx_string_tab[62]
+#define __pyx_kp_u_unable_to_allocate_array_data __pyx_string_tab[63]
+#define __pyx_kp_u_unable_to_allocate_shape_and_str __pyx_string_tab[64]
+#define __pyx_kp_u_us_east_1 __pyx_string_tab[65]
+#define __pyx_n_u_ASCII __pyx_string_tab[66]
+#define __pyx_n_u_B __pyx_string_tab[67]
+#define __pyx_n_u_Buffer __pyx_string_tab[68]
+#define __pyx_n_u_ContextTable __pyx_string_tab[69]
+#define __pyx_n_u_ContextTable___reduce_cython __pyx_string_tab[70]
+#define __pyx_n_u_ContextTable___setstate_cython __pyx_string_tab[71]
+#define __pyx_n_u_ContextTable_all_gather __pyx_string_tab[72]
+#define __pyx_n_u_ContextTable_broadcast __pyx_string_tab[73]
+#define __pyx_n_u_ContextTable_compact __pyx_string_tab[74]
+#define __pyx_n_u_ContextTable_from_ipc __pyx_string_tab[75]
+#define __pyx_n_u_ContextTable_get __pyx_string_tab[76]
+#define __pyx_n_u_ContextTable_get_workflow __pyx_string_tab[77]
+#define __pyx_n_u_ContextTable_put __pyx_string_tab[78]
+#define __pyx_n_u_ContextTable_remove __pyx_string_tab[79]
+#define __pyx_n_u_ContextTable_search __pyx_string_tab[80]
+#define __pyx_n_u_ContextTable_to_arrow __pyx_string_tab[81]
+#define __pyx_n_u_ContextTable_to_ipc __pyx_string_tab[82]
+#define __pyx_n_u_ContextTable_to_ipc_into __pyx_string_tab[83]
+#define __pyx_n_u_Ellipsis __pyx_string_tab[84]
+#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[85]
+#define __pyx_n_u_Sequence __pyx_string_tab[86]
+#define __pyx_n_u_View_MemoryView __pyx_string_tab[87]
+#define __pyx_n_u_abc __pyx_string_tab[88]
+#define __pyx_n_u_all_gather __pyx_string_tab[89]
+#define __pyx_n_u_allocate_buffer __pyx_string_tab[90]
+#define __pyx_n_u_ascontiguousarray __pyx_string_tab[91]
+#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[92]
+#define __pyx_n_u_base __pyx_string_tab[93]
+#define __pyx_n_u_batch __pyx_string_tab[94]
+#define __pyx_n_u_broadcast __pyx_string_tab[95]
+#define __pyx_n_u_bucket __pyx_string_tab[96]
+#define __pyx_n_u_buf __pyx_string_tab[97]
+#define __pyx_n_u_c __pyx_string_tab[98]
+#define __pyx_n_u_c_table __pyx_string_tab[99]
+#define __pyx_n_u_cast __pyx_string_tab[100]
+#define __pyx_n_u_cbuf __pyx_string_tab[101]
+#define __pyx_n_u_class __pyx_string_tab[102]
+#define __pyx_n_u_class_getitem __pyx_string_tab[103]
+#define __pyx_n_u_cline_in_traceback __pyx_string_tab[104]
+#define __pyx_n_u_compact __pyx_string_tab[105]
+#define __pyx_n_u_context_id __pyx_string_tab[106]
+#define __pyx_n_u_cost_usd __pyx_string_tab[107]
+#define __pyx_n_u_count __pyx_string_tab[108]
+#define __pyx_n_u_ctx __pyx_string_tab[109]
+#define __pyx_n_u_ctx_ptr __pyx_string_tab[110]
+#define __pyx_n_u_ctypes __pyx_string_tab[111]
+#define __pyx_n_u_cylon_armada_context_table __pyx_string_tab[112]
+#define __pyx_n_u_data __pyx_string_tab[113]
+#define __pyx_n_u_dict __pyx_string_tab[114]
+#define __pyx_n_u_dim __pyx_string_tab[115]
+#define __pyx_n_u_dtype __pyx_string_tab[116]
+#define __pyx_n_u_dtype_is_object __pyx_string_tab[117]
+#define __pyx_n_u_emb_ptr __pyx_string_tab[118]
+#define __pyx_n_u_embedding __pyx_string_tab[119]
+#define __pyx_n_u_embedding_dim __pyx_string_tab[120]
+#define __pyx_n_u_encode __pyx_string_tab[121]
+#define __pyx_n_u_enumerate __pyx_string_tab[122]
+#define __pyx_n_u_error __pyx_string_tab[123]
+#define __pyx_n_u_flags __pyx_string_tab[124]
+#define __pyx_n_u_float32 __pyx_string_tab[125]
+#define __pyx_n_u_format __pyx_string_tab[126]
+#define __pyx_n_u_fortran __pyx_string_tab[127]
+#define __pyx_n_u_from_ipc __pyx_string_tab[128]
+#define __pyx_n_u_func __pyx_string_tab[129]
+#define __pyx_n_u_get __pyx_string_tab[130]
+#define __pyx_n_u_get_workflow __pyx_string_tab[131]
+#define __pyx_n_u_getstate __pyx_string_tab[132]
+#define __pyx_n_u_id __pyx_string_tab[133]
+#define __pyx_n_u_import __pyx_string_tab[134]
+#define __pyx_n_u_index __pyx_string_tab[135]
+#define __pyx_n_u_input_tokens __pyx_string_tab[136]
+#define __pyx_n_u_is_coroutine __pyx_string_tab[137]
+#define __pyx_n_u_items __pyx_string_tab[138]
+#define __pyx_n_u_itemsize __pyx_string_tab[139]
+#define __pyx_n_u_key __pyx_string_tab[140]
+#define __pyx_n_u_load_context_from_redis __pyx_string_tab[141]
+#define __pyx_n_u_load_context_from_s3 __pyx_string_tab[142]
+#define __pyx_n_u_main __pyx_string_tab[143]
+#define __pyx_n_u_memview __pyx_string_tab[144]
+#define __pyx_n_u_meta __pyx_string_tab[145]
+#define __pyx_n_u_mode __pyx_string_tab[146]
+#define __pyx_n_u_model_id __pyx_string_tab[147]
+#define __pyx_n_u_module __pyx_string_tab[148]
+#define __pyx_n_u_name __pyx_string_tab[149]
+#define __pyx_n_u_name_2 __pyx_string_tab[150]
+#define __pyx_n_u_ndim __pyx_string_tab[151]
+#define __pyx_n_u_new __pyx_string_tab[152]
+#define __pyx_n_u_np __pyx_string_tab[153]
+#define __pyx_n_u_numpy __pyx_string_tab[154]
+#define __pyx_n_u_obj __pyx_string_tab[155]
+#define __pyx_n_u_out __pyx_string_tab[156]
+#define __pyx_n_u_output_tokens __pyx_string_tab[157]
+#define __pyx_n_u_pa __pyx_string_tab[158]
+#define __pyx_n_u_pack __pyx_string_tab[159]
+#define __pyx_n_u_pop __pyx_string_tab[160]
+#define __pyx_n_u_put __pyx_string_tab[161]
+#define __pyx_n_u_pyarrow __pyx_string_tab[162]
+#define __pyx_n_u_pyx_checksum __pyx_string_tab[163]
+#define __pyx_n_u_pyx_state __pyx_string_tab[164]
+#define __pyx_n_u_pyx_type __pyx_string_tab[165]
+#define __pyx_n_u_pyx_unpickle_Enum __pyx_string_tab[166]
+#define __pyx_n_u_pyx_vtable __pyx_string_tab[167]
+#define __pyx_n_u_q_ptr __pyx_string_tab[168]
+#define __pyx_n_u_qualname __pyx_string_tab[169]
+#define __pyx_n_u_query __pyx_string_tab[170]
+#define __pyx_n_u_r __pyx_string_tab[171]
+#define __pyx_n_u_ravel __pyx_string_tab[172]
+#define __pyx_n_u_redis_addr __pyx_string_tab[173]
+#define __pyx_n_u_reduce __pyx_string_tab[174]
+#define __pyx_n_u_reduce_cython __pyx_string_tab[175]
+#define __pyx_n_u_reduce_ex __pyx_string_tab[176]
+#define __pyx_n_u_region __pyx_string_tab[177]
+#define __pyx_n_u_register __pyx_string_tab[178]
+#define __pyx_n_u_remove __pyx_string_tab[179]
+#define __pyx_n_u_response __pyx_string_tab[180]
+#define __pyx_n_u_results __pyx_string_tab[181]
+#define __pyx_n_u_root __pyx_string_tab[182]
+#define __pyx_n_u_save_context_to_redis __pyx_string_tab[183]
+#define __pyx_n_u_save_context_to_s3 __pyx_string_tab[184]
+#define __pyx_n_u_scratch __pyx_string_tab[185]
+#define __pyx_n_u_search __pyx_string_tab[186]
+#define __pyx_n_u_self __pyx_string_tab[187]
+#define __pyx_n_u_set_name __pyx_string_tab[188]
+#define __pyx_n_u_setdefault __pyx_string_tab[189]
+#define __pyx_n_u_setstate __pyx_string_tab[190]
+#define __pyx_n_u_setstate_cython __pyx_string_tab[191]
+#define __pyx_n_u_shape __pyx_string_tab[192]
+#define __pyx_n_u_similarity __pyx_string_tab[193]
+#define __pyx_n_u_size __pyx_string_tab[194]
+#define __pyx_n_u_start __pyx_string_tab[195]
+#define __pyx_n_u_staticmethod __pyx_string_tab[196]
+#define __pyx_n_u_status __pyx_string_tab[197]
+#define __pyx_n_u_step __pyx_string_tab[198]
+#define __pyx_n_u_stop __pyx_string_tab[199]
+#define __pyx_n_u_struct __pyx_string_tab[200]
+#define __pyx_n_u_table __pyx_string_tab[201]
+#define __pyx_n_u_test __pyx_string_tab[202]
+#define __pyx_n_u_threshold __pyx_string_tab[203]
+#define __pyx_n_u_to_arrow __pyx_string_tab[204]
+#define __pyx_n_u_to_ipc __pyx_string_tab[205]
+#define __pyx_n_u_to_ipc_into __pyx_string_tab[206]
+#define __pyx_n_u_top_k __pyx_string_tab[207]
+#define __pyx_n_u_ttl_seconds __pyx_string_tab[208]
+#define __pyx_n_u_unpack __pyx_string_tab[209]
+#define __pyx_n_u_update __pyx_string_tab[210]
+#define __pyx_n_u_values __pyx_string_tab[211]
+#define __pyx_n_u_view __pyx_string_tab[212]
+#define __pyx_n_u_wf __pyx_string_tab[213]
+#define __pyx_n_u_workflow_id __pyx_string_tab[214]
+#define __pyx_n_u_x __pyx_string_tab[215]
+#define __pyx_kp_b_PyObject_std_shared_ptr_arrow_Bu __pyx_string_tab[216]
+#define __pyx_kp_b_iso88591_A_21Gq_d_D_AQ_4vV1_1_1_xr __pyx_string_tab[217]
+#define __pyx_kp_b_iso88591_A_21Gq_d_D_AYa_4vV1_1_1_xr __pyx_string_tab[218]
+#define __pyx_kp_b_iso88591_A_AWF_IV1_5_c_AQ_s_1_22GuGST_G1 __pyx_string_tab[219]
+#define __pyx_kp_b_iso88591_A_O_gQ_L_q_L_q_A_Q_L_B_F_IV1_9F __pyx_string_tab[220]
+#define __pyx_kp_b_iso88591_A_Qa_A_d_D_AV1A_4vV1_1_1_xr_q __pyx_string_tab[221]
+#define __pyx_kp_b_iso88591_A_QfBa_4AV1A_Qe5_4vQa_uCq_iq_aq __pyx_string_tab[222]
+#define __pyx_kp_b_iso88591_A_d_D_4uD_1 __pyx_string_tab[223]
+#define __pyx_kp_b_iso88591_A_d_D_4vV1_1_vXRwa __pyx_string_tab[224]
+#define __pyx_kp_b_iso88591_A_d_D_G1_4vV1_V82WA __pyx_string_tab[225]
+#define __pyx_kp_b_iso88591_A_d_D_a_wa_4uD_1 __pyx_string_tab[226]
+#define __pyx_kp_b_iso88591_A_d_D_aq_4vV1_1_V82WA_1 __pyx_string_tab[227]
+#define __pyx_kp_b_iso88591_A_d_D_gT_4vV1_1O6_7_4s_a_1 __pyx_string_tab[228]
+#define __pyx_kp_b_iso88591_A_iq_V7_c_F_4vV1_1_0_hb_q __pyx_string_tab[229]
+#define __pyx_kp_b_iso88591_A_k_S_t6_AQ_4vV1_1_2_ha_R_A_q __pyx_string_tab[230]
+#define __pyx_kp_b_iso88591_A_l_S_t_WD_4vV1_1_36_7 __pyx_string_tab[231]
+#define __pyx_kp_b_iso88591_A_nA_wd_G4q_4vV1_1_5V82WA_4wd_1 __pyx_string_tab[232]
+#define __pyx_kp_b_iso88591_Q __pyx_string_tab[233]
+#define __pyx_kp_b_std_shared_ptr_cylon_CylonContex __pyx_string_tab[234]
+#define __pyx_n_b_O __pyx_string_tab[235]
 #define __pyx_float_0_0 __pyx_number_tab[0]
 #define __pyx_float_0_85 __pyx_number_tab[1]
 #define __pyx_int_0 __pyx_number_tab[2]
@@ -7273,6 +7366,8 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   Py_CLEAR(clear_module_state->__pyx_ptype_7pycylon_4data_5table_SortOptions);
   Py_CLEAR(clear_module_state->__pyx_ptype_7pycylon_4data_5table_Table);
   Py_CLEAR(clear_module_state->__pyx_ptype_7pycylon_4data_6column_Column);
+  Py_CLEAR(clear_module_state->__pyx_ptype_7pycylon_3net_10fmi_config_FMIConfig);
+  Py_CLEAR(clear_module_state->__pyx_ptype_7pycylon_3net_16fmi_communicator_FMICommunicator);
   Py_CLEAR(clear_module_state->__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator);
   Py_CLEAR(clear_module_state->__pyx_ptype_7pycylon_2io_15csv_read_config_CSVReadOptions);
   Py_CLEAR(clear_module_state->__pyx_ptype_12cylon_armada_13context_table_ContextTable);
@@ -7286,9 +7381,9 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   Py_CLEAR(clear_module_state->__pyx_memoryviewslice_type);
   Py_CLEAR(clear_module_state->__pyx_type___pyx_memoryviewslice);
   for (int i=0; i<1; ++i) { Py_CLEAR(clear_module_state->__pyx_slice[i]); }
-  for (int i=0; i<4; ++i) { Py_CLEAR(clear_module_state->__pyx_tuple[i]); }
-  for (int i=0; i<13; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<212; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<6; ++i) { Py_CLEAR(clear_module_state->__pyx_tuple[i]); }
+  for (int i=0; i<18; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
+  for (int i=0; i<236; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<7; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* CommonTypesMetaclass.module_state_clear */
@@ -7425,6 +7520,8 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   Py_VISIT(traverse_module_state->__pyx_ptype_7pycylon_4data_5table_SortOptions);
   Py_VISIT(traverse_module_state->__pyx_ptype_7pycylon_4data_5table_Table);
   Py_VISIT(traverse_module_state->__pyx_ptype_7pycylon_4data_6column_Column);
+  Py_VISIT(traverse_module_state->__pyx_ptype_7pycylon_3net_10fmi_config_FMIConfig);
+  Py_VISIT(traverse_module_state->__pyx_ptype_7pycylon_3net_16fmi_communicator_FMICommunicator);
   Py_VISIT(traverse_module_state->__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator);
   Py_VISIT(traverse_module_state->__pyx_ptype_7pycylon_2io_15csv_read_config_CSVReadOptions);
   Py_VISIT(traverse_module_state->__pyx_ptype_12cylon_armada_13context_table_ContextTable);
@@ -7438,9 +7535,9 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   Py_VISIT(traverse_module_state->__pyx_memoryviewslice_type);
   Py_VISIT(traverse_module_state->__pyx_type___pyx_memoryviewslice);
   for (int i=0; i<1; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_slice[i]); }
-  for (int i=0; i<4; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_tuple[i]); }
-  for (int i=0; i<13; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<212; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<6; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_tuple[i]); }
+  for (int i=0; i<18; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
+  for (int i=0; i<236; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<7; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* CommonTypesMetaclass.module_state_traverse */
@@ -25514,7 +25611,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_14to_ipc
  *             raise Exception(f"ToIpc failed: {status.get_msg().decode()}")
  *         return pyarrow_wrap_buffer(buf)             # <<<<<<<<<<<<<<
  * 
- *     @staticmethod
+ *     def to_ipc_into(self, scratch not None):
 */
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_2 = __pyx_f_7pyarrow_3lib_pyarrow_wrap_buffer(__pyx_v_buf); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 185, __pyx_L1_error)
@@ -25548,22 +25645,253 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_14to_ipc
 /* "cylon_armada/context_table.pyx":187
  *         return pyarrow_wrap_buffer(buf)
  * 
- *     @staticmethod             # <<<<<<<<<<<<<<
- *     def from_ipc(data not None):
- *         """Deserialize from Arrow IPC bytes.
+ *     def to_ipc_into(self, scratch not None):             # <<<<<<<<<<<<<<
+ *         """Serialize into a pre-allocated, reusable ``pyarrow.Buffer`` (no alloc).
+ * 
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_17from_ipc(CYTHON_UNUSED PyObject *__pyx_self, 
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_17to_ipc_into(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_16from_ipc, "Deserialize from Arrow IPC bytes.\n\n        Args:\n            data: any buffer-protocol object from to_ipc() \342\200\224 a ``pyarrow.Buffer``\n                (zero-copy) or ``bytes``/``memoryview``.\n\n        Returns:\n            A new ContextTable.\n        ");
-static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_17from_ipc = {"from_ipc", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_17from_ipc, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_16from_ipc};
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_17from_ipc(CYTHON_UNUSED PyObject *__pyx_self, 
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_16to_ipc_into, "Serialize into a pre-allocated, reusable ``pyarrow.Buffer`` (no alloc).\n\n        The buffer-pooled transfer path: a caller keeps one mutable Buffer and\n        reuses it across serializations, so the pages stay resident instead of\n        being re-allocated and re-faulted each time. ``scratch`` must be a mutable\n        ``pyarrow.Buffer`` at least as large as a ``to_ipc()`` result for this\n        table (the size is deterministic for a fixed schema + row count). Returns\n        ``scratch``; ``from_ipc`` reads it (the IPC stream stops at its\n        end-of-stream marker, so any trailing capacity is ignored). This is the\n        ContextTable analog of arrow_ipc's FixedSizeBufferWriter reuse.\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_17to_ipc_into = {"to_ipc_into", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_17to_ipc_into, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_16to_ipc_into};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_17to_ipc_into(PyObject *__pyx_v_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  PyObject *__pyx_v_scratch = 0;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[1] = {0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("to_ipc_into (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_scratch,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 187, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 187, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "to_ipc_into", 0) < (0)) __PYX_ERR(0, 187, __pyx_L3_error)
+      for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("to_ipc_into", 1, 1, 1, i); __PYX_ERR(0, 187, __pyx_L3_error) }
+      }
+    } else if (unlikely(__pyx_nargs != 1)) {
+      goto __pyx_L5_argtuple_error;
+    } else {
+      values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 187, __pyx_L3_error)
+    }
+    __pyx_v_scratch = values[0];
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("to_ipc_into", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 187, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("cylon_armada.context_table.ContextTable.to_ipc_into", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(((PyObject *)__pyx_v_scratch) == Py_None)) {
+    PyErr_Format(PyExc_TypeError, "Argument '%.200s' must not be None", "scratch"); __PYX_ERR(0, 187, __pyx_L1_error)
+  }
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_16to_ipc_into(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self), __pyx_v_scratch);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16to_ipc_into(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, PyObject *__pyx_v_scratch) {
+  std::shared_ptr< arrow::Buffer>  __pyx_v_cbuf;
+  int64_t __pyx_v_size;
+  cylon::Status __pyx_v_status;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  std::shared_ptr< arrow::Buffer>  __pyx_t_1;
+  int __pyx_t_2;
+  PyObject *__pyx_t_3 = NULL;
+  PyObject *__pyx_t_4 = NULL;
+  PyObject *__pyx_t_5 = NULL;
+  PyObject *__pyx_t_6 = NULL;
+  size_t __pyx_t_7;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("to_ipc_into", 0);
+
+  /* "cylon_armada/context_table.pyx":199
+ *         ContextTable analog of arrow_ipc's FixedSizeBufferWriter reuse.
+ *         """
+ *         cdef shared_ptr[CBuffer] cbuf = pyarrow_unwrap_buffer(scratch)             # <<<<<<<<<<<<<<
+ *         cdef int64_t size = 0
+ *         cdef CStatus status = self.table_ptr.get().ToIpcInto(cbuf, &size)
+*/
+  __pyx_t_1 = __pyx_f_7pyarrow_3lib_pyarrow_unwrap_buffer(__pyx_v_scratch); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 199, __pyx_L1_error)
+  __pyx_v_cbuf = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_1);
+
+  /* "cylon_armada/context_table.pyx":200
+ *         """
+ *         cdef shared_ptr[CBuffer] cbuf = pyarrow_unwrap_buffer(scratch)
+ *         cdef int64_t size = 0             # <<<<<<<<<<<<<<
+ *         cdef CStatus status = self.table_ptr.get().ToIpcInto(cbuf, &size)
+ *         if not status.is_ok():
+*/
+  __pyx_v_size = 0;
+
+  /* "cylon_armada/context_table.pyx":201
+ *         cdef shared_ptr[CBuffer] cbuf = pyarrow_unwrap_buffer(scratch)
+ *         cdef int64_t size = 0
+ *         cdef CStatus status = self.table_ptr.get().ToIpcInto(cbuf, &size)             # <<<<<<<<<<<<<<
+ *         if not status.is_ok():
+ *             raise Exception(f"ToIpcInto failed: {status.get_msg().decode()}")
+*/
+  __pyx_v_status = __pyx_v_self->table_ptr.get()->ToIpcInto(__pyx_v_cbuf, (&__pyx_v_size));
+
+  /* "cylon_armada/context_table.pyx":202
+ *         cdef int64_t size = 0
+ *         cdef CStatus status = self.table_ptr.get().ToIpcInto(cbuf, &size)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"ToIpcInto failed: {status.get_msg().decode()}")
+ *         return scratch
+*/
+  __pyx_t_2 = (!(__pyx_v_status.is_ok() != 0));
+  if (unlikely(__pyx_t_2)) {
+
+    /* "cylon_armada/context_table.pyx":203
+ *         cdef CStatus status = self.table_ptr.get().ToIpcInto(cbuf, &size)
+ *         if not status.is_ok():
+ *             raise Exception(f"ToIpcInto failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
+ *         return scratch
+ * 
+*/
+    __pyx_t_4 = NULL;
+    __pyx_t_5 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 203, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_6 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_ToIpcInto_failed, __pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 203, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_t_7 = 1;
+    {
+      PyObject *__pyx_callargs[2] = {__pyx_t_4, __pyx_t_6};
+      __pyx_t_3 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+      __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 203, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_3);
+    }
+    __Pyx_Raise(__pyx_t_3, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    __PYX_ERR(0, 203, __pyx_L1_error)
+
+    /* "cylon_armada/context_table.pyx":202
+ *         cdef int64_t size = 0
+ *         cdef CStatus status = self.table_ptr.get().ToIpcInto(cbuf, &size)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"ToIpcInto failed: {status.get_msg().decode()}")
+ *         return scratch
+*/
+  }
+
+  /* "cylon_armada/context_table.pyx":204
+ *         if not status.is_ok():
+ *             raise Exception(f"ToIpcInto failed: {status.get_msg().decode()}")
+ *         return scratch             # <<<<<<<<<<<<<<
+ * 
+ *     @staticmethod
+*/
+  __Pyx_XDECREF(__pyx_r);
+  __Pyx_INCREF(__pyx_v_scratch);
+  __pyx_r = __pyx_v_scratch;
+  goto __pyx_L0;
+
+  /* "cylon_armada/context_table.pyx":187
+ *         return pyarrow_wrap_buffer(buf)
+ * 
+ *     def to_ipc_into(self, scratch not None):             # <<<<<<<<<<<<<<
+ *         """Serialize into a pre-allocated, reusable ``pyarrow.Buffer`` (no alloc).
+ * 
+*/
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_3);
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_AddTraceback("cylon_armada.context_table.ContextTable.to_ipc_into", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cylon_armada/context_table.pyx":206
+ *         return scratch
+ * 
+ *     @staticmethod             # <<<<<<<<<<<<<<
+ *     def from_ipc(data not None):
+ *         """Deserialize from Arrow IPC bytes.
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_19from_ipc(CYTHON_UNUSED PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_18from_ipc, "Deserialize from Arrow IPC bytes.\n\n        Args:\n            data: any buffer-protocol object from to_ipc() \342\200\224 a ``pyarrow.Buffer``\n                (zero-copy) or ``bytes``/``memoryview``.\n\n        Returns:\n            A new ContextTable.\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_19from_ipc = {"from_ipc", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_19from_ipc, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_18from_ipc};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_19from_ipc(CYTHON_UNUSED PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -25593,32 +25921,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_data,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 187, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 206, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 187, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 206, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "from_ipc", 0) < (0)) __PYX_ERR(0, 187, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "from_ipc", 0) < (0)) __PYX_ERR(0, 206, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("from_ipc", 1, 1, 1, i); __PYX_ERR(0, 187, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("from_ipc", 1, 1, 1, i); __PYX_ERR(0, 206, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 187, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 206, __pyx_L3_error)
     }
     __pyx_v_data = values[0];
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("from_ipc", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 187, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("from_ipc", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 206, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -25630,9 +25958,9 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return NULL;
   __pyx_L4_argument_unpacking_done:;
   if (unlikely(((PyObject *)__pyx_v_data) == Py_None)) {
-    PyErr_Format(PyExc_TypeError, "Argument '%.200s' must not be None", "data"); __PYX_ERR(0, 188, __pyx_L1_error)
+    PyErr_Format(PyExc_TypeError, "Argument '%.200s' must not be None", "data"); __PYX_ERR(0, 207, __pyx_L1_error)
   }
-  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_ipc(__pyx_v_data);
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_18from_ipc(__pyx_v_data);
 
   /* function exit code */
   goto __pyx_L0;
@@ -25651,7 +25979,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_ipc(PyObject *__pyx_v_data) {
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18from_ipc(PyObject *__pyx_v_data) {
   std::shared_ptr<cylon::context::ContextTable>  __pyx_v_c_table;
   cylon::Status __pyx_v_status;
   std::shared_ptr< arrow::Buffer>  __pyx_v_cbuf;
@@ -25675,33 +26003,33 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("from_ipc", 0);
 
-  /* "cylon_armada/context_table.pyx":204
+  /* "cylon_armada/context_table.pyx":223
  *         cdef int64_t size
  * 
  *         if isinstance(data, pa.Buffer):             # <<<<<<<<<<<<<<
  *             # Zero-copy: hold the Arrow buffer by reference (no defensive copy).
  *             # Safe because the ContextTable keeps it alive via Arrow's shared_ptr.
 */
-  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_pa); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 204, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_pa); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 223, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_Buffer); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 204, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_Buffer); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 223, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_3 = PyObject_IsInstance(__pyx_v_data, __pyx_t_2); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 204, __pyx_L1_error)
+  __pyx_t_3 = PyObject_IsInstance(__pyx_v_data, __pyx_t_2); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 223, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   if (__pyx_t_3) {
 
-    /* "cylon_armada/context_table.pyx":207
+    /* "cylon_armada/context_table.pyx":226
  *             # Zero-copy: hold the Arrow buffer by reference (no defensive copy).
  *             # Safe because the ContextTable keeps it alive via Arrow's shared_ptr.
  *             cbuf = pyarrow_unwrap_buffer(data)             # <<<<<<<<<<<<<<
  *             status = CContextTable.MakeFromIpcBuffer(cbuf, &c_table)
  *         else:
 */
-    __pyx_t_4 = __pyx_f_7pyarrow_3lib_pyarrow_unwrap_buffer(__pyx_v_data); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 207, __pyx_L1_error)
+    __pyx_t_4 = __pyx_f_7pyarrow_3lib_pyarrow_unwrap_buffer(__pyx_v_data); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 226, __pyx_L1_error)
     __pyx_v_cbuf = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_4);
 
-    /* "cylon_armada/context_table.pyx":208
+    /* "cylon_armada/context_table.pyx":227
  *             # Safe because the ContextTable keeps it alive via Arrow's shared_ptr.
  *             cbuf = pyarrow_unwrap_buffer(data)
  *             status = CContextTable.MakeFromIpcBuffer(cbuf, &c_table)             # <<<<<<<<<<<<<<
@@ -25710,7 +26038,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
 */
     __pyx_v_status = cylon::context::ContextTable::MakeFromIpcBuffer(__pyx_v_cbuf, (&__pyx_v_c_table));
 
-    /* "cylon_armada/context_table.pyx":204
+    /* "cylon_armada/context_table.pyx":223
  *         cdef int64_t size
  * 
  *         if isinstance(data, pa.Buffer):             # <<<<<<<<<<<<<<
@@ -25720,7 +26048,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
     goto __pyx_L3;
   }
 
-  /* "cylon_armada/context_table.pyx":212
+  /* "cylon_armada/context_table.pyx":231
  *             # bytes / memoryview: the source may be freed, so MakeFromIpc copies.
  *             # Normalize to unsigned-char format so the typed memoryview matches.
  *             view = memoryview(data).cast('B')             # <<<<<<<<<<<<<<
@@ -25728,7 +26056,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
  *             if size == 0:
 */
   /*else*/ {
-    __pyx_t_5 = PyMemoryView_FromObject(__pyx_v_data); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 212, __pyx_L1_error)
+    __pyx_t_5 = PyMemoryView_FromObject(__pyx_v_data); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 231, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_1 = __pyx_t_5;
     __Pyx_INCREF(__pyx_t_1);
@@ -25738,16 +26066,16 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
       __pyx_t_2 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_cast, __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_1); __pyx_t_1 = 0;
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 212, __pyx_L1_error)
+      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 231, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
     }
-    __pyx_t_7 = __Pyx_PyObject_to_MemoryviewSlice_ds_nn_uint8_t__const__(__pyx_t_2, 0); if (unlikely(!__pyx_t_7.memview)) __PYX_ERR(0, 212, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyObject_to_MemoryviewSlice_ds_nn_uint8_t__const__(__pyx_t_2, 0); if (unlikely(!__pyx_t_7.memview)) __PYX_ERR(0, 231, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
     __pyx_v_view = __pyx_t_7;
     __pyx_t_7.memview = NULL;
     __pyx_t_7.data = NULL;
 
-    /* "cylon_armada/context_table.pyx":213
+    /* "cylon_armada/context_table.pyx":232
  *             # Normalize to unsigned-char format so the typed memoryview matches.
  *             view = memoryview(data).cast('B')
  *             size = view.shape[0]             # <<<<<<<<<<<<<<
@@ -25756,7 +26084,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
 */
     __pyx_v_size = (__pyx_v_view.shape[0]);
 
-    /* "cylon_armada/context_table.pyx":214
+    /* "cylon_armada/context_table.pyx":233
  *             view = memoryview(data).cast('B')
  *             size = view.shape[0]
  *             if size == 0:             # <<<<<<<<<<<<<<
@@ -25766,7 +26094,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
     __pyx_t_3 = (__pyx_v_size == 0);
     if (unlikely(__pyx_t_3)) {
 
-      /* "cylon_armada/context_table.pyx":215
+      /* "cylon_armada/context_table.pyx":234
  *             size = view.shape[0]
  *             if size == 0:
  *                 raise Exception("FromIpc failed: empty buffer")             # <<<<<<<<<<<<<<
@@ -25779,14 +26107,14 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
         PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_mstate_global->__pyx_kp_u_FromIpc_failed_empty_buffer};
         __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
         __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-        if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 215, __pyx_L1_error)
+        if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 234, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
       }
       __Pyx_Raise(__pyx_t_2, 0, 0, 0);
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-      __PYX_ERR(0, 215, __pyx_L1_error)
+      __PYX_ERR(0, 234, __pyx_L1_error)
 
-      /* "cylon_armada/context_table.pyx":214
+      /* "cylon_armada/context_table.pyx":233
  *             view = memoryview(data).cast('B')
  *             size = view.shape[0]
  *             if size == 0:             # <<<<<<<<<<<<<<
@@ -25795,7 +26123,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
 */
     }
 
-    /* "cylon_armada/context_table.pyx":216
+    /* "cylon_armada/context_table.pyx":235
  *             if size == 0:
  *                 raise Exception("FromIpc failed: empty buffer")
  *             status = CContextTable.MakeFromIpc(&view[0], size, &c_table)             # <<<<<<<<<<<<<<
@@ -25810,13 +26138,13 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
     } else if (unlikely(__pyx_t_8 >= __pyx_v_view.shape[0])) __pyx_t_9 = 0;
     if (unlikely(__pyx_t_9 != -1)) {
       __Pyx_RaiseBufferIndexError(__pyx_t_9);
-      __PYX_ERR(0, 216, __pyx_L1_error)
+      __PYX_ERR(0, 235, __pyx_L1_error)
     }
     __pyx_v_status = cylon::context::ContextTable::MakeFromIpc((&(*((uint8_t const  *) ( /* dim=0 */ (__pyx_v_view.data + __pyx_t_8 * __pyx_v_view.strides[0]) )))), __pyx_v_size, (&__pyx_v_c_table));
   }
   __pyx_L3:;
 
-  /* "cylon_armada/context_table.pyx":217
+  /* "cylon_armada/context_table.pyx":236
  *                 raise Exception("FromIpc failed: empty buffer")
  *             status = CContextTable.MakeFromIpc(&view[0], size, &c_table)
  *         if not status.is_ok():             # <<<<<<<<<<<<<<
@@ -25826,7 +26154,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
   __pyx_t_3 = (!(__pyx_v_status.is_ok() != 0));
   if (unlikely(__pyx_t_3)) {
 
-    /* "cylon_armada/context_table.pyx":218
+    /* "cylon_armada/context_table.pyx":237
  *             status = CContextTable.MakeFromIpc(&view[0], size, &c_table)
  *         if not status.is_ok():
  *             raise Exception(f"FromIpc failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
@@ -25834,9 +26162,9 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
  *         cdef ContextTable table = ContextTable.__new__(
 */
     __pyx_t_5 = NULL;
-    __pyx_t_1 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 218, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 237, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_10 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_FromIpc_failed, __pyx_t_1); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 218, __pyx_L1_error)
+    __pyx_t_10 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_FromIpc_failed, __pyx_t_1); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 237, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_10);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
     __pyx_t_6 = 1;
@@ -25845,14 +26173,14 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
       __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
       __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
-      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 218, __pyx_L1_error)
+      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 237, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
     }
     __Pyx_Raise(__pyx_t_2, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-    __PYX_ERR(0, 218, __pyx_L1_error)
+    __PYX_ERR(0, 237, __pyx_L1_error)
 
-    /* "cylon_armada/context_table.pyx":217
+    /* "cylon_armada/context_table.pyx":236
  *                 raise Exception("FromIpc failed: empty buffer")
  *             status = CContextTable.MakeFromIpc(&view[0], size, &c_table)
  *         if not status.is_ok():             # <<<<<<<<<<<<<<
@@ -25861,35 +26189,35 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
 */
   }
 
-  /* "cylon_armada/context_table.pyx":221
+  /* "cylon_armada/context_table.pyx":240
  * 
  *         cdef ContextTable table = ContextTable.__new__(
  *             ContextTable, c_table.get().EmbeddingDim())             # <<<<<<<<<<<<<<
  *         table.table_ptr = c_table
  *         return table
 */
-  __pyx_t_2 = __Pyx_PyLong_From_int(__pyx_v_c_table.get()->EmbeddingDim()); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 221, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyLong_From_int(__pyx_v_c_table.get()->EmbeddingDim()); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 240, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
 
-  /* "cylon_armada/context_table.pyx":220
+  /* "cylon_armada/context_table.pyx":239
  *             raise Exception(f"FromIpc failed: {status.get_msg().decode()}")
  * 
  *         cdef ContextTable table = ContextTable.__new__(             # <<<<<<<<<<<<<<
  *             ContextTable, c_table.get().EmbeddingDim())
  *         table.table_ptr = c_table
 */
-  __pyx_t_10 = PyTuple_New(1); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 220, __pyx_L1_error)
+  __pyx_t_10 = PyTuple_New(1); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 239, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_10);
   __Pyx_GIVEREF(__pyx_t_2);
-  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 0, __pyx_t_2) != (0)) __PYX_ERR(0, 220, __pyx_L1_error);
+  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_10, 0, __pyx_t_2) != (0)) __PYX_ERR(0, 239, __pyx_L1_error);
   __pyx_t_2 = 0;
-  __pyx_t_2 = ((PyObject *)__pyx_tp_new_12cylon_armada_13context_table_ContextTable(((PyTypeObject *)__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable), __pyx_t_10, NULL)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 220, __pyx_L1_error)
+  __pyx_t_2 = ((PyObject *)__pyx_tp_new_12cylon_armada_13context_table_ContextTable(((PyTypeObject *)__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable), __pyx_t_10, NULL)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 239, __pyx_L1_error)
   __Pyx_GOTREF((PyObject *)__pyx_t_2);
   __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
   __pyx_v_table = ((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_t_2);
   __pyx_t_2 = 0;
 
-  /* "cylon_armada/context_table.pyx":222
+  /* "cylon_armada/context_table.pyx":241
  *         cdef ContextTable table = ContextTable.__new__(
  *             ContextTable, c_table.get().EmbeddingDim())
  *         table.table_ptr = c_table             # <<<<<<<<<<<<<<
@@ -25898,7 +26226,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
 */
   __pyx_v_table->table_ptr = __pyx_v_c_table;
 
-  /* "cylon_armada/context_table.pyx":223
+  /* "cylon_armada/context_table.pyx":242
  *             ContextTable, c_table.get().EmbeddingDim())
  *         table.table_ptr = c_table
  *         return table             # <<<<<<<<<<<<<<
@@ -25910,8 +26238,8 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
   __pyx_r = ((PyObject *)__pyx_v_table);
   goto __pyx_L0;
 
-  /* "cylon_armada/context_table.pyx":187
- *         return pyarrow_wrap_buffer(buf)
+  /* "cylon_armada/context_table.pyx":206
+ *         return scratch
  * 
  *     @staticmethod             # <<<<<<<<<<<<<<
  *     def from_ipc(data not None):
@@ -25935,7 +26263,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
   return __pyx_r;
 }
 
-/* "cylon_armada/context_table.pyx":225
+/* "cylon_armada/context_table.pyx":244
  *         return table
  * 
  *     def to_arrow(self):             # <<<<<<<<<<<<<<
@@ -25944,16 +26272,16 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_16from_i
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_19to_arrow(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_21to_arrow(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_18to_arrow, "Get the underlying RecordBatch as a pyarrow.RecordBatch.\n\n        Returns:\n            pyarrow.RecordBatch (includes tombstoned rows).\n        ");
-static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_19to_arrow = {"to_arrow", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_19to_arrow, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_18to_arrow};
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_19to_arrow(PyObject *__pyx_v_self, 
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_20to_arrow, "Get the underlying RecordBatch as a pyarrow.RecordBatch.\n\n        Returns:\n            pyarrow.RecordBatch (includes tombstoned rows).\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_21to_arrow = {"to_arrow", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_21to_arrow, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_20to_arrow};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_21to_arrow(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -25979,14 +26307,14 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   const Py_ssize_t __pyx_kwds_len = unlikely(__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
   if (unlikely(__pyx_kwds_len < 0)) return NULL;
   if (unlikely(__pyx_kwds_len > 0)) {__Pyx_RejectKeywords("to_arrow", __pyx_kwds); return NULL;}
-  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arrow(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self));
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_20to_arrow(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arrow(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self) {
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20to_arrow(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self) {
   std::shared_ptr< arrow::RecordBatch>  __pyx_v_batch;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -25997,7 +26325,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arr
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("to_arrow", 0);
 
-  /* "cylon_armada/context_table.pyx":231
+  /* "cylon_armada/context_table.pyx":250
  *             pyarrow.RecordBatch (includes tombstoned rows).
  *         """
  *         cdef shared_ptr[CRecordBatch] batch = self.table_ptr.get().Batch()             # <<<<<<<<<<<<<<
@@ -26006,7 +26334,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arr
 */
   __pyx_v_batch = __pyx_v_self->table_ptr.get()->Batch();
 
-  /* "cylon_armada/context_table.pyx":232
+  /* "cylon_armada/context_table.pyx":251
  *         """
  *         cdef shared_ptr[CRecordBatch] batch = self.table_ptr.get().Batch()
  *         if not batch.get():             # <<<<<<<<<<<<<<
@@ -26016,7 +26344,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arr
   __pyx_t_1 = (!(__pyx_v_batch.get() != 0));
   if (__pyx_t_1) {
 
-    /* "cylon_armada/context_table.pyx":233
+    /* "cylon_armada/context_table.pyx":252
  *         cdef shared_ptr[CRecordBatch] batch = self.table_ptr.get().Batch()
  *         if not batch.get():
  *             return None             # <<<<<<<<<<<<<<
@@ -26027,7 +26355,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arr
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "cylon_armada/context_table.pyx":232
+    /* "cylon_armada/context_table.pyx":251
  *         """
  *         cdef shared_ptr[CRecordBatch] batch = self.table_ptr.get().Batch()
  *         if not batch.get():             # <<<<<<<<<<<<<<
@@ -26036,7 +26364,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arr
 */
   }
 
-  /* "cylon_armada/context_table.pyx":234
+  /* "cylon_armada/context_table.pyx":253
  *         if not batch.get():
  *             return None
  *         return pyarrow_wrap_batch(batch)             # <<<<<<<<<<<<<<
@@ -26044,13 +26372,13 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arr
  *     @property
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_2 = __pyx_f_7pyarrow_3lib_pyarrow_wrap_batch(__pyx_v_batch); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 234, __pyx_L1_error)
+  __pyx_t_2 = __pyx_f_7pyarrow_3lib_pyarrow_wrap_batch(__pyx_v_batch); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 253, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_r = __pyx_t_2;
   __pyx_t_2 = 0;
   goto __pyx_L0;
 
-  /* "cylon_armada/context_table.pyx":225
+  /* "cylon_armada/context_table.pyx":244
  *         return table
  * 
  *     def to_arrow(self):             # <<<<<<<<<<<<<<
@@ -26069,7 +26397,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_18to_arr
   return __pyx_r;
 }
 
-/* "cylon_armada/context_table.pyx":236
+/* "cylon_armada/context_table.pyx":255
  *         return pyarrow_wrap_batch(batch)
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -26101,7 +26429,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_4size___
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__get__", 0);
 
-  /* "cylon_armada/context_table.pyx":239
+  /* "cylon_armada/context_table.pyx":258
  *     def size(self):
  *         """Number of active (non-deleted) rows."""
  *         return self.table_ptr.get().Size()             # <<<<<<<<<<<<<<
@@ -26109,13 +26437,13 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_4size___
  *     @property
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyLong_From_int64_t(__pyx_v_self->table_ptr.get()->Size()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 239, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyLong_From_int64_t(__pyx_v_self->table_ptr.get()->Size()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 258, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cylon_armada/context_table.pyx":236
+  /* "cylon_armada/context_table.pyx":255
  *         return pyarrow_wrap_batch(batch)
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -26134,7 +26462,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_4size___
   return __pyx_r;
 }
 
-/* "cylon_armada/context_table.pyx":241
+/* "cylon_armada/context_table.pyx":260
  *         return self.table_ptr.get().Size()
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -26166,7 +26494,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_10total_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__get__", 0);
 
-  /* "cylon_armada/context_table.pyx":244
+  /* "cylon_armada/context_table.pyx":263
  *     def total_rows(self):
  *         """Total rows including tombstoned."""
  *         return self.table_ptr.get().TotalRows()             # <<<<<<<<<<<<<<
@@ -26174,13 +26502,13 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_10total_
  *     @property
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyLong_From_int64_t(__pyx_v_self->table_ptr.get()->TotalRows()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 244, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyLong_From_int64_t(__pyx_v_self->table_ptr.get()->TotalRows()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 263, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cylon_armada/context_table.pyx":241
+  /* "cylon_armada/context_table.pyx":260
  *         return self.table_ptr.get().Size()
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -26199,7 +26527,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_10total_
   return __pyx_r;
 }
 
-/* "cylon_armada/context_table.pyx":246
+/* "cylon_armada/context_table.pyx":265
  *         return self.table_ptr.get().TotalRows()
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -26231,7 +26559,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_13embedd
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__get__", 0);
 
-  /* "cylon_armada/context_table.pyx":249
+  /* "cylon_armada/context_table.pyx":268
  *     def embedding_dim(self):
  *         """Embedding dimension."""
  *         return self.table_ptr.get().EmbeddingDim()             # <<<<<<<<<<<<<<
@@ -26239,13 +26567,13 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_13embedd
  *     def broadcast(self, CylonContext ctx not None, int root=0):
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_self->table_ptr.get()->EmbeddingDim()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 249, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_self->table_ptr.get()->EmbeddingDim()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 268, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cylon_armada/context_table.pyx":246
+  /* "cylon_armada/context_table.pyx":265
  *         return self.table_ptr.get().TotalRows()
  * 
  *     @property             # <<<<<<<<<<<<<<
@@ -26264,7 +26592,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_13embedd
   return __pyx_r;
 }
 
-/* "cylon_armada/context_table.pyx":251
+/* "cylon_armada/context_table.pyx":270
  *         return self.table_ptr.get().EmbeddingDim()
  * 
  *     def broadcast(self, CylonContext ctx not None, int root=0):             # <<<<<<<<<<<<<<
@@ -26273,16 +26601,16 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_13embedd
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_21broadcast(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_23broadcast(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_20broadcast, "Broadcast this ContextTable from root rank to all workers.\n\n        On non-root ranks, replaces current contents with the broadcast data.\n        Compacts before broadcasting. No-op for local (non-distributed) contexts.\n\n        Args:\n            ctx: CylonContext with distributed communicator.\n            root: Rank of the broadcasting process (default 0).\n        ");
-static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_21broadcast = {"broadcast", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_21broadcast, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_20broadcast};
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_21broadcast(PyObject *__pyx_v_self, 
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_22broadcast, "Broadcast this ContextTable from root rank to all workers.\n\n        On non-root ranks, replaces current contents with the broadcast data.\n        Compacts before broadcasting. No-op for local (non-distributed) contexts.\n\n        Args:\n            ctx: CylonContext with distributed communicator.\n            root: Rank of the broadcasting process (default 0).\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_23broadcast = {"broadcast", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_23broadcast, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_22broadcast};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_23broadcast(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -26313,48 +26641,48 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_ctx,&__pyx_mstate_global->__pyx_n_u_root,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 251, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 270, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 251, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 270, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 251, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 270, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "broadcast", 0) < (0)) __PYX_ERR(0, 251, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "broadcast", 0) < (0)) __PYX_ERR(0, 270, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("broadcast", 0, 1, 2, i); __PYX_ERR(0, 251, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("broadcast", 0, 1, 2, i); __PYX_ERR(0, 270, __pyx_L3_error) }
       }
     } else {
       switch (__pyx_nargs) {
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 251, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 270, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 251, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 270, __pyx_L3_error)
         break;
         default: goto __pyx_L5_argtuple_error;
       }
     }
     __pyx_v_ctx = ((struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *)values[0]);
     if (values[1]) {
-      __pyx_v_root = __Pyx_PyLong_As_int(values[1]); if (unlikely((__pyx_v_root == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 251, __pyx_L3_error)
+      __pyx_v_root = __Pyx_PyLong_As_int(values[1]); if (unlikely((__pyx_v_root == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 270, __pyx_L3_error)
     } else {
       __pyx_v_root = ((int)0);
     }
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("broadcast", 0, 1, 2, __pyx_nargs); __PYX_ERR(0, 251, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("broadcast", 0, 1, 2, __pyx_nargs); __PYX_ERR(0, 270, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -26365,8 +26693,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ctx), __pyx_mstate_global->__pyx_ptype_7pycylon_3ctx_7context_CylonContext, 0, "ctx", 0))) __PYX_ERR(0, 251, __pyx_L1_error)
-  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadcast(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self), __pyx_v_ctx, __pyx_v_root);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ctx), __pyx_mstate_global->__pyx_ptype_7pycylon_3ctx_7context_CylonContext, 0, "ctx", 0))) __PYX_ERR(0, 270, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_22broadcast(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self), __pyx_v_ctx, __pyx_v_root);
 
   /* function exit code */
   goto __pyx_L0;
@@ -26385,7 +26713,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadcast(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx, int __pyx_v_root) {
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22broadcast(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx, int __pyx_v_root) {
   std::shared_ptr<cylon::CylonContext>  __pyx_v_ctx_ptr;
   cylon::Status __pyx_v_status;
   PyObject *__pyx_r = NULL;
@@ -26402,17 +26730,17 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("broadcast", 0);
 
-  /* "cylon_armada/context_table.pyx":261
+  /* "cylon_armada/context_table.pyx":280
  *             root: Rank of the broadcasting process (default 0).
  *         """
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)             # <<<<<<<<<<<<<<
  *         cdef CStatus status = self.table_ptr.get().Broadcast(ctx_ptr, root)
  *         if not status.is_ok():
 */
-  __pyx_t_1 = __pyx_f_7pycylon_3api_3lib_pycylon_unwrap_context(((PyObject *)__pyx_v_ctx)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 261, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_7pycylon_3api_3lib_pycylon_unwrap_context(((PyObject *)__pyx_v_ctx)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 280, __pyx_L1_error)
   __pyx_v_ctx_ptr = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_1);
 
-  /* "cylon_armada/context_table.pyx":262
+  /* "cylon_armada/context_table.pyx":281
  *         """
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)
  *         cdef CStatus status = self.table_ptr.get().Broadcast(ctx_ptr, root)             # <<<<<<<<<<<<<<
@@ -26421,7 +26749,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
 */
   __pyx_v_status = __pyx_v_self->table_ptr.get()->Broadcast(__pyx_v_ctx_ptr, __pyx_v_root);
 
-  /* "cylon_armada/context_table.pyx":263
+  /* "cylon_armada/context_table.pyx":282
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)
  *         cdef CStatus status = self.table_ptr.get().Broadcast(ctx_ptr, root)
  *         if not status.is_ok():             # <<<<<<<<<<<<<<
@@ -26431,7 +26759,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
   __pyx_t_2 = (!(__pyx_v_status.is_ok() != 0));
   if (unlikely(__pyx_t_2)) {
 
-    /* "cylon_armada/context_table.pyx":264
+    /* "cylon_armada/context_table.pyx":283
  *         cdef CStatus status = self.table_ptr.get().Broadcast(ctx_ptr, root)
  *         if not status.is_ok():
  *             raise Exception(f"Broadcast failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
@@ -26439,9 +26767,9 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
  *     def all_gather(self, CylonContext ctx not None):
 */
     __pyx_t_4 = NULL;
-    __pyx_t_5 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 264, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 283, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_6 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_Broadcast_failed, __pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 264, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_Broadcast_failed, __pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 283, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
     __pyx_t_7 = 1;
@@ -26450,14 +26778,14 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
       __pyx_t_3 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
       __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 264, __pyx_L1_error)
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 283, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
     }
     __Pyx_Raise(__pyx_t_3, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(0, 264, __pyx_L1_error)
+    __PYX_ERR(0, 283, __pyx_L1_error)
 
-    /* "cylon_armada/context_table.pyx":263
+    /* "cylon_armada/context_table.pyx":282
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)
  *         cdef CStatus status = self.table_ptr.get().Broadcast(ctx_ptr, root)
  *         if not status.is_ok():             # <<<<<<<<<<<<<<
@@ -26466,7 +26794,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
 */
   }
 
-  /* "cylon_armada/context_table.pyx":251
+  /* "cylon_armada/context_table.pyx":270
  *         return self.table_ptr.get().EmbeddingDim()
  * 
  *     def broadcast(self, CylonContext ctx not None, int root=0):             # <<<<<<<<<<<<<<
@@ -26490,7 +26818,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
   return __pyx_r;
 }
 
-/* "cylon_armada/context_table.pyx":266
+/* "cylon_armada/context_table.pyx":285
  *             raise Exception(f"Broadcast failed: {status.get_msg().decode()}")
  * 
  *     def all_gather(self, CylonContext ctx not None):             # <<<<<<<<<<<<<<
@@ -26499,16 +26827,16 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_20broadc
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_23all_gather(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_25all_gather(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_22all_gather, "AllGather: each worker contributes its ContextTable, all receive merged result.\n\n        Compacts before gathering. No-op for local (non-distributed) contexts.\n\n        Args:\n            ctx: CylonContext with distributed communicator.\n        ");
-static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_23all_gather = {"all_gather", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_23all_gather, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_22all_gather};
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_23all_gather(PyObject *__pyx_v_self, 
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_12ContextTable_24all_gather, "AllGather: each worker contributes its ContextTable, all receive merged result.\n\n        Compacts before gathering. No-op for local (non-distributed) contexts.\n\n        Args:\n            ctx: CylonContext with distributed communicator.\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_25all_gather = {"all_gather", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_25all_gather, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_24all_gather};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_25all_gather(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -26538,32 +26866,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_ctx,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 266, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 285, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 266, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 285, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "all_gather", 0) < (0)) __PYX_ERR(0, 266, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "all_gather", 0) < (0)) __PYX_ERR(0, 285, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("all_gather", 1, 1, 1, i); __PYX_ERR(0, 266, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("all_gather", 1, 1, 1, i); __PYX_ERR(0, 285, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 266, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 285, __pyx_L3_error)
     }
     __pyx_v_ctx = ((struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *)values[0]);
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("all_gather", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 266, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("all_gather", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 285, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -26574,8 +26902,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ctx), __pyx_mstate_global->__pyx_ptype_7pycylon_3ctx_7context_CylonContext, 0, "ctx", 0))) __PYX_ERR(0, 266, __pyx_L1_error)
-  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_gather(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self), __pyx_v_ctx);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ctx), __pyx_mstate_global->__pyx_ptype_7pycylon_3ctx_7context_CylonContext, 0, "ctx", 0))) __PYX_ERR(0, 285, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_24all_gather(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self), __pyx_v_ctx);
 
   /* function exit code */
   goto __pyx_L0;
@@ -26594,7 +26922,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_gather(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx) {
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_24all_gather(struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, struct __pyx_obj_7pycylon_3ctx_7context_CylonContext *__pyx_v_ctx) {
   std::shared_ptr<cylon::CylonContext>  __pyx_v_ctx_ptr;
   cylon::Status __pyx_v_status;
   PyObject *__pyx_r = NULL;
@@ -26611,17 +26939,17 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_ga
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("all_gather", 0);
 
-  /* "cylon_armada/context_table.pyx":274
+  /* "cylon_armada/context_table.pyx":293
  *             ctx: CylonContext with distributed communicator.
  *         """
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)             # <<<<<<<<<<<<<<
  *         cdef CStatus status = self.table_ptr.get().AllGather(ctx_ptr)
  *         if not status.is_ok():
 */
-  __pyx_t_1 = __pyx_f_7pycylon_3api_3lib_pycylon_unwrap_context(((PyObject *)__pyx_v_ctx)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 274, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_7pycylon_3api_3lib_pycylon_unwrap_context(((PyObject *)__pyx_v_ctx)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 293, __pyx_L1_error)
   __pyx_v_ctx_ptr = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_1);
 
-  /* "cylon_armada/context_table.pyx":275
+  /* "cylon_armada/context_table.pyx":294
  *         """
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)
  *         cdef CStatus status = self.table_ptr.get().AllGather(ctx_ptr)             # <<<<<<<<<<<<<<
@@ -26630,7 +26958,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_ga
 */
   __pyx_v_status = __pyx_v_self->table_ptr.get()->AllGather(__pyx_v_ctx_ptr);
 
-  /* "cylon_armada/context_table.pyx":276
+  /* "cylon_armada/context_table.pyx":295
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)
  *         cdef CStatus status = self.table_ptr.get().AllGather(ctx_ptr)
  *         if not status.is_ok():             # <<<<<<<<<<<<<<
@@ -26640,7 +26968,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_ga
   __pyx_t_2 = (!(__pyx_v_status.is_ok() != 0));
   if (unlikely(__pyx_t_2)) {
 
-    /* "cylon_armada/context_table.pyx":277
+    /* "cylon_armada/context_table.pyx":296
  *         cdef CStatus status = self.table_ptr.get().AllGather(ctx_ptr)
  *         if not status.is_ok():
  *             raise Exception(f"AllGather failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
@@ -26648,9 +26976,9 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_ga
  * 
 */
     __pyx_t_4 = NULL;
-    __pyx_t_5 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 277, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 296, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_6 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_AllGather_failed, __pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 277, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_AllGather_failed, __pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 296, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
     __pyx_t_7 = 1;
@@ -26659,14 +26987,14 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_ga
       __pyx_t_3 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
       __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 277, __pyx_L1_error)
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 296, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
     }
     __Pyx_Raise(__pyx_t_3, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(0, 277, __pyx_L1_error)
+    __PYX_ERR(0, 296, __pyx_L1_error)
 
-    /* "cylon_armada/context_table.pyx":276
+    /* "cylon_armada/context_table.pyx":295
  *         cdef shared_ptr[CCylonContext] ctx_ptr = pycylon_unwrap_context(ctx)
  *         cdef CStatus status = self.table_ptr.get().AllGather(ctx_ptr)
  *         if not status.is_ok():             # <<<<<<<<<<<<<<
@@ -26675,7 +27003,7 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_ga
 */
   }
 
-  /* "cylon_armada/context_table.pyx":266
+  /* "cylon_armada/context_table.pyx":285
  *             raise Exception(f"Broadcast failed: {status.get_msg().decode()}")
  * 
  *     def all_gather(self, CylonContext ctx not None):             # <<<<<<<<<<<<<<
@@ -26706,15 +27034,15 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_22all_ga
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_25__reduce_cython__(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__reduce_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_25__reduce_cython__ = {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_25__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_25__reduce_cython__(PyObject *__pyx_v_self, 
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_27__reduce_cython__ = {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__reduce_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -26740,14 +27068,14 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   const Py_ssize_t __pyx_kwds_len = unlikely(__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
   if (unlikely(__pyx_kwds_len < 0)) return NULL;
   if (unlikely(__pyx_kwds_len > 0)) {__Pyx_RejectKeywords("__reduce_cython__", __pyx_kwds); return NULL;}
-  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_24__reduce_cython__(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self));
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_26__reduce_cython__(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_24__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self) {
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_26__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_lineno = 0;
@@ -26787,15 +27115,15 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_24__redu
 */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__setstate_cython__(PyObject *__pyx_v_self, 
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_29__setstate_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_27__setstate_cython__ = {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
-static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__setstate_cython__(PyObject *__pyx_v_self, 
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_12ContextTable_29__setstate_cython__ = {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_29__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_12ContextTable_29__setstate_cython__(PyObject *__pyx_v_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -26861,7 +27189,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_26__setstate_cython__(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self), __pyx_v___pyx_state);
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_12ContextTable_28__setstate_cython__(((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_v_self), __pyx_v___pyx_state);
 
   /* function exit code */
   for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
@@ -26871,7 +27199,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_26__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_28__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_lineno = 0;
@@ -26898,6 +27226,1133 @@ static PyObject *__pyx_pf_12cylon_armada_13context_table_12ContextTable_26__sets
   __pyx_L1_error:;
   __Pyx_AddTraceback("cylon_armada.context_table.ContextTable.__setstate_cython__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cylon_armada/context_table.pyx":304
+ * 
+ * IF CYTHON_REDIS:
+ *     def save_context_to_redis(ContextTable table not None,             # <<<<<<<<<<<<<<
+ *                               str key not None,
+ *                               str redis_addr="tcp://localhost:6379",
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_12cylon_armada_13context_table_1save_context_to_redis(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_save_context_to_redis, "Save a ContextTable to Redis as Arrow IPC bytes.\n\n        Requires CYLON_SESSION_ID environment variable for key namespacing.\n\n        Args:\n            table: The ContextTable to persist.\n            key: Application-defined key (e.g., workflow_id).\n            redis_addr: Redis connection string.\n            ttl_seconds: TTL for the Redis key (default 3600).\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_1save_context_to_redis = {"save_context_to_redis", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_1save_context_to_redis, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_save_context_to_redis};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_1save_context_to_redis(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table = 0;
+  PyObject *__pyx_v_key = 0;
+  PyObject *__pyx_v_redis_addr = 0;
+  int __pyx_v_ttl_seconds;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[4] = {0,0,0,0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("save_context_to_redis (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_table,&__pyx_mstate_global->__pyx_n_u_key,&__pyx_mstate_global->__pyx_n_u_redis_addr,&__pyx_mstate_global->__pyx_n_u_ttl_seconds,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 304, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  4:
+        values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 304, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  3:
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 304, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 304, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 304, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "save_context_to_redis", 0) < (0)) __PYX_ERR(0, 304, __pyx_L3_error)
+      if (!values[2]) values[2] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_tcp_localhost_6379)));
+      for (Py_ssize_t i = __pyx_nargs; i < 2; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("save_context_to_redis", 0, 2, 4, i); __PYX_ERR(0, 304, __pyx_L3_error) }
+      }
+    } else {
+      switch (__pyx_nargs) {
+        case  4:
+        values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 304, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  3:
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 304, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 304, __pyx_L3_error)
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 304, __pyx_L3_error)
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      if (!values[2]) values[2] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_tcp_localhost_6379)));
+    }
+    __pyx_v_table = ((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)values[0]);
+    __pyx_v_key = ((PyObject*)values[1]);
+    __pyx_v_redis_addr = ((PyObject*)values[2]);
+    if (values[3]) {
+      __pyx_v_ttl_seconds = __Pyx_PyLong_As_int(values[3]); if (unlikely((__pyx_v_ttl_seconds == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 307, __pyx_L3_error)
+    } else {
+      __pyx_v_ttl_seconds = ((int)((int)0xE10));
+    }
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("save_context_to_redis", 0, 2, 4, __pyx_nargs); __PYX_ERR(0, 304, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("cylon_armada.context_table.save_context_to_redis", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_table), __pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, 0, "table", 0))) __PYX_ERR(0, 304, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_key), (&PyUnicode_Type), 0, "key", 1))) __PYX_ERR(0, 305, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_redis_addr), (&PyUnicode_Type), 1, "redis_addr", 1))) __PYX_ERR(0, 306, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_save_context_to_redis(__pyx_self, __pyx_v_table, __pyx_v_key, __pyx_v_redis_addr, __pyx_v_ttl_seconds);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_12cylon_armada_13context_table_save_context_to_redis(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table, PyObject *__pyx_v_key, PyObject *__pyx_v_redis_addr, int __pyx_v_ttl_seconds) {
+  cylon::Status __pyx_v_status;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  std::string __pyx_t_2;
+  std::string __pyx_t_3;
+  int __pyx_t_4;
+  PyObject *__pyx_t_5 = NULL;
+  PyObject *__pyx_t_6 = NULL;
+  PyObject *__pyx_t_7 = NULL;
+  size_t __pyx_t_8;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("save_context_to_redis", 0);
+
+  /* "cylon_armada/context_table.pyx":319
+ *         """
+ *         cdef CStatus status = CSaveToRedis(
+ *             table.table_ptr, key.encode(), redis_addr.encode(), ttl_seconds)             # <<<<<<<<<<<<<<
+ *         if not status.is_ok():
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")
+*/
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_key, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 319, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_2 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 319, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  if (unlikely(__pyx_v_redis_addr == Py_None)) {
+    PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "encode");
+    __PYX_ERR(0, 319, __pyx_L1_error)
+  }
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_redis_addr, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 319, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_3 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 319, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "cylon_armada/context_table.pyx":318
+ *             ttl_seconds: TTL for the Redis key (default 3600).
+ *         """
+ *         cdef CStatus status = CSaveToRedis(             # <<<<<<<<<<<<<<
+ *             table.table_ptr, key.encode(), redis_addr.encode(), ttl_seconds)
+ *         if not status.is_ok():
+*/
+  __pyx_v_status = cylon::context::SaveToRedis(__pyx_v_table->table_ptr, __pyx_t_2, __pyx_t_3, __pyx_v_ttl_seconds);
+
+  /* "cylon_armada/context_table.pyx":320
+ *         cdef CStatus status = CSaveToRedis(
+ *             table.table_ptr, key.encode(), redis_addr.encode(), ttl_seconds)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")
+ * 
+*/
+  __pyx_t_4 = (!(__pyx_v_status.is_ok() != 0));
+  if (unlikely(__pyx_t_4)) {
+
+    /* "cylon_armada/context_table.pyx":321
+ *             table.table_ptr, key.encode(), redis_addr.encode(), ttl_seconds)
+ *         if not status.is_ok():
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
+ * 
+ *     def load_context_from_redis(str key not None,
+*/
+    __pyx_t_5 = NULL;
+    __pyx_t_6 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 321, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __pyx_t_7 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_SaveToRedis_failed, __pyx_t_6); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 321, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_7);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __pyx_t_8 = 1;
+    {
+      PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_t_7};
+      __pyx_t_1 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_8, (2-__pyx_t_8) | (__pyx_t_8*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+      __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 321, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_1);
+    }
+    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    __PYX_ERR(0, 321, __pyx_L1_error)
+
+    /* "cylon_armada/context_table.pyx":320
+ *         cdef CStatus status = CSaveToRedis(
+ *             table.table_ptr, key.encode(), redis_addr.encode(), ttl_seconds)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")
+ * 
+*/
+  }
+
+  /* "cylon_armada/context_table.pyx":304
+ * 
+ * IF CYTHON_REDIS:
+ *     def save_context_to_redis(ContextTable table not None,             # <<<<<<<<<<<<<<
+ *                               str key not None,
+ *                               str redis_addr="tcp://localhost:6379",
+*/
+
+  /* function exit code */
+  __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_AddTraceback("cylon_armada.context_table.save_context_to_redis", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cylon_armada/context_table.pyx":323
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")
+ * 
+ *     def load_context_from_redis(str key not None,             # <<<<<<<<<<<<<<
+ *                                 str redis_addr="tcp://localhost:6379"):
+ *         """Load a ContextTable from Redis.
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_12cylon_armada_13context_table_3load_context_from_redis(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_2load_context_from_redis, "Load a ContextTable from Redis.\n\n        Args:\n            key: Application-defined key (same as used in save_context_to_redis).\n            redis_addr: Redis connection string.\n\n        Returns:\n            A new ContextTable, or None if key not found.\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_3load_context_from_redis = {"load_context_from_redis", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_3load_context_from_redis, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_2load_context_from_redis};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_3load_context_from_redis(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  PyObject *__pyx_v_key = 0;
+  PyObject *__pyx_v_redis_addr = 0;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[2] = {0,0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("load_context_from_redis (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_key,&__pyx_mstate_global->__pyx_n_u_redis_addr,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 323, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 323, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 323, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "load_context_from_redis", 0) < (0)) __PYX_ERR(0, 323, __pyx_L3_error)
+      if (!values[1]) values[1] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_tcp_localhost_6379)));
+      for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("load_context_from_redis", 0, 1, 2, i); __PYX_ERR(0, 323, __pyx_L3_error) }
+      }
+    } else {
+      switch (__pyx_nargs) {
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 323, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 323, __pyx_L3_error)
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      if (!values[1]) values[1] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_tcp_localhost_6379)));
+    }
+    __pyx_v_key = ((PyObject*)values[0]);
+    __pyx_v_redis_addr = ((PyObject*)values[1]);
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("load_context_from_redis", 0, 1, 2, __pyx_nargs); __PYX_ERR(0, 323, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("cylon_armada.context_table.load_context_from_redis", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_key), (&PyUnicode_Type), 0, "key", 1))) __PYX_ERR(0, 323, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_redis_addr), (&PyUnicode_Type), 1, "redis_addr", 1))) __PYX_ERR(0, 324, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_2load_context_from_redis(__pyx_self, __pyx_v_key, __pyx_v_redis_addr);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_12cylon_armada_13context_table_2load_context_from_redis(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_key, PyObject *__pyx_v_redis_addr) {
+  std::shared_ptr<cylon::context::ContextTable>  __pyx_v_c_table;
+  cylon::Status __pyx_v_status;
+  struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table = 0;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  std::string __pyx_t_2;
+  std::string __pyx_t_3;
+  int __pyx_t_4;
+  PyObject *__pyx_t_5 = NULL;
+  PyObject *__pyx_t_6 = NULL;
+  PyObject *__pyx_t_7 = NULL;
+  size_t __pyx_t_8;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("load_context_from_redis", 0);
+
+  /* "cylon_armada/context_table.pyx":336
+ *         cdef shared_ptr[CContextTable] c_table
+ *         cdef CStatus status = CLoadFromRedis(
+ *             key.encode(), redis_addr.encode(), &c_table)             # <<<<<<<<<<<<<<
+ *         if not status.is_ok():
+ *             raise Exception(f"LoadFromRedis failed: {status.get_msg().decode()}")
+*/
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_key, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 336, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_2 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 336, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  if (unlikely(__pyx_v_redis_addr == Py_None)) {
+    PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "encode");
+    __PYX_ERR(0, 336, __pyx_L1_error)
+  }
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_redis_addr, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 336, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_3 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 336, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "cylon_armada/context_table.pyx":335
+ *         """
+ *         cdef shared_ptr[CContextTable] c_table
+ *         cdef CStatus status = CLoadFromRedis(             # <<<<<<<<<<<<<<
+ *             key.encode(), redis_addr.encode(), &c_table)
+ *         if not status.is_ok():
+*/
+  __pyx_v_status = cylon::context::LoadFromRedis(__pyx_t_2, __pyx_t_3, (&__pyx_v_c_table));
+
+  /* "cylon_armada/context_table.pyx":337
+ *         cdef CStatus status = CLoadFromRedis(
+ *             key.encode(), redis_addr.encode(), &c_table)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"LoadFromRedis failed: {status.get_msg().decode()}")
+ *         if not c_table.get():
+*/
+  __pyx_t_4 = (!(__pyx_v_status.is_ok() != 0));
+  if (unlikely(__pyx_t_4)) {
+
+    /* "cylon_armada/context_table.pyx":338
+ *             key.encode(), redis_addr.encode(), &c_table)
+ *         if not status.is_ok():
+ *             raise Exception(f"LoadFromRedis failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
+ *         if not c_table.get():
+ *             return None
+*/
+    __pyx_t_5 = NULL;
+    __pyx_t_6 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 338, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __pyx_t_7 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_LoadFromRedis_failed, __pyx_t_6); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 338, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_7);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __pyx_t_8 = 1;
+    {
+      PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_t_7};
+      __pyx_t_1 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_8, (2-__pyx_t_8) | (__pyx_t_8*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+      __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 338, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_1);
+    }
+    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    __PYX_ERR(0, 338, __pyx_L1_error)
+
+    /* "cylon_armada/context_table.pyx":337
+ *         cdef CStatus status = CLoadFromRedis(
+ *             key.encode(), redis_addr.encode(), &c_table)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"LoadFromRedis failed: {status.get_msg().decode()}")
+ *         if not c_table.get():
+*/
+  }
+
+  /* "cylon_armada/context_table.pyx":339
+ *         if not status.is_ok():
+ *             raise Exception(f"LoadFromRedis failed: {status.get_msg().decode()}")
+ *         if not c_table.get():             # <<<<<<<<<<<<<<
+ *             return None
+ *         cdef ContextTable table = ContextTable.__new__(
+*/
+  __pyx_t_4 = (!(__pyx_v_c_table.get() != 0));
+  if (__pyx_t_4) {
+
+    /* "cylon_armada/context_table.pyx":340
+ *             raise Exception(f"LoadFromRedis failed: {status.get_msg().decode()}")
+ *         if not c_table.get():
+ *             return None             # <<<<<<<<<<<<<<
+ *         cdef ContextTable table = ContextTable.__new__(
+ *             ContextTable, c_table.get().EmbeddingDim())
+*/
+    __Pyx_XDECREF(__pyx_r);
+    __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+    goto __pyx_L0;
+
+    /* "cylon_armada/context_table.pyx":339
+ *         if not status.is_ok():
+ *             raise Exception(f"LoadFromRedis failed: {status.get_msg().decode()}")
+ *         if not c_table.get():             # <<<<<<<<<<<<<<
+ *             return None
+ *         cdef ContextTable table = ContextTable.__new__(
+*/
+  }
+
+  /* "cylon_armada/context_table.pyx":342
+ *             return None
+ *         cdef ContextTable table = ContextTable.__new__(
+ *             ContextTable, c_table.get().EmbeddingDim())             # <<<<<<<<<<<<<<
+ *         table.table_ptr = c_table
+ *         return table
+*/
+  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_c_table.get()->EmbeddingDim()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 342, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+
+  /* "cylon_armada/context_table.pyx":341
+ *         if not c_table.get():
+ *             return None
+ *         cdef ContextTable table = ContextTable.__new__(             # <<<<<<<<<<<<<<
+ *             ContextTable, c_table.get().EmbeddingDim())
+ *         table.table_ptr = c_table
+*/
+  __pyx_t_7 = PyTuple_New(1); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 341, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_7);
+  __Pyx_GIVEREF(__pyx_t_1);
+  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_7, 0, __pyx_t_1) != (0)) __PYX_ERR(0, 341, __pyx_L1_error);
+  __pyx_t_1 = 0;
+  __pyx_t_1 = ((PyObject *)__pyx_tp_new_12cylon_armada_13context_table_ContextTable(((PyTypeObject *)__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable), __pyx_t_7, NULL)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 341, __pyx_L1_error)
+  __Pyx_GOTREF((PyObject *)__pyx_t_1);
+  __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+  __pyx_v_table = ((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_t_1);
+  __pyx_t_1 = 0;
+
+  /* "cylon_armada/context_table.pyx":343
+ *         cdef ContextTable table = ContextTable.__new__(
+ *             ContextTable, c_table.get().EmbeddingDim())
+ *         table.table_ptr = c_table             # <<<<<<<<<<<<<<
+ *         return table
+ * 
+*/
+  __pyx_v_table->table_ptr = __pyx_v_c_table;
+
+  /* "cylon_armada/context_table.pyx":344
+ *             ContextTable, c_table.get().EmbeddingDim())
+ *         table.table_ptr = c_table
+ *         return table             # <<<<<<<<<<<<<<
+ * 
+ * IF CYTHON_FMI:
+*/
+  __Pyx_XDECREF(__pyx_r);
+  __Pyx_INCREF((PyObject *)__pyx_v_table);
+  __pyx_r = ((PyObject *)__pyx_v_table);
+  goto __pyx_L0;
+
+  /* "cylon_armada/context_table.pyx":323
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")
+ * 
+ *     def load_context_from_redis(str key not None,             # <<<<<<<<<<<<<<
+ *                                 str redis_addr="tcp://localhost:6379"):
+ *         """Load a ContextTable from Redis.
+*/
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_AddTraceback("cylon_armada.context_table.load_context_from_redis", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF((PyObject *)__pyx_v_table);
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cylon_armada/context_table.pyx":347
+ * 
+ * IF CYTHON_FMI:
+ *     def save_context_to_s3(ContextTable table not None,             # <<<<<<<<<<<<<<
+ *                            str bucket not None,
+ *                            str key not None,
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_12cylon_armada_13context_table_5save_context_to_s3(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_4save_context_to_s3, "Save a ContextTable to S3 as Arrow IPC bytes.\n\n        Args:\n            table: The ContextTable to persist.\n            bucket: S3 bucket name.\n            key: S3 object key.\n            region: AWS region (default \"us-east-1\").\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_5save_context_to_s3 = {"save_context_to_s3", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_5save_context_to_s3, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_4save_context_to_s3};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_5save_context_to_s3(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table = 0;
+  PyObject *__pyx_v_bucket = 0;
+  PyObject *__pyx_v_key = 0;
+  PyObject *__pyx_v_region = 0;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[4] = {0,0,0,0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("save_context_to_s3 (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_table,&__pyx_mstate_global->__pyx_n_u_bucket,&__pyx_mstate_global->__pyx_n_u_key,&__pyx_mstate_global->__pyx_n_u_region,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 347, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  4:
+        values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 347, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  3:
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 347, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 347, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 347, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "save_context_to_s3", 0) < (0)) __PYX_ERR(0, 347, __pyx_L3_error)
+      if (!values[3]) values[3] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_us_east_1)));
+      for (Py_ssize_t i = __pyx_nargs; i < 3; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("save_context_to_s3", 0, 3, 4, i); __PYX_ERR(0, 347, __pyx_L3_error) }
+      }
+    } else {
+      switch (__pyx_nargs) {
+        case  4:
+        values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 347, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  3:
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 347, __pyx_L3_error)
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 347, __pyx_L3_error)
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 347, __pyx_L3_error)
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      if (!values[3]) values[3] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_us_east_1)));
+    }
+    __pyx_v_table = ((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)values[0]);
+    __pyx_v_bucket = ((PyObject*)values[1]);
+    __pyx_v_key = ((PyObject*)values[2]);
+    __pyx_v_region = ((PyObject*)values[3]);
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("save_context_to_s3", 0, 3, 4, __pyx_nargs); __PYX_ERR(0, 347, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("cylon_armada.context_table.save_context_to_s3", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_table), __pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, 0, "table", 0))) __PYX_ERR(0, 347, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_bucket), (&PyUnicode_Type), 0, "bucket", 1))) __PYX_ERR(0, 348, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_key), (&PyUnicode_Type), 0, "key", 1))) __PYX_ERR(0, 349, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_region), (&PyUnicode_Type), 1, "region", 1))) __PYX_ERR(0, 350, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_4save_context_to_s3(__pyx_self, __pyx_v_table, __pyx_v_bucket, __pyx_v_key, __pyx_v_region);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_12cylon_armada_13context_table_4save_context_to_s3(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table, PyObject *__pyx_v_bucket, PyObject *__pyx_v_key, PyObject *__pyx_v_region) {
+  cylon::Status __pyx_v_status;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  std::string __pyx_t_2;
+  std::string __pyx_t_3;
+  std::string __pyx_t_4;
+  int __pyx_t_5;
+  PyObject *__pyx_t_6 = NULL;
+  PyObject *__pyx_t_7 = NULL;
+  PyObject *__pyx_t_8 = NULL;
+  size_t __pyx_t_9;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("save_context_to_s3", 0);
+
+  /* "cylon_armada/context_table.pyx":360
+ *         """
+ *         cdef CStatus status = CSaveToS3(
+ *             table.table_ptr, bucket.encode(), key.encode(), region.encode())             # <<<<<<<<<<<<<<
+ *         if not status.is_ok():
+ *             raise Exception(f"SaveToS3 failed: {status.get_msg().decode()}")
+*/
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_bucket, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 360, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_2 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 360, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_key, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 360, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_3 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 360, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  if (unlikely(__pyx_v_region == Py_None)) {
+    PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "encode");
+    __PYX_ERR(0, 360, __pyx_L1_error)
+  }
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_region, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 360, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_4 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 360, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "cylon_armada/context_table.pyx":359
+ *             region: AWS region (default "us-east-1").
+ *         """
+ *         cdef CStatus status = CSaveToS3(             # <<<<<<<<<<<<<<
+ *             table.table_ptr, bucket.encode(), key.encode(), region.encode())
+ *         if not status.is_ok():
+*/
+  __pyx_v_status = cylon::context::SaveToS3(__pyx_v_table->table_ptr, __pyx_t_2, __pyx_t_3, __pyx_t_4);
+
+  /* "cylon_armada/context_table.pyx":361
+ *         cdef CStatus status = CSaveToS3(
+ *             table.table_ptr, bucket.encode(), key.encode(), region.encode())
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"SaveToS3 failed: {status.get_msg().decode()}")
+ * 
+*/
+  __pyx_t_5 = (!(__pyx_v_status.is_ok() != 0));
+  if (unlikely(__pyx_t_5)) {
+
+    /* "cylon_armada/context_table.pyx":362
+ *             table.table_ptr, bucket.encode(), key.encode(), region.encode())
+ *         if not status.is_ok():
+ *             raise Exception(f"SaveToS3 failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
+ * 
+ *     def load_context_from_s3(str bucket not None,
+*/
+    __pyx_t_6 = NULL;
+    __pyx_t_7 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 362, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_7);
+    __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_SaveToS3_failed, __pyx_t_7); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 362, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_8);
+    __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+    __pyx_t_9 = 1;
+    {
+      PyObject *__pyx_callargs[2] = {__pyx_t_6, __pyx_t_8};
+      __pyx_t_1 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_9, (2-__pyx_t_9) | (__pyx_t_9*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+      __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 362, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_1);
+    }
+    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    __PYX_ERR(0, 362, __pyx_L1_error)
+
+    /* "cylon_armada/context_table.pyx":361
+ *         cdef CStatus status = CSaveToS3(
+ *             table.table_ptr, bucket.encode(), key.encode(), region.encode())
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"SaveToS3 failed: {status.get_msg().decode()}")
+ * 
+*/
+  }
+
+  /* "cylon_armada/context_table.pyx":347
+ * 
+ * IF CYTHON_FMI:
+ *     def save_context_to_s3(ContextTable table not None,             # <<<<<<<<<<<<<<
+ *                            str bucket not None,
+ *                            str key not None,
+*/
+
+  /* function exit code */
+  __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_AddTraceback("cylon_armada.context_table.save_context_to_s3", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cylon_armada/context_table.pyx":364
+ *             raise Exception(f"SaveToS3 failed: {status.get_msg().decode()}")
+ * 
+ *     def load_context_from_s3(str bucket not None,             # <<<<<<<<<<<<<<
+ *                              str key not None,
+ *                              str region="us-east-1"):
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_12cylon_armada_13context_table_7load_context_from_s3(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+PyDoc_STRVAR(__pyx_doc_12cylon_armada_13context_table_6load_context_from_s3, "Load a ContextTable from S3.\n\n        Args:\n            bucket: S3 bucket name.\n            key: S3 object key.\n            region: AWS region.\n\n        Returns:\n            A new ContextTable.\n        ");
+static PyMethodDef __pyx_mdef_12cylon_armada_13context_table_7load_context_from_s3 = {"load_context_from_s3", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_7load_context_from_s3, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_6load_context_from_s3};
+static PyObject *__pyx_pw_12cylon_armada_13context_table_7load_context_from_s3(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  PyObject *__pyx_v_bucket = 0;
+  PyObject *__pyx_v_key = 0;
+  PyObject *__pyx_v_region = 0;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[3] = {0,0,0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("load_context_from_s3 (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_bucket,&__pyx_mstate_global->__pyx_n_u_key,&__pyx_mstate_global->__pyx_n_u_region,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 364, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  3:
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 364, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 364, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 364, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "load_context_from_s3", 0) < (0)) __PYX_ERR(0, 364, __pyx_L3_error)
+      if (!values[2]) values[2] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_us_east_1)));
+      for (Py_ssize_t i = __pyx_nargs; i < 2; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("load_context_from_s3", 0, 2, 3, i); __PYX_ERR(0, 364, __pyx_L3_error) }
+      }
+    } else {
+      switch (__pyx_nargs) {
+        case  3:
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 364, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 364, __pyx_L3_error)
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 364, __pyx_L3_error)
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      if (!values[2]) values[2] = __Pyx_NewRef(((PyObject*)((PyObject*)__pyx_mstate_global->__pyx_kp_u_us_east_1)));
+    }
+    __pyx_v_bucket = ((PyObject*)values[0]);
+    __pyx_v_key = ((PyObject*)values[1]);
+    __pyx_v_region = ((PyObject*)values[2]);
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("load_context_from_s3", 0, 2, 3, __pyx_nargs); __PYX_ERR(0, 364, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("cylon_armada.context_table.load_context_from_s3", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_bucket), (&PyUnicode_Type), 0, "bucket", 1))) __PYX_ERR(0, 364, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_key), (&PyUnicode_Type), 0, "key", 1))) __PYX_ERR(0, 365, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_region), (&PyUnicode_Type), 1, "region", 1))) __PYX_ERR(0, 366, __pyx_L1_error)
+  __pyx_r = __pyx_pf_12cylon_armada_13context_table_6load_context_from_s3(__pyx_self, __pyx_v_bucket, __pyx_v_key, __pyx_v_region);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  goto __pyx_L7_cleaned_up;
+  __pyx_L0:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __pyx_L7_cleaned_up:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_12cylon_armada_13context_table_6load_context_from_s3(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_bucket, PyObject *__pyx_v_key, PyObject *__pyx_v_region) {
+  std::shared_ptr<cylon::context::ContextTable>  __pyx_v_c_table;
+  cylon::Status __pyx_v_status;
+  struct __pyx_obj_12cylon_armada_13context_table_ContextTable *__pyx_v_table = 0;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  std::string __pyx_t_2;
+  std::string __pyx_t_3;
+  std::string __pyx_t_4;
+  int __pyx_t_5;
+  PyObject *__pyx_t_6 = NULL;
+  PyObject *__pyx_t_7 = NULL;
+  PyObject *__pyx_t_8 = NULL;
+  size_t __pyx_t_9;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("load_context_from_s3", 0);
+
+  /* "cylon_armada/context_table.pyx":379
+ *         cdef shared_ptr[CContextTable] c_table
+ *         cdef CStatus status = CLoadFromS3(
+ *             bucket.encode(), key.encode(), region.encode(), &c_table)             # <<<<<<<<<<<<<<
+ *         if not status.is_ok():
+ *             raise Exception(f"LoadFromS3 failed: {status.get_msg().decode()}")
+*/
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_bucket, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 379, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_2 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 379, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_key, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 379, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_3 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 379, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  if (unlikely(__pyx_v_region == Py_None)) {
+    PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "encode");
+    __PYX_ERR(0, 379, __pyx_L1_error)
+  }
+  __pyx_t_1 = PyUnicode_AsEncodedString(__pyx_v_region, NULL, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 379, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_4 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 379, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "cylon_armada/context_table.pyx":378
+ *         """
+ *         cdef shared_ptr[CContextTable] c_table
+ *         cdef CStatus status = CLoadFromS3(             # <<<<<<<<<<<<<<
+ *             bucket.encode(), key.encode(), region.encode(), &c_table)
+ *         if not status.is_ok():
+*/
+  __pyx_v_status = cylon::context::LoadFromS3(__pyx_t_2, __pyx_t_3, __pyx_t_4, (&__pyx_v_c_table));
+
+  /* "cylon_armada/context_table.pyx":380
+ *         cdef CStatus status = CLoadFromS3(
+ *             bucket.encode(), key.encode(), region.encode(), &c_table)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"LoadFromS3 failed: {status.get_msg().decode()}")
+ *         cdef ContextTable table = ContextTable.__new__(
+*/
+  __pyx_t_5 = (!(__pyx_v_status.is_ok() != 0));
+  if (unlikely(__pyx_t_5)) {
+
+    /* "cylon_armada/context_table.pyx":381
+ *             bucket.encode(), key.encode(), region.encode(), &c_table)
+ *         if not status.is_ok():
+ *             raise Exception(f"LoadFromS3 failed: {status.get_msg().decode()}")             # <<<<<<<<<<<<<<
+ *         cdef ContextTable table = ContextTable.__new__(
+ *             ContextTable, c_table.get().EmbeddingDim())
+*/
+    __pyx_t_6 = NULL;
+    __pyx_t_7 = __Pyx_decode_cpp_string(__pyx_v_status.get_msg(), 0, PY_SSIZE_T_MAX, NULL, NULL, NULL); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 381, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_7);
+    __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_LoadFromS3_failed, __pyx_t_7); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 381, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_8);
+    __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+    __pyx_t_9 = 1;
+    {
+      PyObject *__pyx_callargs[2] = {__pyx_t_6, __pyx_t_8};
+      __pyx_t_1 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_Exception)), __pyx_callargs+__pyx_t_9, (2-__pyx_t_9) | (__pyx_t_9*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+      __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+      __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 381, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_1);
+    }
+    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    __PYX_ERR(0, 381, __pyx_L1_error)
+
+    /* "cylon_armada/context_table.pyx":380
+ *         cdef CStatus status = CLoadFromS3(
+ *             bucket.encode(), key.encode(), region.encode(), &c_table)
+ *         if not status.is_ok():             # <<<<<<<<<<<<<<
+ *             raise Exception(f"LoadFromS3 failed: {status.get_msg().decode()}")
+ *         cdef ContextTable table = ContextTable.__new__(
+*/
+  }
+
+  /* "cylon_armada/context_table.pyx":383
+ *             raise Exception(f"LoadFromS3 failed: {status.get_msg().decode()}")
+ *         cdef ContextTable table = ContextTable.__new__(
+ *             ContextTable, c_table.get().EmbeddingDim())             # <<<<<<<<<<<<<<
+ *         table.table_ptr = c_table
+ *         return table
+*/
+  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_c_table.get()->EmbeddingDim()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 383, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+
+  /* "cylon_armada/context_table.pyx":382
+ *         if not status.is_ok():
+ *             raise Exception(f"LoadFromS3 failed: {status.get_msg().decode()}")
+ *         cdef ContextTable table = ContextTable.__new__(             # <<<<<<<<<<<<<<
+ *             ContextTable, c_table.get().EmbeddingDim())
+ *         table.table_ptr = c_table
+*/
+  __pyx_t_8 = PyTuple_New(1); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 382, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_8);
+  __Pyx_GIVEREF(__pyx_t_1);
+  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_8, 0, __pyx_t_1) != (0)) __PYX_ERR(0, 382, __pyx_L1_error);
+  __pyx_t_1 = 0;
+  __pyx_t_1 = ((PyObject *)__pyx_tp_new_12cylon_armada_13context_table_ContextTable(((PyTypeObject *)__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable), __pyx_t_8, NULL)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 382, __pyx_L1_error)
+  __Pyx_GOTREF((PyObject *)__pyx_t_1);
+  __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+  __pyx_v_table = ((struct __pyx_obj_12cylon_armada_13context_table_ContextTable *)__pyx_t_1);
+  __pyx_t_1 = 0;
+
+  /* "cylon_armada/context_table.pyx":384
+ *         cdef ContextTable table = ContextTable.__new__(
+ *             ContextTable, c_table.get().EmbeddingDim())
+ *         table.table_ptr = c_table             # <<<<<<<<<<<<<<
+ *         return table
+*/
+  __pyx_v_table->table_ptr = __pyx_v_c_table;
+
+  /* "cylon_armada/context_table.pyx":385
+ *             ContextTable, c_table.get().EmbeddingDim())
+ *         table.table_ptr = c_table
+ *         return table             # <<<<<<<<<<<<<<
+*/
+  __Pyx_XDECREF(__pyx_r);
+  __Pyx_INCREF((PyObject *)__pyx_v_table);
+  __pyx_r = ((PyObject *)__pyx_v_table);
+  goto __pyx_L0;
+
+  /* "cylon_armada/context_table.pyx":364
+ *             raise Exception(f"SaveToS3 failed: {status.get_msg().decode()}")
+ * 
+ *     def load_context_from_s3(str bucket not None,             # <<<<<<<<<<<<<<
+ *                              str key not None,
+ *                              str region="us-east-1"):
+*/
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_AddTraceback("cylon_armada.context_table.load_context_from_s3", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF((PyObject *)__pyx_v_table);
   __Pyx_XGIVEREF(__pyx_r);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
@@ -26962,12 +28417,13 @@ static PyMethodDef __pyx_methods_12cylon_armada_13context_table_ContextTable[] =
   {"get_workflow", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_11get_workflow, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_10get_workflow},
   {"compact", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_13compact, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_12compact},
   {"to_ipc", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_15to_ipc, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_14to_ipc},
-  {"from_ipc", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_17from_ipc, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_16from_ipc},
-  {"to_arrow", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_19to_arrow, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_18to_arrow},
-  {"broadcast", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_21broadcast, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_20broadcast},
-  {"all_gather", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_23all_gather, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_22all_gather},
-  {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_25__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
-  {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
+  {"to_ipc_into", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_17to_ipc_into, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_16to_ipc_into},
+  {"from_ipc", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_19from_ipc, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_18from_ipc},
+  {"to_arrow", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_21to_arrow, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_20to_arrow},
+  {"broadcast", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_23broadcast, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_22broadcast},
+  {"all_gather", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_25all_gather, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_12cylon_armada_13context_table_12ContextTable_24all_gather},
+  {"__reduce_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_27__reduce_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
+  {"__setstate_cython__", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_12cylon_armada_13context_table_12ContextTable_29__setstate_cython__, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0},
   {0, 0, 0, 0}
 };
 
@@ -29297,7 +30753,32 @@ static int __Pyx_modinit_type_import_code(__pyx_mstatetype *__pyx_mstate) {
   __Pyx_ImportType_CheckSize_Warn_3_2_4); if (!__pyx_mstate->__pyx_ptype_7pycylon_4data_6column_Column) __PYX_ERR(19, 60, __pyx_L1_error)
   __pyx_vtabptr_7pycylon_4data_6column_Column = (struct __pyx_vtabstruct_7pycylon_4data_6column_Column*)__Pyx_GetVtable(__pyx_mstate->__pyx_ptype_7pycylon_4data_6column_Column); if (unlikely(!__pyx_vtabptr_7pycylon_4data_6column_Column)) __PYX_ERR(19, 60, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_1 = PyImport_ImportModule("pycylon.net.mpi_communicator"); if (unlikely(!__pyx_t_1)) __PYX_ERR(20, 37, __pyx_L1_error)
+  __pyx_t_1 = PyImport_ImportModule("pycylon.net.fmi_config"); if (unlikely(!__pyx_t_1)) __PYX_ERR(20, 64, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_mstate->__pyx_ptype_7pycylon_3net_10fmi_config_FMIConfig = __Pyx_ImportType_3_2_4(__pyx_t_1, "pycylon.net.fmi_config", "FMIConfig",
+  #if defined(PYPY_VERSION_NUM) && PYPY_VERSION_NUM < 0x050B0000
+  sizeof(struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig),
+  #elif CYTHON_COMPILING_IN_LIMITED_API
+  sizeof(struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig),
+  #else
+  sizeof(struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_3net_10fmi_config_FMIConfig),
+  #endif
+  __Pyx_ImportType_CheckSize_Warn_3_2_4); if (!__pyx_mstate->__pyx_ptype_7pycylon_3net_10fmi_config_FMIConfig) __PYX_ERR(20, 64, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __pyx_t_1 = PyImport_ImportModule("pycylon.net.fmi_communicator"); if (unlikely(!__pyx_t_1)) __PYX_ERR(21, 36, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_mstate->__pyx_ptype_7pycylon_3net_16fmi_communicator_FMICommunicator = __Pyx_ImportType_3_2_4(__pyx_t_1, "pycylon.net.fmi_communicator", "FMICommunicator",
+  #if defined(PYPY_VERSION_NUM) && PYPY_VERSION_NUM < 0x050B0000
+  sizeof(struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator),
+  #elif CYTHON_COMPILING_IN_LIMITED_API
+  sizeof(struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator),
+  #else
+  sizeof(struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_3net_16fmi_communicator_FMICommunicator),
+  #endif
+  __Pyx_ImportType_CheckSize_Warn_3_2_4); if (!__pyx_mstate->__pyx_ptype_7pycylon_3net_16fmi_communicator_FMICommunicator) __PYX_ERR(21, 36, __pyx_L1_error)
+  __pyx_vtabptr_7pycylon_3net_16fmi_communicator_FMICommunicator = (struct __pyx_vtabstruct_7pycylon_3net_16fmi_communicator_FMICommunicator*)__Pyx_GetVtable(__pyx_mstate->__pyx_ptype_7pycylon_3net_16fmi_communicator_FMICommunicator); if (unlikely(!__pyx_vtabptr_7pycylon_3net_16fmi_communicator_FMICommunicator)) __PYX_ERR(21, 36, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __pyx_t_1 = PyImport_ImportModule("pycylon.net.mpi_communicator"); if (unlikely(!__pyx_t_1)) __PYX_ERR(22, 37, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_mstate->__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator = __Pyx_ImportType_3_2_4(__pyx_t_1, "pycylon.net.mpi_communicator", "MPICommunicator",
   #if defined(PYPY_VERSION_NUM) && PYPY_VERSION_NUM < 0x050B0000
@@ -29307,10 +30788,10 @@ static int __Pyx_modinit_type_import_code(__pyx_mstatetype *__pyx_mstate) {
   #else
   sizeof(struct __pyx_obj_7pycylon_3net_16mpi_communicator_MPICommunicator), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_3net_16mpi_communicator_MPICommunicator),
   #endif
-  __Pyx_ImportType_CheckSize_Warn_3_2_4); if (!__pyx_mstate->__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator) __PYX_ERR(20, 37, __pyx_L1_error)
-  __pyx_vtabptr_7pycylon_3net_16mpi_communicator_MPICommunicator = (struct __pyx_vtabstruct_7pycylon_3net_16mpi_communicator_MPICommunicator*)__Pyx_GetVtable(__pyx_mstate->__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator); if (unlikely(!__pyx_vtabptr_7pycylon_3net_16mpi_communicator_MPICommunicator)) __PYX_ERR(20, 37, __pyx_L1_error)
+  __Pyx_ImportType_CheckSize_Warn_3_2_4); if (!__pyx_mstate->__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator) __PYX_ERR(22, 37, __pyx_L1_error)
+  __pyx_vtabptr_7pycylon_3net_16mpi_communicator_MPICommunicator = (struct __pyx_vtabstruct_7pycylon_3net_16mpi_communicator_MPICommunicator*)__Pyx_GetVtable(__pyx_mstate->__pyx_ptype_7pycylon_3net_16mpi_communicator_MPICommunicator); if (unlikely(!__pyx_vtabptr_7pycylon_3net_16mpi_communicator_MPICommunicator)) __PYX_ERR(22, 37, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_1 = PyImport_ImportModule("pycylon.io.csv_read_config"); if (unlikely(!__pyx_t_1)) __PYX_ERR(21, 83, __pyx_L1_error)
+  __pyx_t_1 = PyImport_ImportModule("pycylon.io.csv_read_config"); if (unlikely(!__pyx_t_1)) __PYX_ERR(23, 83, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_mstate->__pyx_ptype_7pycylon_2io_15csv_read_config_CSVReadOptions = __Pyx_ImportType_3_2_4(__pyx_t_1, "pycylon.io.csv_read_config", "CSVReadOptions",
   #if defined(PYPY_VERSION_NUM) && PYPY_VERSION_NUM < 0x050B0000
@@ -29320,7 +30801,7 @@ static int __Pyx_modinit_type_import_code(__pyx_mstatetype *__pyx_mstate) {
   #else
   sizeof(struct __pyx_obj_7pycylon_2io_15csv_read_config_CSVReadOptions), __PYX_GET_STRUCT_ALIGNMENT_3_2_4(struct __pyx_obj_7pycylon_2io_15csv_read_config_CSVReadOptions),
   #endif
-  __Pyx_ImportType_CheckSize_Warn_3_2_4); if (!__pyx_mstate->__pyx_ptype_7pycylon_2io_15csv_read_config_CSVReadOptions) __PYX_ERR(21, 83, __pyx_L1_error)
+  __Pyx_ImportType_CheckSize_Warn_3_2_4); if (!__pyx_mstate->__pyx_ptype_7pycylon_2io_15csv_read_config_CSVReadOptions) __PYX_ERR(23, 83, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   __Pyx_RefNannyFinishContext();
   return 0;
@@ -30296,19 +31777,34 @@ __Pyx_RefNannySetupContext("PyInit_context_table", 0);
   /* "cylon_armada/context_table.pyx":187
  *         return pyarrow_wrap_buffer(buf)
  * 
- *     @staticmethod             # <<<<<<<<<<<<<<
- *     def from_ipc(data not None):
- *         """Deserialize from Arrow IPC bytes.
+ *     def to_ipc_into(self, scratch not None):             # <<<<<<<<<<<<<<
+ *         """Serialize into a pre-allocated, reusable ``pyarrow.Buffer`` (no alloc).
+ * 
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_17from_ipc, __Pyx_CYFUNCTION_STATICMETHOD | __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_from_ipc, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[7])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 187, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_17to_ipc_into, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_to_ipc_into, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[7])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 187, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_from_ipc, __pyx_t_4) < (0)) __PYX_ERR(0, 187, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_to_ipc_into, __pyx_t_4) < (0)) __PYX_ERR(0, 187, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+
+  /* "cylon_armada/context_table.pyx":206
+ *         return scratch
+ * 
+ *     @staticmethod             # <<<<<<<<<<<<<<
+ *     def from_ipc(data not None):
+ *         """Deserialize from Arrow IPC bytes.
+*/
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_19from_ipc, __Pyx_CYFUNCTION_STATICMETHOD | __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_from_ipc, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[8])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 206, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
+  #endif
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_from_ipc, __pyx_t_4) < (0)) __PYX_ERR(0, 206, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __pyx_t_5 = NULL;
-  __Pyx_GetNameInClass(__pyx_t_9, (PyObject*)__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_from_ipc); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 187, __pyx_L1_error)
+  __Pyx_GetNameInClass(__pyx_t_9, (PyObject*)__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_from_ipc); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 206, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_9);
   __pyx_t_6 = 1;
   {
@@ -30316,56 +31812,56 @@ __Pyx_RefNannySetupContext("PyInit_context_table", 0);
     __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)__pyx_builtin_staticmethod, __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
     __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
     __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
-    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 187, __pyx_L1_error)
+    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 206, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
   }
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_from_ipc, __pyx_t_4) < (0)) __PYX_ERR(0, 187, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_from_ipc, __pyx_t_4) < (0)) __PYX_ERR(0, 206, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "cylon_armada/context_table.pyx":225
+  /* "cylon_armada/context_table.pyx":244
  *         return table
  * 
  *     def to_arrow(self):             # <<<<<<<<<<<<<<
  *         """Get the underlying RecordBatch as a pyarrow.RecordBatch.
  * 
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_19to_arrow, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_to_arrow, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[8])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 225, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_21to_arrow, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_to_arrow, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[9])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 244, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_to_arrow, __pyx_t_4) < (0)) __PYX_ERR(0, 225, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_to_arrow, __pyx_t_4) < (0)) __PYX_ERR(0, 244, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "cylon_armada/context_table.pyx":251
+  /* "cylon_armada/context_table.pyx":270
  *         return self.table_ptr.get().EmbeddingDim()
  * 
  *     def broadcast(self, CylonContext ctx not None, int root=0):             # <<<<<<<<<<<<<<
  *         """Broadcast this ContextTable from root rank to all workers.
  * 
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_21broadcast, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_broadcast, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[9])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 251, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_23broadcast, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_broadcast, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[10])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 270, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
   __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_4, __pyx_mstate_global->__pyx_tuple[3]);
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_broadcast, __pyx_t_4) < (0)) __PYX_ERR(0, 251, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_broadcast, __pyx_t_4) < (0)) __PYX_ERR(0, 270, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "cylon_armada/context_table.pyx":266
+  /* "cylon_armada/context_table.pyx":285
  *             raise Exception(f"Broadcast failed: {status.get_msg().decode()}")
  * 
  *     def all_gather(self, CylonContext ctx not None):             # <<<<<<<<<<<<<<
  *         """AllGather: each worker contributes its ContextTable, all receive merged result.
  * 
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_23all_gather, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_all_gather, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[10])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 266, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_25all_gather, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable_all_gather, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[11])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 285, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_all_gather, __pyx_t_4) < (0)) __PYX_ERR(0, 266, __pyx_L1_error)
+  if (__Pyx_SetItemOnTypeDict(__pyx_mstate_global->__pyx_ptype_12cylon_armada_13context_table_ContextTable, __pyx_mstate_global->__pyx_n_u_all_gather, __pyx_t_4) < (0)) __PYX_ERR(0, 285, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
   /* "(tree fragment)":1
@@ -30373,7 +31869,7 @@ __Pyx_RefNannySetupContext("PyInit_context_table", 0);
  *     raise TypeError, "no default __reduce__ due to non-trivial __cinit__"
  * def __setstate_cython__(self, __pyx_state):
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_25__reduce_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable___reduce_cython, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[11])); if (unlikely(!__pyx_t_4)) __PYX_ERR(1, 1, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_27__reduce_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable___reduce_cython, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[12])); if (unlikely(!__pyx_t_4)) __PYX_ERR(1, 1, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
@@ -30387,12 +31883,90 @@ __Pyx_RefNannySetupContext("PyInit_context_table", 0);
  * def __setstate_cython__(self, __pyx_state):             # <<<<<<<<<<<<<<
  *     raise TypeError, "no default __reduce__ due to non-trivial __cinit__"
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_27__setstate_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable___setstate_cython, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[12])); if (unlikely(!__pyx_t_4)) __PYX_ERR(1, 3, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_12ContextTable_29__setstate_cython__, __Pyx_CYFUNCTION_CCLASS, __pyx_mstate_global->__pyx_n_u_ContextTable___setstate_cython, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[13])); if (unlikely(!__pyx_t_4)) __PYX_ERR(1, 3, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
   if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_setstate_cython, __pyx_t_4) < (0)) __PYX_ERR(1, 3, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+
+  /* "cylon_armada/context_table.pyx":307
+ *                               str key not None,
+ *                               str redis_addr="tcp://localhost:6379",
+ *                               int ttl_seconds=3600):             # <<<<<<<<<<<<<<
+ *         """Save a ContextTable to Redis as Arrow IPC bytes.
+ * 
+*/
+  __pyx_t_4 = __Pyx_PyLong_From_int(((int)0xE10)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 307, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+
+  /* "cylon_armada/context_table.pyx":304
+ * 
+ * IF CYTHON_REDIS:
+ *     def save_context_to_redis(ContextTable table not None,             # <<<<<<<<<<<<<<
+ *                               str key not None,
+ *                               str redis_addr="tcp://localhost:6379",
+*/
+  __pyx_t_9 = PyTuple_Pack(2, ((PyObject*)__pyx_mstate_global->__pyx_kp_u_tcp_localhost_6379), __pyx_t_4); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 304, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_9);
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_1save_context_to_redis, 0, __pyx_mstate_global->__pyx_n_u_save_context_to_redis, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[14])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 304, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
+  #endif
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_4, __pyx_t_9);
+  __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_save_context_to_redis, __pyx_t_4) < (0)) __PYX_ERR(0, 304, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+
+  /* "cylon_armada/context_table.pyx":323
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")
+ * 
+ *     def load_context_from_redis(str key not None,             # <<<<<<<<<<<<<<
+ *                                 str redis_addr="tcp://localhost:6379"):
+ *         """Load a ContextTable from Redis.
+*/
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_3load_context_from_redis, 0, __pyx_mstate_global->__pyx_n_u_load_context_from_redis, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[15])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 323, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
+  #endif
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_4, __pyx_mstate_global->__pyx_tuple[4]);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_load_context_from_redis, __pyx_t_4) < (0)) __PYX_ERR(0, 323, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+
+  /* "cylon_armada/context_table.pyx":347
+ * 
+ * IF CYTHON_FMI:
+ *     def save_context_to_s3(ContextTable table not None,             # <<<<<<<<<<<<<<
+ *                            str bucket not None,
+ *                            str key not None,
+*/
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_5save_context_to_s3, 0, __pyx_mstate_global->__pyx_n_u_save_context_to_s3, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[16])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 347, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
+  #endif
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_4, __pyx_mstate_global->__pyx_tuple[5]);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_save_context_to_s3, __pyx_t_4) < (0)) __PYX_ERR(0, 347, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+
+  /* "cylon_armada/context_table.pyx":364
+ *             raise Exception(f"SaveToS3 failed: {status.get_msg().decode()}")
+ * 
+ *     def load_context_from_s3(str bucket not None,             # <<<<<<<<<<<<<<
+ *                              str key not None,
+ *                              str region="us-east-1"):
+*/
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_13context_table_7load_context_from_s3, 0, __pyx_mstate_global->__pyx_n_u_load_context_from_s3, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_context_table, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[17])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 364, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
+  PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
+  #endif
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_4, __pyx_mstate_global->__pyx_tuple[5]);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_load_context_from_s3, __pyx_t_4) < (0)) __PYX_ERR(0, 364, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
   /* "cylon_armada/context_table.pyx":1
@@ -30443,7 +32017,7 @@ __Pyx_RefNannySetupContext("PyInit_context_table", 0);
 
 static int __Pyx_InitCachedBuiltins(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
-  __pyx_builtin_staticmethod = __Pyx_GetBuiltinName(__pyx_mstate->__pyx_n_u_staticmethod); if (!__pyx_builtin_staticmethod) __PYX_ERR(0, 187, __pyx_L1_error)
+  __pyx_builtin_staticmethod = __Pyx_GetBuiltinName(__pyx_mstate->__pyx_n_u_staticmethod); if (!__pyx_builtin_staticmethod) __PYX_ERR(0, 206, __pyx_L1_error)
   __pyx_builtin___import__ = __Pyx_GetBuiltinName(__pyx_mstate->__pyx_n_u_import); if (!__pyx_builtin___import__) __PYX_ERR(1, 101, __pyx_L1_error)
   __pyx_builtin_enumerate = __Pyx_GetBuiltinName(__pyx_mstate->__pyx_n_u_enumerate); if (!__pyx_builtin_enumerate) __PYX_ERR(1, 157, __pyx_L1_error)
   __pyx_builtin_Ellipsis = __Pyx_GetBuiltinName(__pyx_mstate->__pyx_n_u_Ellipsis); if (!__pyx_builtin_Ellipsis) __PYX_ERR(1, 409, __pyx_L1_error)
@@ -30514,20 +32088,42 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
   __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[2]);
   __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[2]);
 
-  /* "cylon_armada/context_table.pyx":251
+  /* "cylon_armada/context_table.pyx":270
  *         return self.table_ptr.get().EmbeddingDim()
  * 
  *     def broadcast(self, CylonContext ctx not None, int root=0):             # <<<<<<<<<<<<<<
  *         """Broadcast this ContextTable from root rank to all workers.
  * 
 */
-  __pyx_mstate_global->__pyx_tuple[3] = PyTuple_Pack(1, __pyx_mstate_global->__pyx_int_0); if (unlikely(!__pyx_mstate_global->__pyx_tuple[3])) __PYX_ERR(0, 251, __pyx_L1_error)
+  __pyx_mstate_global->__pyx_tuple[3] = PyTuple_Pack(1, __pyx_mstate_global->__pyx_int_0); if (unlikely(!__pyx_mstate_global->__pyx_tuple[3])) __PYX_ERR(0, 270, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[3]);
   __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[3]);
+
+  /* "cylon_armada/context_table.pyx":323
+ *             raise Exception(f"SaveToRedis failed: {status.get_msg().decode()}")
+ * 
+ *     def load_context_from_redis(str key not None,             # <<<<<<<<<<<<<<
+ *                                 str redis_addr="tcp://localhost:6379"):
+ *         """Load a ContextTable from Redis.
+*/
+  __pyx_mstate_global->__pyx_tuple[4] = PyTuple_Pack(1, ((PyObject*)__pyx_mstate_global->__pyx_kp_u_tcp_localhost_6379)); if (unlikely(!__pyx_mstate_global->__pyx_tuple[4])) __PYX_ERR(0, 323, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[4]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[4]);
+
+  /* "cylon_armada/context_table.pyx":347
+ * 
+ * IF CYTHON_FMI:
+ *     def save_context_to_s3(ContextTable table not None,             # <<<<<<<<<<<<<<
+ *                            str bucket not None,
+ *                            str key not None,
+*/
+  __pyx_mstate_global->__pyx_tuple[5] = PyTuple_Pack(1, ((PyObject*)__pyx_mstate_global->__pyx_kp_u_us_east_1)); if (unlikely(!__pyx_mstate_global->__pyx_tuple[5])) __PYX_ERR(0, 347, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[5]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[5]);
   #if CYTHON_IMMORTAL_CONSTANTS
   {
     PyObject **table = __pyx_mstate->__pyx_tuple;
-    for (Py_ssize_t i=0; i<4; ++i) {
+    for (Py_ssize_t i=0; i<6; ++i) {
       #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
       #if PY_VERSION_HEX < 0x030E0000
       if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
@@ -30573,34 +32169,34 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 8; } index[] = {{2},{18},{68},{18},{35},{54},{37},{60},{24},{52},{16},{26},{34},{31},{16},{28},{12},{29},{33},{45},{22},{15},{179},{37},{12},{15},{30},{14},{32},{1},{1},{1},{1},{0},{1},{8},{5},{6},{15},{23},{25},{30},{7},{29},{6},{2},{6},{35},{9},{30},{50},{8},{25},{20},{32},{22},{14},{30},{37},{5},{1},{6},{12},{30},{32},{23},{22},{20},{21},{16},{25},{16},{19},{19},{21},{19},{8},{20},{8},{15},{3},{10},{15},{17},{18},{4},{5},{9},{3},{1},{7},{4},{4},{9},{17},{18},{7},{10},{8},{5},{3},{7},{6},{26},{4},{8},{3},{5},{15},{7},{9},{13},{6},{9},{5},{5},{7},{6},{7},{8},{8},{3},{12},{12},{2},{10},{5},{12},{13},{5},{8},{8},{7},{4},{4},{8},{10},{4},{8},{4},{7},{2},{5},{3},{3},{13},{2},{4},{3},{3},{7},{14},{11},{10},{19},{14},{5},{12},{5},{1},{5},{10},{17},{13},{8},{6},{8},{7},{4},{6},{4},{12},{10},{12},{19},{5},{10},{4},{5},{12},{6},{4},{4},{6},{5},{8},{9},{8},{6},{5},{6},{6},{6},{4},{2},{11},{1},{217},{62},{67},{139},{206},{175},{45},{48},{56},{52},{64},{86},{9},{73},{1}};
-    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (2205 bytes) */
-const char* const cstring = "BZh91AY&SYdi|\260\000\001\\\377\377\365\376\377\377\377\377\377\377\277\247\377\362\277\377\377\362@@@@@@@@@@@@@\000@\000`\010/\275\336i\357=\227\213\235\355\341R\002\275\206\333&\267\201\354%\024M2S\323&\236\210\364\232\23656\232\232hFi4\0310\023M\006\214\206\201\240z\2324mM\241\0311=2\010%\024\302\215S\362yL\206\246\324\324\3654h\006@\320\014\203@\323\324\000\000\000\001\241\246\200\r\00050S\321S\305=D\332\217Sj\003CF\217Q\3514\30440CF@4\000\014\232hi\232\201\210\001\202SD\023D\324\315#\024\312i\266\240F\324\310\r\000\003A\240\000\000\000\000\000\003M4 \300\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\tM\"\000\020\325O\364Sz\230\246\324\236\230\024\3104i\351<\243 \000\000\000\000\003@\000\032\017\316\277\2210Yn\263\"\352\247\267\351a\221\224[\205\244^5\270)h^f-\242D-\364tD\352\210\330\362\003\037\362\004\201!!Nm\014i\275\206\224\225\231\212Dk\213\022\216\374i\203\216\202\224\235\341\233\376\303'U\276\361\211\016\354Cr\260\263\312h\337\274\272\243J\021\245\244m\024\317a\371I4b\373\2239\013&\022piJs\315\025>G\330\373\232Co\361Cl\227\311\300\357\225\261&\317\201\251\271\016\261'\316\227Xl4aL\201\334\271\002.\342\0178\361\3027t\030\024\203\253\372\214'\240+\322\r\025~\322:\212\250\026o\362\325\347m\245I\212\3447\234^\235\2539n\016\375\275\330\222\316\351\377\252B\322Mb\375M\331`IF[\230\022/\323\035Wb\375\311\3519\342F\216\026\244#D\001I\315\331n\221\343D\363W.\300\276\346C\006\3142\340\206\207\204\234\231\254\207\263\310\301\211\247fX\361\303\351J<a\n\257\257\355X`(\2101\014\361>g]\273\314.\014\003h\216\002\227\350\215\205\367T\367\032\032w{\336G//u\362\234\303\252\265*]\243+\030S\274\343v\0079\nL\341\270_\244\211\241\330\346\316\266\232\003\013\226\177nb\243w\266\367\375\251\265\263\024\313?\257\034\227XHs]\2116\256\3124!\266\314S\207\200\004\271(\3526'\017\014\026\34248\215\300\273\374\366\tE\374M\234\256\003\252/\214\221\270\221\252\"\256\215E\232\217D\265i\355a\216c3>^x\365\361=\\V\246\263*,\246$\302Pe\222\222#\306<\211\022\\q\034rv\234\211\365\212""\364{\024w.\212X\014id,\233\354:\251R\007\243M\232\021\"\302X\2127\340\326\2563@l\222\264\024eJ\320Fl6O[\364\034\364D\256Y\252\313}\355\242\304\007\217\265\221\031\006\020\223O\353~\350\023\321\214\304\"9\347B@\245\013-\\\216\372\356#\241^\\\236\320\355Y\211\304\270\225\375\227+>3\302XD9\315<\302J\2713\345 \203\244\357\200\244\207\266x\232\317zU\225\246\305Q\241M\303\253\233\373\233\000\364\335P#<\222\305\342\021\006\226\264%\224\236\215\372\260:\031\004\223\255\213\263\301\010\224\024&\225\317}H\016\324\376\024\325\002\035I_l)\340fX\262\200\262\007#\261|\201x\203.$\345\331\335\323C\200\025t\350\252\200\2330N\365\0321'\353+\211\305[:+%\321\370\363\311\033\022^\350\265<\311\216\036-\376\224\027q\307\325P\212\237.\336/T\200\273\010\251O<'\004TA\032\037\2379\353\246\221E\232\372`Pa q\232(\354\224\217B\255\354\253@%\344g\210r\2722\213\2719.\035 \332n=o\365a5\026\333\234\032\301\\\273V\n\321\032\344\002V\016\343\243\005}\266f\262\316\306\365e\301\262\372\330LvnN:\201\006\201\3301\014\\\241\223\204\313\337(i\356<\233~L\251gu\006\001\214\235\307b\227\264\210d\310\312O\005y\322\341LNV\332\315\3153\355\353g\343\210\222\347\343\022}\331\2458n\nJ\232kFf\341W;\242\205\243\"-\020(\232Ii\236\262\302i=#\036\217X!\222a*\274\341\355\213k\236\264\301\204\352\021\241\244\366\223\030\305\246\251\310I\"\311\033T\301V\354\261\310~\302j\242s\247h\346\247V\021\350!\224\266#\223\242Q\016\016\204\251\253,%\306\255\247\201>=M{\246\247\322\226\3143E\375\235\266$hwt\351\023jf\2515f\264h$?t0\077\077(u\360\273T\254\020!\2030\230+Y\256\305\246;\034V\303\202\373\372\273\360b\005\317!4Z6\316w{\363\304(9uR!d\001\016\222a\320\017\316\333\254\333?{\257\3313K;\n\247Q$$O\013\203nC\034\023l\023\024\266\363]X\201 \315\"\231\226(|\374J\366\242\022\260]Q\212\005\232s%\034\235W\305\266R\355\362\223P\332\371\214\325[\233J3\266+-\005P\270x&\027n\336\014p\353v\265F\034,n`_O\020\203\016\223\2063n&\035\2431\231>\266\315d\2059\220dd\265\320)pC\023\206j\352\317\023\255j\343\026i\276\345\235\252\312eh\351\t\343dD""\200t\311\024:\224,hR\215\n\346\016e\232\216\341A`\211M\300\275\235\213\247\241$$\"\225\025j\026I\232\347&\200hX\263\324FC/9\212\220S\314\341\026\272\322\333\240\332\257G\022\3230PFK1\337\271\230\244\337\027/\020\"\024\272d\006\232\227$\314\310\013_%]\3619\325\243X<\220\202$\203+\202*\212\242e^\247\010\3748\301\010\033\253pF%\325UH1\322\026+\245j\251\333l\341fI\331\033\023=\017\027\237r\234!<\265\327U\220\322\315A\301^j\327|\022J\304\250\237\250\375~\237\027)\326:G\025\031\022\022Mh&\020\223t\001\333m\233\014I%\316kl4\014J\031\2338\245\237\n\2726\025\3103\253ix\263\212<\333\r\337\004F\272\246\023\006\345\003P&\005\020za\000I\226\336\323^pR\346\301\027;\327\205Q\347I4%8I\334\244\257Oy\313\336\2657\256\265\346\255a\263\260\206g$\"\365\260&>J^\263+\236\260\222\002R\321RA\224\253\213J\227\034G0\324\267M\021\345d'r\275\367zv\266\024\033\002&\\TY4D;\315|It\300\222$\211\347\330\270\325S\243\311\200Y\325\326\254\352\212\221\005\305\332\273\215nN\214\331\223U\263l\200\234\211\241&i\342\345\344&\315\336\335%}/\006\025\367\0311\r\034\014\324\212\006L\204)\231N\301\257\025\273I%\2246\206#\224\242\004\214\3355l\367\335hQ\032.r\222\025\\<a\227e^\035\244\354T\240\326tX\336\004\021\264\230\310\334xoVk\310\350\355\301\232\271\\\203\231\260LM\317\276\222\002\344\246\\L\016\255iV\263\001\220\223\3063\001\257\333\023\241S!2L-\224\2171\202,#,\223\232\3076\255u\202\017\201\336\006`@7H\227\"H\332\361\020F\372@\347\030!.OE6\310\226Vf\252\255F\206\272\202_\215\256>\315\205X\3701\262\365b\226w\220O\230n\025\317B\250\206\377$w\266\2046\220\262v\322\327.\177\016`\037\036\r\017\312S\342%\251\254[J\237\271\202\352t\371x\276\250\220\036\260\027F\311c:\2516w.!k\304iO][\\\"\242\304\356v\270\ti\263\362\254\233\253\246\210\300\326\225\234^\014\213\333\226\217\306V\021\240\233p\220\242s\321\331NM\321|,\031(\224>\030e\301\372\326\304|\\\014s\213/\251\370_+\020m\347\025Nr\362\223\262\245a\035\355B\2217m\201\327zK\033\3430A3p\353\303\212S!<\311\322S\036\367b\023\035\357\361\2562x\362\027\232\354a\266""\243\353\275\223\260z\202\363+G2\232\020\030\320%\037$\247\244\306X:\333\n\244K\224\300\205q~&X\032\213[Q\014\026&\000\345\",\021\020\311IRY\236K]<\316j\265\244\367\273\240+s\377\342\356H\247\n\022\014\215/\226\000";
-    PyObject *data = __Pyx_DecompressString(cstring, 2205, 2);
+    const struct { const unsigned int length: 8; } index[] = {{2},{18},{68},{18},{35},{54},{37},{60},{24},{52},{16},{26},{34},{31},{16},{28},{12},{29},{33},{45},{22},{22},{19},{15},{179},{37},{12},{15},{20},{17},{30},{18},{14},{32},{1},{1},{1},{1},{0},{1},{8},{5},{6},{15},{23},{25},{30},{7},{29},{6},{2},{6},{35},{9},{30},{50},{8},{25},{20},{32},{22},{14},{20},{30},{37},{9},{5},{1},{6},{12},{30},{32},{23},{22},{20},{21},{16},{25},{16},{19},{19},{21},{19},{24},{8},{20},{8},{15},{3},{10},{15},{17},{18},{4},{5},{9},{6},{3},{1},{7},{4},{4},{9},{17},{18},{7},{10},{8},{5},{3},{7},{6},{26},{4},{8},{3},{5},{15},{7},{9},{13},{6},{9},{5},{5},{7},{6},{7},{8},{8},{3},{12},{12},{2},{10},{5},{12},{13},{5},{8},{3},{23},{20},{8},{7},{4},{4},{8},{10},{4},{8},{4},{7},{2},{5},{3},{3},{13},{2},{4},{3},{3},{7},{14},{11},{10},{19},{14},{5},{12},{5},{1},{5},{10},{10},{17},{13},{6},{8},{6},{8},{7},{4},{21},{18},{7},{6},{4},{12},{10},{12},{19},{5},{10},{4},{5},{12},{6},{4},{4},{6},{5},{8},{9},{8},{6},{11},{5},{11},{6},{6},{6},{4},{2},{11},{1},{217},{62},{67},{139},{206},{76},{175},{45},{48},{56},{52},{64},{86},{70},{102},{67},{112},{9},{73},{1}};
+    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (2496 bytes) */
+const char* const cstring = "BZh91AY&SYk\005\037\027\000\001\276\177\377\365\376\377\377\377\377\377\377\277\247\377\362\277\377\377\362@@@@@@@@@@@@@\000@\000`\tO\274\350\367\275^\306\360\343\257s\322\333\272\326e[\255\335\333Y\326o\001\356\022\210\212OeC\364\3253F2F\324\230\322{@\232\032)\344\321\352z\203j\032\006\203C@A\262\217MM\244\362\233\324\236\324\230\022H\230\2010 C&$54\304\000\r\032\000d\000\320\003 \0004\006A\352\000h&\"\247\351$\306\247\265OP4\031\000\000\r\006\206\200\000\000\310\001\220\0004\320\000\022\232!\000)\351\n{%4\331=(h\315 1\003!\240\000\030\200\000\0001\003A\246\232\020`\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\004\222\001\023E?MT\375Sx\204\311\224\362\032&\rM\030\032&j\003@\300\201\243\010\323\t\210`OD\364\324\247\025\036|\343\032\204\361\\l\347f\300T\363{7\3325\027\t\365E\344\\)\312\304\377\205\345c@q={[P\3326\310\276\2018M$\266\330\031\220\314\206a\252)\234\222\320\304\220L\251\230\013\304q\244\305\007v\3250v\034AJNE\341\205\271\031\340\241X]X\004\214\242\006\223w8WsD\346Q\315W\265\266\022 \264*\034\236-M\026Fu.r\252\313c\216\025\304E\025\326E\373\023\243\004t\034eK\270=#\354bo\320\375\217\334\352\024\337\346\023\353\256\255A\322]B\316\210(z\221\350(\255\372\330D\r\373\316\266\302\301\361\251\t{\020|'\272\325\347{\206\003\345\331\211\227^J\254\007\211K\365\261\362Y2\364\277\317\003g\327\235\235<`\322\260[o<\246K\243}\265\312\261\337\227nD\263t\377\325!l\223Y?c)\\I.&\rD\206\005\325\375\303\037\346\221q+3E\201-\022\232*\201#\204\206\226\022\304\354\253\337]\242Kz\211\247m6Q\254k.54\227/I\355\021\353v\222\343\354oy\376\274\313\227`}\350\004d9\231\374\\\351\005w\325\n\026D]B]\035\211\364\3426\367L\230.=@\342\314\320*FM\275\007\335\007a\251\361\364\022\3151\350\355\365_\304z\255Y\250\342\274)\251e\202\014r\343=\024NqDU?\035\003s\230Efdx\216\003\2338\036\222m:q\351B\226\033\337\350\311\372b)\331\303f\222\002\333j\263\336\2064\335\242u\257\030\320G\310\315\022o\212\256#\260\306\266\021\343i\334ni\202\360'\315\213\007\350\224\3136Z\271\312m^\365\273\n\354v""Z$\350\374\026`2a\035\244R\007*\272\3425\223\274\010\230\212\"\251\375D?\021\360\231\025ige\032M\223#\260ED\221f+\261\265\310q!d\025\214\266\264\236\004\364\323\321\202l\311\211<y\350\337\277\006QL\367\323\222\236\364\007F|-\331\307U\206\032\356\225S?\243A\314\271B\022\323;\362'\363\364\267\343\363\311\230\023g\260\3668\332X\261a\277\236\253#\036\375$}-Y`\003\356\361\311c\253\223M4Y\260\325TTdo\347\020C\230\307[\257\272\335\260\030g\252\030\210\344\2342\005(Z6\364\363\353\326p\325\301.m\261&\256\202q.B\271\3702\302wJ\330\214`\3369d\325y\263\342H\251\004\2179\354#\224)\241\343b&\264\031\336\223W;\250\305h\271M\303\263\207\3670-\265\301\337\010bv^\240A\224\222\305\342\020\363\025[\331\257\231\321_\252\0072L\016\265\245\226\333\321\201p^2\354]\207\341\234J<\231\277\303+\255-\366h\215\341\217\207\336\312t\014\340\361\034\214\260\014\243\005\370\023\226\347s\231?\234\r]:*\240%\205l\250}f\215\362\216\213UA@\325\2470\362:?=\204\026\371`\234L\266B\254yP\226\275[\rc,\330\325Tk\2533\033\235\033%3\t\241\210\231\267B0\210%\003n\275\034\r\\\023\r\216\366\325\273\205\301\312b\214\223lX\275W\303v\252s!\371g\254\304\036\031\242N'4\231\266\366\340F\215\235\357\345/\010+\234\347Q\220\033Nq&\321\211\273\225\006\311\000\226\003\270\350\333Y\343^\214-\350q\3572\r|\033X0\230\352\354'\035A\006c\214\330\206/\002\240\346\210\007.}\020\323\311\344\313vL\251c\272\202\340\301\0078r'Z\200\364\311\207\253\231:\020&\332\261\321dJ5a4\200\270\267\215\332\330\342\010\222\341\306$\373SJp\333\264\2254U@\r\345[;\242\203\350\036\270\201D\311\272Kf\233\205gA\332q\\c\034\336\320I\222a*\336\220\366\340\332g\245\014\257F`\373T+ \241[\221\201\365\322N\037\022-t/\265\264\0135'\033\217H\312\311\r4\312Wk\213l\261\214\021\275\303\033mx\242\240\010`\315\355\303\254\261\"\215P\330\260-\272m\276\204\267.\276-\357\254\334H\330\331\210\204\351\025\3573^\233\003}\033\204\317\34530\364\355\300<\254\367k\220\223\307\347Hd\031\033\033\252R<\276}\217\355\361\305x\\oC\313]\002pP0P\326\337R\001Q\257\272\254a\255\001\20732""\034\311bg\232\253[F&\350\365\370t\300\3059\r#\221\231\206b\025\316\033\260IpAT\310\215\031\224\362{\306A|\212^\260C\354r+\036\326\253[\216\2445\225\214T\026\216)\274\305\010\226zf\243Lg\337#\006z\321\273\230\224\355o\020\317\222r\261\243\205\341\032\267j\220S\226\264#G\033\225sI8+\274\326\270\256\\\361\345\355\207\006\376x5\250\240\207\252\345|\276\316\310\241u\216`iHxb16I\004\252\007\242/Jx\356|g9\270EJ.\316\307j\231L\252\216\220\2365DH\007L\221C\261B\3035(\315V\301\307\261\250\356\024,{\221:8\022gb\271\346\222\022\021J\205ULX\2235n\"\310J\250\221\276\331 FE\327eE\214\212\333\\\030\r\223\t$\326\226\341xo\355\243\224\267\252\013IN\306\016s\230\024\233\342\345\242\004B\234\3742LmH\2430\003\002\252\2704\363F\214sT\036Hq\201'\026C7\002f\031\205\301\275\217\r\244\266o\005\327\035\365\026\247\254\314\314\314\032\250\341\014\215l\225ukZ\006`\262\351\323\014s$\242I'\215\201j\315\354\262\270+\250\"\240\332\331v\303\340\000\316A\314O~\231\\3,}\271\321&;\265\320\242\346a\231\225\200\310n6s.X;S\032\322\321\250\214\372I,\372DH3\361# \331i^K\376\366\340\301\0219\255\261\320N\032\032\372F\2474\0307w\246&\rv\r`\230\024\201\355\210\004\231qx\201\266j\265\315B\n\335\352\332TFy9\310\357\003Hc\006\210\031\344\325\312F\260_\266\330\261+eF\221\200\277\260R^XY\026\220\2709K<\365S\0316.\261A\226\020\0318\301\240\346\211c,\260.\360\016K\357\317/)\220\235\313\373\313\242.\335\326Zk\t\031\356\2512i\010w\253fE;\210' \306\352\351\261PHl\351 @\036\021\316\220\305\006\004\005Q1;\333\353P3\221^\207U\005\375\356\231\004\346Q\t3S\027.!6\034\352\344\256\245\254\014\255\254\320\207\247\360%\027\304/\274}2k\250D\230\033ff!\307Pal\253ZQ\014J\236E.\351\245M\027Z\024M\275M\357*\037]\303\246~<\323\227\223\314\270\241\034\333\0352\272dj\203\0047\004\313\226\316=[\010\332\3465\003\335\314\214Bm(o\027F\033\031S\201\264\327\006\323T7\333\0044\317\324mU\335mH\\\316\344\255\025&\0313!\270\251\035#;\031\tRv\026\034R\rX\272\333A\364\273\301\240\023\014\334\366\227\026H\337x\210#R@\346\220\204\252\327\314M\271)""\350\265\232\265UCCYA\265\025.\006\340\353|\202q\357z\265\376\310\220\362\371\222\016\330x\303\366GQ\230\001\274\37368\307\335\000\356\213\3748\313\213\263\315\301\323A=\274z\005\337\3453~\246:\236#\274\231\376><\201v~\351\243\265\201\031\357\004\250n \213{\204\370\035j\344y<\226N^\336s\314Zt\327\273\376\361\212\n\342\206\256\237\021\3411\323vD\320O\212\322\001\200\357Z\227\r\216,\251\351G\016\023\031M\344\326\351\036[\311\177\213x\356J.\334 }\252zS\006F\370\304\327\356\264\316\327\001v\375\232I\307\260\245]o\267\002\211(\265\277\212\247&/\341%\263)S_\246G\274\227\357\246\311\203P\377\312\024mE?\"\341\331\360\215\226%$\337\254\321\310\260\306}\305\341\315\031^\365+\024\270\023:\326\261d\264^^\014\275\300\326-e\251\222I\253&T\213N8\357\340[\273\t^\332\330Z\002\330\037\235\314\305\203s2\356\351\351\n\035\255\256\335\001\013\006\247\212$\317\361\342\322\232\372\326\346\356\270\342\255\307mh+\2039\203L\221@\202f%a\221\037\347cz\030\207i\321\334\201\033\304\033\234\245$62\222\277c\346\361\272}\033\341-\313m\223\334\354\351\213\020U\207J.\233\377\342\356H\247\n\022\r`\243\342\340";
+    PyObject *data = __Pyx_DecompressString(cstring, 2496, 2);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1998 bytes) */
-const char* const cstring = "x\332\215V\315S\033\311\025\007\227k#\022\\^l/\216m\234mXv\005\004\344\205\340\304Q\010)\001\206RU\262`\314\262q\252RS\255\236\226\324a\246{\230\356\001i\253R\265G\216s\234\243\216:\3528G\0359\352\250#\177\002\177B^\367\214\276\000\333\251\222fzz\336\347\357\375\336\353\311\243\202\343\354aU\245>*c\346P;\257w\220\315\\\312%\023\\\"\317\247\204\332\214W\006\233\350[\033\271\201T\250D\021\3436\255Q\033an#.\024\222\016\003\361-_`\233`\020\351Y\335\n\312epr\306\3509\262\005\225F\230\326<!)\222\312g6\225\333\230#\301\235:\">\305\212\"\214J\211\222\252b\205\230DDp\305*\201\010$\270E.u\205_\317\201\2266\205\245d\025\216\224@\240l\257\030;\211\204v\231\n\245\206\317}\246p\311\241\251@\022T\331\027\356\247tM\242\350\234\251*Ru\217\242l\272\257|\314\245Ic\240\222\210\201\006\003\360\324\020\232\333\302\3650\031\240\2623\014)K@I\224\336\272\236\252#Y\305\340J\005\036\004[\026>\"uU\025<\207}\037\327w\215\r\235q\232\3266\300Ck\352H\247\226G\273\220O\321#}W7\237\251q\220 \274G\007!\025M\236\"PH\224QI\004\334\226h\001\327 \270o\355\305\342\355\224\222\252\007\236'|E\355\"?\303\016\003z\010\233.\353\372\2020\004\231%Y\004\341g!\007\215Wv\031U@\253'\234d\t%5n6\376ap<\3268B\010?\010H\3150`\333$\257a\262\251\303J\324\207\244\241R\232=\340\304\320\204\243\203\267\007+\353o\326\r\037}\372\037p/!\272\022q\200 \300:\235S\300\034\005\316t\025e\016\025\313\250.\002\304i\202\245\007r\303\n\320\032\034I\300\007\026(kJ\216\025\344m\201:4E6-\027;\243Z{\027;\222\346\366G\300\203\220S\036cB\250\354\241y\020\0140?\204\214\301@\357\361\275\242\036rq\335@\013=\3663\365\305\240\006Gb\270\214?r\303d\315\002\301\317\250\017DU\324\325\317\242\244\263\317mf\027\377\206m\333\342\032G\215\n\002(\277\257\021\3418:n\250`\016\227\310\306Poi\241$\253\315\233\333=Jo\222\272\003\030`\337\3056~E\022\342Y\246\251r^\275f3\251\227\324-Q\333\214\216\336\264\300hue\007\031\372R\023x\205\240\005M\205\212!\276FI\213\2031\312\225\351\362\301\320a2Q\261u\202\222\375L\321\306_\321\367\267\332\202\013\240G\031\007\216B\226""\345S; \324\262\220\035\030\214\270\340+@\2273\206\035xK\030g\n^&Hm\236\006\024\206\301\035\241n$\003\312\036A\346\366\236fx\037\240\221\367\243\273\274\"E\340\023\272\031\364k\207\035G\0203\363\264?dc\205sw\274M\032E[LGf\256\360~\273X\334J\206\353p\377\017\257s}\034\022\234,\353\306[\240\267\004V\177\344=x\267*\346\210\030\331.\365F\374\310.I\006\334\310\236\236\254\026\363\310\310f\205\252\233\317\326\271\360O\312\2168\037y\341\005\243\202\276\351\225\221-I\261O\252#[J\0009\375\033\246`\023\302x\3538\314\223LZ\326A\275\006\377\035\230\036\326\017 tH\313\357)\220\200\023\252\207On0\207\240A\006(\364\252a%]\215\345\240GL\365\260\254s\302\004@\341\303\024e\234\312\022\226\264\204\025\251\3661\003UB\222~\321\217\004\236\201\216z\344XVo\001\210h\246\353G0b1\0309>&`\210\234\244(\367\372\216\331DHe\005\022\356\001WD\325\340gy\312'f\306\r\367jn\244W5\317,\313\326\000\300\325\265\265\270\271X\000O\322\025\320\303\332R\277\225\373\013\313t&\2019Oy\340\232aL\001q\277\354\340\212\204*b\365\2075\350M\027\253t\350\367h`Y\345\200\303\025\362\033.\272\331Hh\010\t\301\337\325'\n\334\365y\3048\320\300R\342\004f\201\216\255\217m2\013\322\201`Y.\006\230,8\210\365)\354R\205\3659\244\377\216\261\t\253\300\0011\216\335\301\025\362\200+\205\000\270\007\231xuH\034\214\303o\340\323\303\200\367\211'<\330\362\352\206Y\226\005\203\316\"UJNd\340&Oi\370ziP4\253\200{\214\234\200\333\267\274'wf\320\267\254S\r-\334\002\354$\301\230\021\004$:\203\200\373\303\353V\373\3667hM/+L\302\361\227\364\205O\341[\204K}\207\t(}!T\322\035\222:e\323\351i\332\260J\307\344P\377[w\314\0023s$s\231\203\341\263\251\256q\006\001\337H1\002\030W\205\255\327\201\204(<\251\004\374\375\200\2504E\005\322p\255B@U\341\330\275\276LZ\021\204\255\023\300\007\260\r< #\205\357\201\200J]\274\363r\237\030\314\256\035\324\367\r\033\321\322\202Tv>\017A\001\004\032\275\rd\354\345\363\311\014\334D\372\034\204\t\376\335\342\330\377\241tH\201I\366\226\356\315a\315\317\372X\030\330^\034\353\021\342\334\307^:\024n\354i\373\375\255\200\017""\t\376R\270\376rlb\255\263\272\327>\275\034\357f~\027\331\215\245\346N\353^k).\304\357\272\231\337\\\254_\234\205\307\321jw\362Q\270\030\255vfV[\323\255Z\354\267\237^\216w\356o\304\205\353'\0377\360\241\215?c\342\227B\367k\324}\366\034\256\327\317\307&\246\302{\235G\363\215B\343\247\346nk\256U\214\217\333\253\332\302\353\360\213\220DS\332\302RT\210 \260\247\241\214f\301ff\2563\267\326Y\333k\007\227{\235\367G\335\314\263\350Ec\257\271z\225Yi\036\265\236\307\353\211\237\356\344\343\020\002x\032\236G\370*\363\360\302\017\237\201\372\233\306fk\252\265\022\253\366k\035\312\325\314K\035\n\374f\347\272s\337tg^^\317\214M<\270\330\217\376\322\2504\301\351\344\305\337\243L\343W\215\323\321egr&*\230\373\313(\225\032\277\312<\t\267:\323\013\315\361\346\213\326n<\027\027\333\307\227&\227?\207\273\3217 wG.\363\235\371\365\316z\361\362Y\347\360C\347\303\277\206\341\234o\341\356\344tX\321\212_\205pyp\033\331h\277\371\307\326o\343G\361\237\332\263P\331\271\261\211\311\213|\370.,G[\021\276\376b\354\301\223\316c\035\020\340\010\250\255\267\n\255\343x\025*\230\2017a>z\027\321\306\353\344\365\343p=<\203\r\360\371\360\"\010\267\303\323\356\227\323!\213N\033\200\344\\c\271\211\233\247\255\373`\340(\236\216O\333\343wU\371U\363\254\365\317\3700>o\003\342Z\247\252Sx\036e\033O\032\207\215\377\266\000\261\007\027\377\216f\273P\216S\010wrl\342U\323\006\336\354\264\357\265\277\273Lm\006\341N\224V/\363\260\363p\2661\325\200\334\256\206\220Y\210g?\343>1\376u_#\033O\305K\355\275\244\034Cz\013\321l\347\305J\363\270\365&^\213\177j\027@\357\321pP\313\2278\245\320\247b\323\r1\360\265\034\343\217\0014\344\311\350\3175f\033\2537\365!\326\244\356G\332\372\247k\236\274\225\341|\210oF5\336\275\377\353\213\337\207\357n\216\026s8\347\363\333\372\226~\254\334\236/\311\t\236\016\216\364\004\337\377\037<\265\023h";
-    PyObject *data = __Pyx_DecompressString(cstring, 1998, 1);
+    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (2300 bytes) */
+const char* const cstring = "x\332\215VKO\334X\026\206(J\303\014Q\032\222!/\222\\h:\005L \341\221G\327\320\214\n\010\010\251\247\223\000C&#\215\254[\366\255*\017.\333\370^\003\325\322H\275d\351\245\227\265\254\245\227^\326\222e-k\311O\340'\364w\257]/ a\244*\373\372\370\234s\277\363\235\307u\226\344,k\223\212\022\363H\201\232\0263\262RB\014\263\314ln:6'\256\307tf\230v\261#$?\032\244\354sA\362\214\230\266\301\216\231A\250m\020\333\021\204[&\324W=\207\032:\205J\313\353\252_(`\223C\223\035\021\303a\\)\263c\327\341\214p\341\231\006\343k\324&\216mU\210\3561*\030\241$\237\030\211\022\025\304\344Dwla\026}\307\347\330\226\224Y\331\361*s\260\222\256(\347f\321&\302!06f\225\237DCn\231*\245\216\217<S\320\274\305R\205\004T\301s\312\337\262U\201\222#S\224\210\250\270\214dR\271\360\250\315U\030\035\223D\r\026&\310\023]l\2569e\227\352\035V\326\273)5\023R\022\243\367eWT\010/Ql%|\027`\013\216G\364\212(9\366\034\365<Z\331P>d\304iXk\240\207\035\213]\031Z\226l \236-Woou\361\231\251\r\022\2067Y\007\322\226\212\323\361\005q\n$\357\370\266\301\311\024=\006\270\037\215\351\255\313!%Y\367]\327\361\0043\266\354Cj\231(\017\307`/d~\241\014\220\031=C\000?\203\030$_\231\027\244\010\253\226r\022%R\252\266\371\005\245#\301n\243\352x\033VK\272\263\330\026-\377C\021\276'\t\007\326_\035p\240JeM\261$\3714\230e\346\231\007v\220RYf@\243\352\311&\037\337\177\234]z\267\244\n\327c\377\005N\2160\362\272\205JBy\312\340}\323\022@%\323\315\347\310V\201T\034\237\330,!\335\205^\267\001z\310&\034DbA2\2526\250\000A\032\314\321=\2314\257\346!\223\326\033\324\342l\356C\017\313\200\234\026<\325u\306[\264\177\364;\311\331F\304p\320z\334\241\207l\327\351%*\221u\321\264#\230K\312\264\242\022\205\216\375\215yN'\243\273\016\212b\313\006\244\226\276\222\264\237\376i\253N\221U\346\330\207\314C#\010V\226\317N^\2226\267\222\231\376;5\014\315\226\364K2\t2\360\352Xw,K\206\213\n\231\243y}\271\253w\245RB\306\312Eq\253eV\364\212\005\352\250W\246\006}\251'\205\255\251\246\235s+\307\210W.Y9\317\0145\232Z\323\210\222\371\331u\242\332\203)\340E\235L\311R+\252\306""\222\344Ju8c\266PS\2443\324L\236\230\0302@n\376\306\310\362\317\344\325\245\266\263\035TU\201\372\226 \232\3461\303\327\231\246\021\303W\034\331\216=\213*;4\251\205\267\272i\233\002/\023\246V\016|\206as\005\324\345d\000\032=\314\\\226\311\016j\023\324\363\276Wj\027\271\343{:[\021\272\233}\371\322rtj\225\034.\262o\026\337\376\344\267\363I-\371F&Mb \006\025t\356\212\267Is\312]\3221=\347\363Y\206\321>;\237\333Y\333\332ZM&{\367\360\351^\317\265IJH\324\264\013o\3212\034\235\362\225\367\200\241\025\325\371\324#\316\267\316\227\036\251\236L\327\036\231\034\353\232\351\352=\302\"\023\027\237\265#\307\333/X\316Q\317\013\327\357U\364T\377\365\2108\243\236^\352\021\t\007\225\353]p\005\341E\030\211H3\321}\357-\313t\271\3115\355c\345\030\377uL*\355Whn\263\302\016C\345\330:\223\203n\2563\363\320U\035vZ\351\322\222\tBy\247\261Tz)\257\330\272\351\200\"\017\243\335\264\031\317S\316\362T\350\2456\227y_\337g\270\026t=i5)\324\361\214J\226CN\323Z\013\360%\233D>\302\025\002\3200\325u\270\323\367\323\034\264Z\3264tT\236\346s\334}[\350\342\030?\315\025\236\256\246jw\233\317\365\264\271,GM3$\r\270\226\r\251\256.\032HJ\032\n\355/=\265\247@{\241\251\246\326q\0041\333/\253\361\317\220\017\257`\321\"G\216\251X\\@[\227\251H\317\243V\221hZ\301\267qE|\335%\241\004I\221\" \374\313\362\260\303]\036\225\246\215\"\321\204\263\2171\"\261\265\031N\306H:K\366\031\"\245\206\326\212Q\355\350\311\301}Y\314\0275\255LA\252\206/\n\3719Qf\202\312\003U\376-\205\000+\337\002\032\233\226;WD\215+\003\\\333E\334n\0054\001\n~\035\204.Ev\366]\307\205\310\255\250*\3254LTM/1}\237\373\345\344)\rV.\025\347j\345\333\256\251\357c\333\367vK\357P\345J\323\016d\"p\363\251\225\200Q\263\016\205w\310,\025\245\206#\302\353\314\313KC\241-`\307rY\304@\226W\216\343:\3519\217\341#\313\346\362\216\321\313=\307\021\034\336\333\314\241\227\324F\027\205|\221\353\236,\363\244O9\263\nj\346\244\244a\225N\363\256I\244]1\225\324\030\344f\331\264(\276\036+2\247P\360\224\226\251#C%\307\220k\237\003\263\313\205\203\277\347\353\"%H@\033\327\022""\340\227\034\313hM\210d\002t\315\001\330i\373BX\000\200 \014\016\316\221/\337E;0|,\371\214\313\2028*\264K\3234\216?V>\250~ 3S\\\030\331,\240\202\n\231\221e\242v\311f\223\031\275B\344!\216\343\347\371t\337\377a\264\r\010\236\261*\311\353\266\274v\217\251\216\357\351\276V\221\035y\324M\207\323\005\231\364\337\026\371v\227\342\357\271\363\357\373\006\027\032\363\233\365\203\323\376\346\300\323\320\250\316\324\326\243\033\321L\234\213?5\007\376|\262tr\030\354\205\363\315\241\221`:\234o\214\315G\243\321q\354\325\357\237\3667n.\307\271\363{_w\360\245N\257q\361{\256\371\2144\037>\302\365\374Q\337\340pp\24312Y\315U?\3276\242\211h+\336\253\317K\017\257\203[\201\036\016K\0173a.\004\260\373\001\017\307\341s`\2421\261\320X\330\254\373\247\233\215\235\335\346\300\303\360qu\2636\17760[\333\215\036\305K\311>\315\241\273\001\000\334\017\216Bz6p\347\304\013\036\302\374]u%\032\216fcQ\177-\241\234\215=\221P\360\033\237hN\374\320\034{r>\3267x\373\344C\370\267j\261\206M\207N~\t\007\252\337U\017z\227\215\241\2610\247\356O\302T\253\377l\340^\260\332\030\235\252\365\327\036G\033\361D\274U\337;U\261\374\024l\204?@\357\212X&\033\223K\215\245\255\323\207\215\355/\215/\377\356\246s2\242\315\241\321\240(\r\377\022\340r\3732\263\341\207\332\233\350A<\022\277\255\217#\263\017\372\006\247\033S?\307\237bdA!\354\315\016\270\255\347\256\311O\023\\\035\300\327D\337\340\320I6\370\024\024\302\325\220\236\337\352\273}\257qW\006\207\234 \003KQ.\332\213\347Q\r\003x\023d\303O!\253\276N^\337\r\226\202C\010\200\377\316\211\037\254\005\007\315\357G\0033<\250\"+\023\325\0275Z;\210n\302\301n<\032\037\324\373\257B\364\262v\030\375+\336\216\217\352\310\236\264)I:\036\205\231\352\275\352v\365\177\021\302\270}\362\237p\274\005w\250o\360e\315@\224\353\365\033\365\347\247\251O?X\017\323J\030\270\323\2703^\035\256\202\247\263.Z\246\342\361k\266O\234?k[d\342\341x\246\276\231\244\266\313n*\034o<\236\255\355E\357\342\205\370s=\007\273\221nP/NiZ\216\337\302&\233\253\263\327\213\230~\215\240\256\235\224\375Du\274:\177\321""\036X\223\032\332\225\336\277]?\311[\036L\006\3642\252[}h\215\021\351\332D\003\014\r\007c\341^\365mm\262\246G\367\343\233\361F=s:|\025\312W\321\255\250\024\347\353\337\325\221\244\263'Oe\211>\013\367k\252\2613\341\275p\007\035%\000Bz\371\312\374Y\210\236\307\003 Pmq})\234=}\326|\372\354|Tnd\325\306\023\260\3116\331\3503Rq%\235\213\321\233\370A}\244\376\366\024\3416\311xbo\327r\262\206\217\002#\234\301\214YB\335^i\375\032\275\360\256\276P\377|\232\266\227\264\030Oi\274\026r\177\363\346\237N\376\032|\272x\n\250/\271lvM\336\322\217\334\313GA\362\271\227\316\370\364\220\376\360\007Ma*L";
+    PyObject *data = __Pyx_DecompressString(cstring, 2300, 1);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (4028 bytes) */
-const char* const bytes = ": AllGather failed: All dimensions preceding dimension %d must be indexed and not slicedBroadcast failed: Buffer view does not expose stridesCan only create a buffer that is contiguous in memory.Cannot assign to read-only memoryviewCannot create writable memory view from read-only memoryviewCannot index with type 'Cannot transpose memoryview with indirect dimensionsCompact failed: Dimension %d is not directEmpty shape tuple for cython.arrayFailed to create ContextTable: FromIpc failed: FromIpc failed: empty bufferGet failed: Index out of bounds (axis %d)Indirect dimensions not supportedInvalid mode, expected 'c' or 'fortran', got Invalid shape in axis <MemoryView of Note that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.Out of bounds on buffer access (axis Put failed: Remove failed: Step may not be zero (axis %d)ToIpc failed: Unable to convert item to object.>')?add_note and  at 0xcollections.abc<contiguous and direct><contiguous and indirect>cylon_armada/context_table.pyxdisableembedding must be a 1-D arrayenablegc (got got differing extents in dimension isenableditemsize <= 0 for cython.arrayno default __reduce__ due to non-trivial __cinit__ object>query must be a 1-D array<strided and direct><strided and direct or indirect><strided and indirect><stringsource>unable to allocate array data.unable to allocate shape and strides.ASCIIBBufferContextTableContextTable.__reduce_cython__ContextTable.__setstate_cython__ContextTable.all_gatherContextTable.broadcastContextTable.compactContextTable.from_ipcContextTable.getContextTable.get_workflowContextTable.putContextTable.removeContextTable.searchContextTable.to_arrowContextTable.to_ipcEllipsis__Pyx_PyDict_NextRefSequenceView.MemoryViewabcall_gatherallocate_bufferascontiguousarrayasyncio.coroutinesbasebatchbroadcastbufcc_tablecastcbuf__class____class_getitem__cline_in_tracebackcompactcontext_idcost_usd""countctxctx_ptrctypescylon_armada.context_tabledata__dict__dimdtypedtype_is_objectemb_ptrembeddingembedding_dimencodeenumerateerrorflagsfloat32formatfortranfrom_ipc__func__getget_workflow__getstate__id__import__indexinput_tokens_is_coroutineitemsitemsize__main__memviewmetamodemodel_id__module__name__name__ndim__new__npnumpyobjoutoutput_tokenspapackpopputpyarrow__pyx_checksum__pyx_state__pyx_type__pyx_unpickle_Enum__pyx_vtable__q_ptr__qualname__queryrravel__reduce____reduce_cython____reduce_ex__registerremoveresponseresultsrootsearchself__set_name__setdefault__setstate____setstate_cython__shapesimilaritysizestartstaticmethodstatusstepstopstructtable__test__thresholdto_arrowto_ipctop_kunpackupdatevaluesviewwfworkflow_idxPyObject *(std::shared_ptr< arrow::Buffer>  const &)\000PyObject *(std::shared_ptr< arrow::RecordBatch>  const &)\000std::shared_ptr< arrow::Buffer>  (PyObject *)\000pyarrow_wrap_buffer\000pyarrow_wrap_batch\000pyarrow_unwrap_buffer\200A\360\020\000\t2\3201G\300q\310\001\330\010\036\230d\240*\250D\260\002\260*\270A\270Q\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0341\260\026\260x\270r\300\027\310\001\320\004<\270A\360\024\000\t2\3201G\300q\310\001\330\010\036\230d\240*\250D\260\002\260*\270A\270Y\300a\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0341\260\026\260x\270r\300\027\310\001\200A\330\037 \330\031\032\330\037 \360\032\000\t\021\220\002\320\022$\240A\240W\250F\260\"\260I\270V\3001\330\010\013\2105\220\006\220c\230\021\330\014\022\220*\230A\230Q\330\010\027\220s\230!\2301\330\010\"\320\"2\3202G\300u\310G\320ST\330\010\031\230\033\240G\2501\340\010-\250T\260\032\2704\270r\300\027\310\001\330\014\023\2201\330\014\027\220w\230a\340\010\017\210r\220\031\230!\2308\240>\260\021\260-\270t\3005\310\001\200A\340\034\035\330\031\032\330\031\032\330!\"\330\"#\330\034\035\360\034\000\t\r\210O\230;\240g\250Q\330\010\014\210L\230\010\240\007\240q\330\010\014\210L\230\010\240\007\240q\330\010\014\320\014\034\230A\330\010\014\320\014""\035\230Q\330\010\014\210L\230\001\340\010\024\220B\320\026(\250\001\250\033\260F\270\"\270I\300V\3101\330\010\013\2109\220F\230#\230Q\330\014\022\220*\230A\230Q\330\010\027\220s\230!\2301\330\010$\320$4\3204I\310\031\320RY\320YZ\330\010\036\230d\240*\250D\260\002\260$\260a\330\014\026\220g\230Q\330\014\025\220Q\330\014\r\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\230O\2506\260\030\270\022\2707\300!\200A\360\"\000\t\014\210:\220Q\220f\230B\230a\360\006\000\r\024\320\023(\250\001\250\021\330\014\"\320\"4\260A\260V\2701\270A\360\010\000\r\024\220:\230Q\230e\2405\250\001\250\021\330\014\023\2204\220v\230Q\230a\330\014\017\210u\220C\220q\330\020\026\220i\230q\240\001\330\014\"\240,\250a\250q\260\004\260A\260T\270\026\270q\300\001\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\034/\250v\260X\270R\270w\300a\340\010\"\240,\250h\260a\330\014\032\230'\240\024\240R\240}\260A\330\010\r\210]\230!\330\010\017\210q\200A\360\014\000\t/\250d\260*\270D\300\002\300&\310\001\330\010\013\2104\210u\220D\230\001\330\014\023\2201\330\010\017\320\017!\240\021\240!\200A\340\010\036\230d\240*\250D\260\002\260(\270!\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\034/\250v\260X\270R\270w\300a\200A\360\014\000\t\037\230d\240*\250D\260\002\260'\270\021\270*\300G\3101\330\010\013\2104\210v\220V\2301\330\014\022\220(\230!\320\033-\250V\2608\2702\270W\300A\200A\360\022\000\t/\250d\260*\270D\300\002\300,\310a\330\014\027\220w\230a\330\010\013\2104\210u\220D\230\001\330\014\023\2201\330\010\017\320\017!\240\021\240!\200A\360\024\000\t\037\230d\240*\250D\260\002\260,\270a\270q\300\001\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\034-\250V\2608\2702\270W\300A\330\010\017\320\017\"\240!\2401\200A\360\024\000\t\037\230d\240*\250D\260\002\260'\270\021\330\014\026\220g\230T\240\021\240!\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\230O\2506\260\030\270\022\2707\300!\330\010\013\2104\210s\220$\220a\330\014\023\2201\330\010\017\320\017!\240\021\240!\200""\001\330\004\n\210+\220Qstd::shared_ptr<cylon::CylonContext>  (PyObject *)\000pycylon_unwrap_contextO";
+    #else /* compression: none (4740 bytes) */
+const char* const bytes = ": AllGather failed: All dimensions preceding dimension %d must be indexed and not slicedBroadcast failed: Buffer view does not expose stridesCan only create a buffer that is contiguous in memory.Cannot assign to read-only memoryviewCannot create writable memory view from read-only memoryviewCannot index with type 'Cannot transpose memoryview with indirect dimensionsCompact failed: Dimension %d is not directEmpty shape tuple for cython.arrayFailed to create ContextTable: FromIpc failed: FromIpc failed: empty bufferGet failed: Index out of bounds (axis %d)Indirect dimensions not supportedInvalid mode, expected 'c' or 'fortran', got Invalid shape in axis LoadFromRedis failed: LoadFromS3 failed: <MemoryView of Note that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.Out of bounds on buffer access (axis Put failed: Remove failed: SaveToRedis failed: SaveToS3 failed: Step may not be zero (axis %d)ToIpcInto failed: ToIpc failed: Unable to convert item to object.>')?add_note and  at 0xcollections.abc<contiguous and direct><contiguous and indirect>cylon_armada/context_table.pyxdisableembedding must be a 1-D arrayenablegc (got got differing extents in dimension isenableditemsize <= 0 for cython.arrayno default __reduce__ due to non-trivial __cinit__ object>query must be a 1-D array<strided and direct><strided and direct or indirect><strided and indirect><stringsource>tcp://localhost:6379unable to allocate array data.unable to allocate shape and strides.us-east-1ASCIIBBufferContextTableContextTable.__reduce_cython__ContextTable.__setstate_cython__ContextTable.all_gatherContextTable.broadcastContextTable.compactContextTable.from_ipcContextTable.getContextTable.get_workflowContextTable.putContextTable.removeContextTable.searchContextTable.to_arrowContextTable.to_ipcContextTable.to_ipc_intoEllipsis__Pyx_PyDict_NextRefSequenceView.MemoryViewabcall_gatherallocat""e_bufferascontiguousarrayasyncio.coroutinesbasebatchbroadcastbucketbufcc_tablecastcbuf__class____class_getitem__cline_in_tracebackcompactcontext_idcost_usdcountctxctx_ptrctypescylon_armada.context_tabledata__dict__dimdtypedtype_is_objectemb_ptrembeddingembedding_dimencodeenumerateerrorflagsfloat32formatfortranfrom_ipc__func__getget_workflow__getstate__id__import__indexinput_tokens_is_coroutineitemsitemsizekeyload_context_from_redisload_context_from_s3__main__memviewmetamodemodel_id__module__name__name__ndim__new__npnumpyobjoutoutput_tokenspapackpopputpyarrow__pyx_checksum__pyx_state__pyx_type__pyx_unpickle_Enum__pyx_vtable__q_ptr__qualname__queryrravelredis_addr__reduce____reduce_cython____reduce_ex__regionregisterremoveresponseresultsrootsave_context_to_redissave_context_to_s3scratchsearchself__set_name__setdefault__setstate____setstate_cython__shapesimilaritysizestartstaticmethodstatusstepstopstructtable__test__thresholdto_arrowto_ipcto_ipc_intotop_kttl_secondsunpackupdatevaluesviewwfworkflow_idxPyObject *(std::shared_ptr< arrow::Buffer>  const &)\000PyObject *(std::shared_ptr< arrow::RecordBatch>  const &)\000std::shared_ptr< arrow::Buffer>  (PyObject *)\000pyarrow_wrap_buffer\000pyarrow_wrap_batch\000pyarrow_unwrap_buffer\200A\360\020\000\t2\3201G\300q\310\001\330\010\036\230d\240*\250D\260\002\260*\270A\270Q\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0341\260\026\260x\270r\300\027\310\001\320\004<\270A\360\024\000\t2\3201G\300q\310\001\330\010\036\230d\240*\250D\260\002\260*\270A\270Y\300a\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0341\260\026\260x\270r\300\027\310\001\200A\330\037 \330\031\032\330\037 \360\032\000\t\021\220\002\320\022$\240A\240W\250F\260\"\260I\270V\3001\330\010\013\2105\220\006\220c\230\021\330\014\022\220*\230A\230Q\330\010\027\220s\230!\2301\330\010\"\320\"2\3202G\300u\310G\320ST\330\010\031\230\033\240G\2501\340\010-\250T\260\032\2704\270r\300\027\310\001\330\014\023\2201\330\014\027\220w\230a\340\010\017""\210r\220\031\230!\2308\240>\260\021\260-\270t\3005\310\001\200A\340\034\035\330\031\032\330\031\032\330!\"\330\"#\330\034\035\360\034\000\t\r\210O\230;\240g\250Q\330\010\014\210L\230\010\240\007\240q\330\010\014\210L\230\010\240\007\240q\330\010\014\320\014\034\230A\330\010\014\320\014\035\230Q\330\010\014\210L\230\001\340\010\024\220B\320\026(\250\001\250\033\260F\270\"\270I\300V\3101\330\010\013\2109\220F\230#\230Q\330\014\022\220*\230A\230Q\330\010\027\220s\230!\2301\330\010$\320$4\3204I\310\031\320RY\320YZ\330\010\036\230d\240*\250D\260\002\260$\260a\330\014\026\220g\230Q\330\014\025\220Q\330\014\r\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\230O\2506\260\030\270\022\2707\300!\200A\360\030\000\t)\320(=\270Q\270a\330\010\034\230A\330\010\036\230d\240*\250D\260\002\260*\270A\270V\3001\300A\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0341\260\026\260x\270r\300\027\310\001\330\010\017\210q\200A\360\"\000\t\014\210:\220Q\220f\230B\230a\360\006\000\r\024\320\023(\250\001\250\021\330\014\"\320\"4\260A\260V\2701\270A\360\010\000\r\024\220:\230Q\230e\2405\250\001\250\021\330\014\023\2204\220v\230Q\230a\330\014\017\210u\220C\220q\330\020\026\220i\230q\240\001\330\014\"\240,\250a\250q\260\004\260A\260T\270\026\270q\300\001\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\034/\250v\260X\270R\270w\300a\340\010\"\240,\250h\260a\330\014\032\230'\240\024\240R\240}\260A\330\010\r\210]\230!\330\010\017\210q\200A\360\014\000\t/\250d\260*\270D\300\002\300&\310\001\330\010\013\2104\210u\220D\230\001\330\014\023\2201\330\010\017\320\017!\240\021\240!\200A\340\010\036\230d\240*\250D\260\002\260(\270!\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\034/\250v\260X\270R\270w\300a\200A\360\014\000\t\037\230d\240*\250D\260\002\260'\270\021\270*\300G\3101\330\010\013\2104\210v\220V\2301\330\014\022\220(\230!\320\033-\250V\2608\2702\270W\300A\200A\360\022\000\t/\250d\260*\270D\300\002\300,\310a\330\014\027\220w\230a\330\010\013\2104\210u\220D\230""\001\330\014\023\2201\330\010\017\320\017!\240\021\240!\200A\360\024\000\t\037\230d\240*\250D\260\002\260,\270a\270q\300\001\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\034-\250V\2608\2702\270W\300A\330\010\017\320\017\"\240!\2401\200A\360\024\000\t\037\230d\240*\250D\260\002\260'\270\021\330\014\026\220g\230T\240\021\240!\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\230O\2506\260\030\270\022\2707\300!\330\010\013\2104\210s\220$\220a\330\014\023\2201\330\010\017\320\017!\240\021\240!\200A\360\006\000\034\035\360\022\000\t\037\230i\240q\330\014\021\220\034\230V\2407\250$\250c\260\027\270\004\270F\300'\310\021\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0340\260\006\260h\270b\300\007\300q\200A\340\035\036\360\030\000\t\037\230k\250\021\330\014\022\220'\230\024\230S\240\007\240t\2506\260\027\270\004\270A\270Q\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0342\260&\270\010\300\002\300'\310\021\330\010\"\240,\250h\260a\330\014\032\230'\240\024\240R\240}\260A\330\010\r\210]\230!\330\010\017\210q\200A\340\036\037\330\036\037\360\026\000\t\037\230l\250!\330\014\021\220\034\230S\240\007\240t\250:\260W\270D\300\001\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0343\2606\270\030\300\022\3007\310!\200A\330 !\360\026\000\t\037\230n\250A\330\014\017\210w\220d\230*\240G\2504\250q\260\001\330\010\013\2104\210v\220V\2301\330\014\022\220)\2301\320\0345\260V\2708\3002\300W\310A\330\010\013\2104\210w\220d\230!\330\014\023\2201\330\010\"\240,\250h\260a\330\014\032\230'\240\024\240R\240}\260A\330\010\r\210]\230!\330\010\017\210q\200\001\330\004\n\210+\220Qstd::shared_ptr<cylon::CylonContext>  (PyObject *)\000pycylon_unwrap_contextO";
     PyObject *data = NULL;
     CYTHON_UNUSED_VAR(__Pyx_DecompressString);
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 197; i++) {
+    for (int i = 0; i < 216; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
-      if (likely(string) && i >= 59) PyUnicode_InternInPlace(&string);
+      if (likely(string) && i >= 66) PyUnicode_InternInPlace(&string);
       if (unlikely(!string)) {
         Py_XDECREF(data);
         __PYX_ERR(0, 1, __pyx_L1_error)
@@ -30608,7 +32204,7 @@ const char* const bytes = ": AllGather failed: All dimensions preceding dimensio
       stringtab[i] = string;
       pos += bytes_length;
     }
-    for (int i = 197; i < 212; i++) {
+    for (int i = 216; i < 236; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyBytes_FromStringAndSize(bytes + pos, bytes_length);
       stringtab[i] = string;
@@ -30619,15 +32215,15 @@ const char* const bytes = ": AllGather failed: All dimensions preceding dimensio
       }
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 212; i++) {
+    for (Py_ssize_t i = 0; i < 236; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
     }
     #if CYTHON_IMMORTAL_CONSTANTS
     {
-      PyObject **table = stringtab + 197;
-      for (Py_ssize_t i=0; i<15; ++i) {
+      PyObject **table = stringtab + 216;
+      for (Py_ssize_t i=0; i<20; ++i) {
         #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
         #if PY_VERSION_HEX < 0x030E0000
         if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
@@ -30743,34 +32339,59 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
     __pyx_mstate_global->__pyx_codeobj_tab[6] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_to_ipc, __pyx_mstate->__pyx_kp_b_iso88591_A_d_D_aq_4vV1_1_V82WA_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[6])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 187};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 187};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_scratch, __pyx_mstate->__pyx_n_u_cbuf, __pyx_mstate->__pyx_n_u_size, __pyx_mstate->__pyx_n_u_status};
+    __pyx_mstate_global->__pyx_codeobj_tab[7] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_to_ipc_into, __pyx_mstate->__pyx_kp_b_iso88591_A_Qa_A_d_D_AV1A_4vV1_1_1_xr_q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[7])) goto bad;
+  }
+  {
+    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 206};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_data, __pyx_mstate->__pyx_n_u_c_table, __pyx_mstate->__pyx_n_u_status, __pyx_mstate->__pyx_n_u_cbuf, __pyx_mstate->__pyx_n_u_view, __pyx_mstate->__pyx_n_u_size, __pyx_mstate->__pyx_n_u_table};
-    __pyx_mstate_global->__pyx_codeobj_tab[7] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_from_ipc, __pyx_mstate->__pyx_kp_b_iso88591_A_QfBa_4AV1A_Qe5_4vQa_uCq_iq_aq, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[7])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[8] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_from_ipc, __pyx_mstate->__pyx_kp_b_iso88591_A_QfBa_4AV1A_Qe5_4vQa_uCq_iq_aq, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[8])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 225};
+    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 244};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_batch};
-    __pyx_mstate_global->__pyx_codeobj_tab[8] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_to_arrow, __pyx_mstate->__pyx_kp_b_iso88591_A_d_D_4uD_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[8])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[9] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_to_arrow, __pyx_mstate->__pyx_kp_b_iso88591_A_d_D_4uD_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[9])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 251};
+    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 270};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_ctx, __pyx_mstate->__pyx_n_u_root, __pyx_mstate->__pyx_n_u_ctx_ptr, __pyx_mstate->__pyx_n_u_status};
-    __pyx_mstate_global->__pyx_codeobj_tab[9] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_broadcast, __pyx_mstate->__pyx_kp_b_iso88591_A_21Gq_d_D_AYa_4vV1_1_1_xr, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[9])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[10] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_broadcast, __pyx_mstate->__pyx_kp_b_iso88591_A_21Gq_d_D_AYa_4vV1_1_1_xr, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[10])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 4, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 266};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 4, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 285};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_ctx, __pyx_mstate->__pyx_n_u_ctx_ptr, __pyx_mstate->__pyx_n_u_status};
-    __pyx_mstate_global->__pyx_codeobj_tab[10] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_all_gather, __pyx_mstate->__pyx_kp_b_iso88591_A_21Gq_d_D_AQ_4vV1_1_1_xr, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[10])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[11] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_all_gather, __pyx_mstate->__pyx_kp_b_iso88591_A_21Gq_d_D_AQ_4vV1_1_1_xr, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[11])) goto bad;
   }
   {
     const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 1, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 1};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self};
-    __pyx_mstate_global->__pyx_codeobj_tab[11] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_reduce_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[11])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[12] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_reduce_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[12])) goto bad;
   }
   {
     const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 3};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_pyx_state};
-    __pyx_mstate_global->__pyx_codeobj_tab[12] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_setstate_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[12])) goto bad;
+    __pyx_mstate_global->__pyx_codeobj_tab[13] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_stringsource, __pyx_mstate->__pyx_n_u_setstate_cython, __pyx_mstate->__pyx_kp_b_iso88591_Q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[13])) goto bad;
+  }
+  {
+    const __Pyx_PyCode_New_function_description descr = {4, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 304};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_table, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_redis_addr, __pyx_mstate->__pyx_n_u_ttl_seconds, __pyx_mstate->__pyx_n_u_status};
+    __pyx_mstate_global->__pyx_codeobj_tab[14] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_save_context_to_redis, __pyx_mstate->__pyx_kp_b_iso88591_A_l_S_t_WD_4vV1_1_36_7, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[14])) goto bad;
+  }
+  {
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 323};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_redis_addr, __pyx_mstate->__pyx_n_u_c_table, __pyx_mstate->__pyx_n_u_status, __pyx_mstate->__pyx_n_u_table};
+    __pyx_mstate_global->__pyx_codeobj_tab[15] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_load_context_from_redis, __pyx_mstate->__pyx_kp_b_iso88591_A_nA_wd_G4q_4vV1_1_5V82WA_4wd_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[15])) goto bad;
+  }
+  {
+    const __Pyx_PyCode_New_function_description descr = {4, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 347};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_table, __pyx_mstate->__pyx_n_u_bucket, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_region, __pyx_mstate->__pyx_n_u_status};
+    __pyx_mstate_global->__pyx_codeobj_tab[16] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_save_context_to_s3, __pyx_mstate->__pyx_kp_b_iso88591_A_iq_V7_c_F_4vV1_1_0_hb_q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[16])) goto bad;
+  }
+  {
+    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 364};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_bucket, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_region, __pyx_mstate->__pyx_n_u_c_table, __pyx_mstate->__pyx_n_u_status, __pyx_mstate->__pyx_n_u_table};
+    __pyx_mstate_global->__pyx_codeobj_tab[17] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_context_table_pyx, __pyx_mstate->__pyx_n_u_load_context_from_s3, __pyx_mstate->__pyx_kp_b_iso88591_A_k_S_t6_AQ_4vV1_1_2_ha_R_A_q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[17])) goto bad;
   }
   Py_DECREF(tuple_dedup_map);
   return 0;
@@ -37803,6 +39424,75 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
       return (int64_t) -1;
   }
   
+/* CIntToPy */
+  static CYTHON_INLINE PyObject* __Pyx_PyLong_From_int(int value) {
+  #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wconversion"
+  #endif
+      const int neg_one = (int) -1, const_zero = (int) 0;
+  #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
+  #pragma GCC diagnostic pop
+  #endif
+      const int is_unsigned = neg_one > const_zero;
+      if (is_unsigned) {
+          if (sizeof(int) < sizeof(long)) {
+              return PyLong_FromLong((long) value);
+          } else if (sizeof(int) <= sizeof(unsigned long)) {
+              return PyLong_FromUnsignedLong((unsigned long) value);
+  #if !CYTHON_COMPILING_IN_PYPY
+          } else if (sizeof(int) <= sizeof(unsigned PY_LONG_LONG)) {
+              return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
+  #endif
+          }
+      } else {
+          if (sizeof(int) <= sizeof(long)) {
+              return PyLong_FromLong((long) value);
+          } else if (sizeof(int) <= sizeof(PY_LONG_LONG)) {
+              return PyLong_FromLongLong((PY_LONG_LONG) value);
+          }
+      }
+      {
+          unsigned char *bytes = (unsigned char *)&value;
+  #if !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX >= 0x030d00A4
+          if (is_unsigned) {
+              return PyLong_FromUnsignedNativeBytes(bytes, sizeof(value), -1);
+          } else {
+              return PyLong_FromNativeBytes(bytes, sizeof(value), -1);
+          }
+  #elif !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX < 0x030d0000
+          int one = 1; int little = (int)*(unsigned char *)&one;
+          return _PyLong_FromByteArray(bytes, sizeof(int),
+                                       little, !is_unsigned);
+  #else
+          int one = 1; int little = (int)*(unsigned char *)&one;
+          PyObject *from_bytes, *result = NULL, *kwds = NULL;
+          PyObject *py_bytes = NULL, *order_str = NULL;
+          from_bytes = PyObject_GetAttrString((PyObject*)&PyLong_Type, "from_bytes");
+          if (!from_bytes) return NULL;
+          py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(int));
+          if (!py_bytes) goto limited_bad;
+          order_str = PyUnicode_FromString(little ? "little" : "big");
+          if (!order_str) goto limited_bad;
+          {
+              PyObject *args[3+(CYTHON_VECTORCALL ? 1 : 0)] = { NULL, py_bytes, order_str };
+              if (!is_unsigned) {
+                  kwds = __Pyx_MakeVectorcallBuilderKwds(1);
+                  if (!kwds) goto limited_bad;
+                  if (__Pyx_VectorcallBuilder_AddArgStr("signed", __Pyx_NewRef(Py_True), kwds, args+3, 0) < 0) goto limited_bad;
+              }
+              result = __Pyx_Object_Vectorcall_CallFromBuilder(from_bytes, args+1, 2 | __Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET, kwds);
+          }
+          limited_bad:
+          Py_XDECREF(kwds);
+          Py_XDECREF(order_str);
+          Py_XDECREF(py_bytes);
+          Py_XDECREF(from_bytes);
+          return result;
+  #endif
+      }
+  }
+  
 /* CIntFromPy */
   static CYTHON_INLINE unsigned PY_LONG_LONG __Pyx_PyLong_As_unsigned_PY_LONG_LONG(PyObject *x) {
   #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
@@ -38100,75 +39790,6 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
           from_bytes = PyObject_GetAttrString((PyObject*)&PyLong_Type, "from_bytes");
           if (!from_bytes) return NULL;
           py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(int64_t));
-          if (!py_bytes) goto limited_bad;
-          order_str = PyUnicode_FromString(little ? "little" : "big");
-          if (!order_str) goto limited_bad;
-          {
-              PyObject *args[3+(CYTHON_VECTORCALL ? 1 : 0)] = { NULL, py_bytes, order_str };
-              if (!is_unsigned) {
-                  kwds = __Pyx_MakeVectorcallBuilderKwds(1);
-                  if (!kwds) goto limited_bad;
-                  if (__Pyx_VectorcallBuilder_AddArgStr("signed", __Pyx_NewRef(Py_True), kwds, args+3, 0) < 0) goto limited_bad;
-              }
-              result = __Pyx_Object_Vectorcall_CallFromBuilder(from_bytes, args+1, 2 | __Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET, kwds);
-          }
-          limited_bad:
-          Py_XDECREF(kwds);
-          Py_XDECREF(order_str);
-          Py_XDECREF(py_bytes);
-          Py_XDECREF(from_bytes);
-          return result;
-  #endif
-      }
-  }
-  
-/* CIntToPy */
-  static CYTHON_INLINE PyObject* __Pyx_PyLong_From_int(int value) {
-  #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wconversion"
-  #endif
-      const int neg_one = (int) -1, const_zero = (int) 0;
-  #ifdef __Pyx_HAS_GCC_DIAGNOSTIC
-  #pragma GCC diagnostic pop
-  #endif
-      const int is_unsigned = neg_one > const_zero;
-      if (is_unsigned) {
-          if (sizeof(int) < sizeof(long)) {
-              return PyLong_FromLong((long) value);
-          } else if (sizeof(int) <= sizeof(unsigned long)) {
-              return PyLong_FromUnsignedLong((unsigned long) value);
-  #if !CYTHON_COMPILING_IN_PYPY
-          } else if (sizeof(int) <= sizeof(unsigned PY_LONG_LONG)) {
-              return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
-  #endif
-          }
-      } else {
-          if (sizeof(int) <= sizeof(long)) {
-              return PyLong_FromLong((long) value);
-          } else if (sizeof(int) <= sizeof(PY_LONG_LONG)) {
-              return PyLong_FromLongLong((PY_LONG_LONG) value);
-          }
-      }
-      {
-          unsigned char *bytes = (unsigned char *)&value;
-  #if !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX >= 0x030d00A4
-          if (is_unsigned) {
-              return PyLong_FromUnsignedNativeBytes(bytes, sizeof(value), -1);
-          } else {
-              return PyLong_FromNativeBytes(bytes, sizeof(value), -1);
-          }
-  #elif !CYTHON_COMPILING_IN_LIMITED_API && PY_VERSION_HEX < 0x030d0000
-          int one = 1; int little = (int)*(unsigned char *)&one;
-          return _PyLong_FromByteArray(bytes, sizeof(int),
-                                       little, !is_unsigned);
-  #else
-          int one = 1; int little = (int)*(unsigned char *)&one;
-          PyObject *from_bytes, *result = NULL, *kwds = NULL;
-          PyObject *py_bytes = NULL, *order_str = NULL;
-          from_bytes = PyObject_GetAttrString((PyObject*)&PyLong_Type, "from_bytes");
-          if (!from_bytes) return NULL;
-          py_bytes = PyBytes_FromStringAndSize((char*)bytes, sizeof(int));
           if (!py_bytes) goto limited_bad;
           order_str = PyUnicode_FromString(little ? "little" : "big");
           if (!order_str) goto limited_bad;

@@ -568,6 +568,56 @@ Status ContextTable::ToIpc(std::vector<uint8_t>* data) {
   return Status::OK();
 }
 
+Status ContextTable::ToIpcInto(const std::shared_ptr<arrow::Buffer>& dest, int64_t* size_out) {
+  if (dest == nullptr || !dest->is_mutable()) {
+    return {Code::ExecutionError, "ToIpcInto requires a non-null mutable destination buffer"};
+  }
+  { auto s = MaterializeIfDirty(); if (!s.is_ok()) return s; }
+
+  // Filter tombstoned rows (identical to ToIpcBuffer; in the pooled fast path
+  // deleted_ is empty, so this is the zero-copy else branch).
+  std::shared_ptr<arrow::RecordBatch> batch_to_write;
+  if (!deleted_.empty()) {
+    std::vector<int64_t> keep;
+    keep.reserve(batch_->num_rows() - deleted_.size());
+    for (int64_t i = 0; i < batch_->num_rows(); ++i) {
+      if (!deleted_.count(i)) {
+        keep.push_back(i);
+      }
+    }
+    arrow::Int64Builder idx_builder;
+    (void)idx_builder.AppendValues(keep);
+    std::shared_ptr<arrow::Array> idx_array;
+    (void)idx_builder.Finish(&idx_array);
+    auto take_result = arrow::compute::Take(batch_, idx_array);
+    if (!take_result.ok()) {
+      return {Code::ExecutionError, take_result.status().ToString()};
+    }
+    batch_to_write = take_result->record_batch();
+  } else {
+    batch_to_write = batch_;
+  }
+
+  // Serialize into the caller's buffer via a fixed-size writer: no allocation,
+  // so a reused dest buffer keeps its pages resident across serializations.
+  auto sink = std::make_shared<arrow::io::FixedSizeBufferWriter>(dest);
+  auto writer_result = arrow::ipc::MakeStreamWriter(sink, batch_to_write->schema());
+  if (!writer_result.ok()) {
+    return {Code::ExecutionError, writer_result.status().ToString()};
+  }
+  auto writer = std::move(*writer_result);
+
+  RETURN_CYLON_STATUS_IF_ARROW_FAILED(writer->WriteRecordBatch(*batch_to_write));
+  RETURN_CYLON_STATUS_IF_ARROW_FAILED(writer->Close());
+
+  auto pos_result = sink->Tell();
+  if (!pos_result.ok()) {
+    return {Code::ExecutionError, pos_result.status().ToString()};
+  }
+  *size_out = *pos_result;
+  return Status::OK();
+}
+
 arrow::Result<std::shared_ptr<ContextTable>> ContextTable::FromIpcBuffer(
     std::shared_ptr<arrow::Buffer> buffer) {
   // Zero-copy: read directly from the supplied buffer. The batches produced by

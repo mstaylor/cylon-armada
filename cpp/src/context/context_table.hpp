@@ -129,6 +129,14 @@ class ContextTable {
   // std::vector). Used by the Python binding via pyarrow_wrap_buffer so to_ipc()
   // returns a zero-copy pyarrow.Buffer. ToIpc(vector) delegates to this.
   Status ToIpcBuffer(std::shared_ptr<arrow::Buffer>* out);
+  // Buffer-reuse variant: serialize the IPC stream into a caller-provided
+  // mutable buffer instead of allocating a fresh one, for pooled transfer paths
+  // that reuse one buffer across many serializations. dest must be at least as
+  // large as the stream (deterministic for a given schema + row count, so a
+  // buffer sized from a prior ToIpcBuffer length fits exactly); size_out
+  // receives the bytes written. The C++ analog of the Python FixedSizeBufferWriter
+  // reuse path used by the arrow_ipc data-plane edge.
+  Status ToIpcInto(const std::shared_ptr<arrow::Buffer>& dest, int64_t* size_out);
 
   static arrow::Result<std::shared_ptr<ContextTable>> FromIpc(
       const uint8_t* data, int64_t size);

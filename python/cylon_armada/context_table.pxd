@@ -77,6 +77,7 @@ cdef extern from "cylon_armada/context/context_table.hpp" namespace "cylon::cont
 
         CStatus ToIpc(vector[uint8_t]* data)
         CStatus ToIpcBuffer(shared_ptr[CBuffer]* out)
+        CStatus ToIpcInto(shared_ptr[CBuffer] dest, int64_t* size_out)
 
         CStatus Broadcast(const shared_ptr[CCylonContext]& ctx, int root)
         CStatus AllGather(const shared_ptr[CCylonContext]& ctx)

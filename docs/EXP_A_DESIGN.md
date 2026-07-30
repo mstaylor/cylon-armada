@@ -234,3 +234,75 @@ python -m results.pipeline --experiment zerocopy \
 The benchmark Lambda bills only per invocation — no idle cost — so it can stay applied (it is
 reused for Experiment J's L3 test). Experiment A adds no GPU/EC2, so there is nothing here to
 tear down; the continuously billing `terraform-gpu` / `terraform-ec2` modules are separate.
+
+## 10. Serverless allocator sensitivity (empirical finding)
+
+The first AWS Lambda run (10 GB, 3 runs, all 7 formats) surfaced a result the local runs did not:
+`arrow_ipc` and `contexttable_ipc` throughput **collapses at the largest batch** (N=5000, D=1024,
+a ~20 MB payload), falling ~3.8x below their mid-range peak and, with the default allocator, below
+pickle. In the mid-range (N=500 to 1000) Arrow wins clearly, so the effect is a crossover, not a
+flat loss.
+
+**Root cause.** The benchmark reserializes every rep, allocating a fresh ~20 MB Arrow IPC buffer;
+the default arena allocator classifies that as a huge allocation and returns it to the OS on free
+(`munmap`), so each rep re-`mmap`s and first-touch-faults the whole buffer. That page-fault churn
+is memory-bandwidth-bound and dominates on Lambda's constrained bandwidth (~18 GB/s); the local
+machine (~40 GB/s) hides it. The deserialize timing is the tell: at N=1000 it runs at ~120 GB/s
+(genuine zero-copy view), but at N=5000 it drops to memcpy speed, i.e. the churn taxes even the
+zero-copy read path. The structural memory-copies claim (arrow 0, pickle 1, json 2) is unaffected.
+
+**Allocator sweep** (arrow_ipc round-trip MB/s at N=5000, D=1024):
+
+| Allocator configuration | MB/s | Fixes collapse |
+|---|---|---|
+| default jemalloc (naive) | 1,373 | no |
+| jemalloc with `ARROW_JEMALLOC_DECAY_MS=-1` | 1,337 | no |
+| mimalloc | 1,353 | no |
+| `system` pool + `MALLOC_MMAP_MAX_=0` + `MALLOC_TRIM_THRESHOLD_=-1` | 4,556 | yes (3.3x) |
+
+Both arena allocators (jemalloc, mimalloc) `munmap` huge blocks on free regardless of their decay
+or retention knobs, so their tuning does nothing here. Only forcing every allocation onto the
+retained glibc heap (system pool, no `mmap`, no trim) keeps the freed buffer resident for reuse and
+removes the churn. `exp_a_zerocopy.py` exposes `ARROW_JEMALLOC_DECAY_MS` as an optional tuning lever
+(calls `pyarrow.jemalloc_set_decay_ms`); it is retained as a documented knob but does not help this
+workload for the reason above.
+
+**Tuned result.** With the system allocator config, the crossover disappears and Arrow wins across
+the whole grid. Full sweep, N=5000, D=1024, median of 3 runs, naive to tuned:
+
+| Format | naive | tuned | factor |
+|---|---|---|---|
+| arrow_ipc | 1,373 | 5,258 | 3.8x |
+| contexttable_ipc | 884 | 3,376 | 3.8x |
+| pickle | 2,355 | 2,478 | 1.0x |
+
+arrow vs pickle at N=5000 goes from 0.58x (Arrow loses) to 2.12x (Arrow wins). The tradeoff is real
+and unavoidable: the glibc allocator is ~20 percent slower for frequent mid-range allocations
+(arrow N=1000, D=1024: 8,910 naive vs 6,856 tuned), so the config trades a modest mid-range cost for
+large-payload robustness. There is no allocator-tuning best of both.
+
+**How to report it.** Present naive and tuned as a before and after. The honest framing is that the
+zero-copy data-plane advantage is real and large, but realizing it on bandwidth-limited serverless
+requires pinning allocations to the heap to avoid huge-allocation `munmap` churn; the naive default
+shows a large-payload cliff. That is a systems contribution, config-only, no change to the data
+plane. Tuned config (Lambda env, or the equivalent on any host):
+
+```bash
+ARROW_DEFAULT_MEMORY_POOL=system
+MALLOC_MMAP_MAX_=0
+MALLOC_TRIM_THRESHOLD_=-1
+```
+
+**Distributed implication.** The cost is on the serialize (send) side, so it carries to multi-worker
+Arrow transfers in Experiments B/E independent of the FMI channel (`direct` / `redis` / `s3`) or the
+TCPunch rendezvous server (which brokers connection setup only and never touches the payload). A
+real transfer serializes once rather than in a tight rep loop, so the effect is smaller there, but
+the allocator config should travel with the data-plane code. Data-scale runs (Section 2) that push
+the payload past 20 MB will re-encounter this and should use the tuned config.
+
+Artifacts: naive `results/exp_a_zerocopy_cloud/`, tuned `results/exp_a_zerocopy_tuned/` (each with a
+median CSV, four charts, and a notebook); S3 prefixes `results/benchmark/exp_a/` and
+`.../exp_a_tuned/`.
+
+## Placeholder to keep the cost note intact
+tear down; the continuously billing `terraform-gpu` / `terraform-ec2` modules are separate.

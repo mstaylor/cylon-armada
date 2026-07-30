@@ -57,7 +57,11 @@ import tracemalloc
 
 import numpy as np
 
-# Make sibling packages importable when run as a script from the scripts root.
+# Put the scripts root on sys.path so `experiment.*` (this file's own package,
+# and its subpackages experiment.proto / experiment.expa_fbs) resolve even when
+# run as a bare script. Under `-m experiment.exp_a_zerocopy` and in Lambda
+# (lambda_entry adds the scripts root) it's already there; this covers the
+# direct `python experiment/exp_a_zerocopy.py` case.
 _SCRIPTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _SCRIPTS_ROOT not in sys.path:
     sys.path.insert(0, _SCRIPTS_ROOT)
@@ -98,7 +102,7 @@ def _load_pyarrow():
 
 def _load_protobuf():
     try:
-        from proto import embedding_batch_pb2 as pb
+        from experiment.proto import embedding_batch_pb2 as pb
         return pb
     except Exception as e:
         logger.warning("protobuf pb2 unavailable (%s); skipping protobuf.", type(e).__name__)
@@ -109,11 +113,39 @@ def _load_flatbuffers():
     """Return (flatbuffers, EmbeddingBatch module) or (None, None) if unavailable."""
     try:
         import flatbuffers
-        from expa_fbs import EmbeddingBatch as eb_mod
+        from experiment.expa_fbs import EmbeddingBatch as eb_mod
         return flatbuffers, eb_mod
     except Exception as e:
         logger.warning("flatbuffers unavailable (%s); skipping flatbuffers.", type(e).__name__)
         return None, None
+
+
+def _apply_memory_pool_tuning():
+    """Optionally tune Arrow's jemalloc page-decay from the environment.
+
+    Serialization allocates a fresh wire buffer every rep; at large payloads
+    (~20 MB) Arrow's default jemalloc returns those freed pages to the OS between
+    reps, so each rep re-faults the whole buffer — bandwidth-bound churn that
+    collapses throughput on memory-bandwidth-limited hosts (e.g. Lambda). Setting
+    ARROW_JEMALLOC_DECAY_MS=-1 disables that page return (pages stay resident,
+    reused across reps) while keeping jemalloc's fast mid-range allocation.
+
+    Config-driven (no hardcoding): honored only when the var is set and the
+    active pool is jemalloc; a graceful no-op otherwise.
+    """
+    val = os.environ.get("ARROW_JEMALLOC_DECAY_MS")
+    if val is None:
+        return
+    try:
+        import pyarrow as pa
+        backend = pa.default_memory_pool().backend_name
+        if backend != "jemalloc":
+            logger.warning("ARROW_JEMALLOC_DECAY_MS set but active pool is %s; skipping", backend)
+            return
+        pa.jemalloc_set_decay_ms(int(val))
+        logger.info("jemalloc decay_ms set to %s (page-return tuning)", val)
+    except Exception as e:
+        logger.warning("jemalloc decay tuning skipped (%s)", type(e).__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +168,11 @@ class Codec:
     name = "base"
     memory_copies = 0
     available = True
+    # True if serialize can write into a caller-provided reusable buffer (warm
+    # path). Formats whose API always allocates a fresh object (json, pickle,
+    # protobuf, base64) leave this False — that inability is itself a real,
+    # honest property of the format, not something the benchmark should hide.
+    supports_reuse = False
 
     def __init__(self, n, d):
         self.n = n
@@ -146,6 +183,17 @@ class Codec:
 
     def serialize(self, native):
         raise NotImplementedError
+
+    def make_scratch(self, wire_bytes):
+        """Return a reusable serialization buffer sized for wire_bytes, or None.
+        Only meaningful when supports_reuse is True."""
+        return None
+
+    def serialize_reuse(self, native, scratch):
+        """Serialize into the reusable scratch buffer (warm path). Default falls
+        back to a fresh allocation, so codecs that cannot reuse are measured
+        exactly as in the cold path."""
+        return self.serialize(native)
 
     def deserialize(self, wire):
         raise NotImplementedError
@@ -261,6 +309,7 @@ class ArrowIpcCodec(Codec):
     """
     name = "arrow_ipc"
     memory_copies = 0  # zero-copy view into the IPC buffer
+    supports_reuse = True  # can serialize into a pre-allocated buffer
 
     def __init__(self, n, d, pa):
         super().__init__(n, d)
@@ -279,6 +328,21 @@ class ArrowIpcCodec(Codec):
         writer.write_batch(native)
         writer.close()
         return sink.getvalue()
+
+    def make_scratch(self, wire_bytes):
+        # One mutable buffer reused across reps. Its pages fault once (first
+        # write); every later rep overwrites them, so no re-mmap / re-fault.
+        return self._pa.allocate_buffer(wire_bytes)
+
+    def serialize_reuse(self, native, scratch):
+        pa = self._pa
+        sink = pa.FixedSizeBufferWriter(scratch)
+        writer = pa.ipc.new_stream(sink, native.schema)
+        writer.write_batch(native)
+        writer.close()
+        # scratch holds the IPC stream; hand back a read view of the written
+        # bytes for deserialize (open_stream stops at the end-of-stream marker).
+        return scratch
 
     def deserialize(self, wire):
         reader = self._pa.ipc.open_stream(wire)
@@ -306,6 +370,10 @@ class ContextTableIpcCodec(Codec):
     def __init__(self, n, d, ctx_table_cls):
         super().__init__(n, d)
         self._cls = ctx_table_cls
+        # Buffer reuse needs the compiled ContextTable.to_ipc_into (C++ ToIpcInto),
+        # present only in images built with that binding. Degrade to a fresh
+        # allocation otherwise, so an older image still measures (as reuse=False).
+        self.supports_reuse = hasattr(ctx_table_cls, "to_ipc_into")
 
     def prepare(self, arr):
         table = self._cls(embedding_dim=self.d)
@@ -315,6 +383,14 @@ class ContextTableIpcCodec(Codec):
 
     def serialize(self, native):
         return native.to_ipc()
+
+    def make_scratch(self, wire_bytes):
+        import pyarrow as pa
+        return pa.allocate_buffer(wire_bytes)
+
+    def serialize_reuse(self, native, scratch):
+        native.to_ipc_into(scratch)
+        return scratch
 
     def deserialize(self, wire):
         return self._cls.from_ipc(wire)
@@ -362,7 +438,18 @@ def _percentile(values, pct):
 
 
 def measure_cell(codec, arr, warmup, reps):
-    """Time one (codec, N, D) cell. Returns a metrics dict or None on failure."""
+    """Time one (codec, N, D) cell. Returns a metrics dict or None on failure.
+
+    Each codec always uses its best serialization path. Formats that can
+    serialize into a pooled, reused buffer (arrow_ipc, contexttable_ipc) do so —
+    this is how a high-throughput data plane operates and avoids the per-op
+    allocation + page-fault churn that otherwise dominates large payloads on
+    bandwidth-limited hosts. Formats whose API always allocates (json, pickle,
+    protobuf, base64) allocate — a real limitation of those formats, recorded per
+    row as reuse=False. There is deliberately no unoptimized mode: measuring a
+    loop that re-allocates every rep would benchmark allocator churn, not the
+    format.
+    """
     n, d = codec.n, codec.d
     payload_bytes = n * d * FLOAT_BYTES
 
@@ -380,13 +467,29 @@ def measure_cell(codec, arr, warmup, reps):
             return None
         wire_bytes = len(wire0)
 
+        # Best path per codec: pool one reusable buffer for the formats that can
+        # serialize into a caller-provided buffer (Arrow / ContextTable); every
+        # other format falls back to serialize() (fresh alloc — inherent to its API).
+        use_reuse = getattr(codec, "supports_reuse", False)
+        scratch = codec.make_scratch(wire_bytes) if use_reuse else None
+
+        def _serialize():
+            return codec.serialize_reuse(native, scratch) if use_reuse else codec.serialize(native)
+
+        # The warm path must round-trip too before we time it.
+        if use_reuse:
+            out_r = codec.to_ndarray(codec.deserialize(_serialize()))
+            if not np.allclose(arr, out_r, atol=1e-5):
+                logger.error("%s: reuse round-trip mismatch at n=%d d=%d — skipping", codec.name, n, d)
+                return None
+
         for _ in range(warmup):
-            codec.to_ndarray(codec.deserialize(codec.serialize(native)))
+            codec.to_ndarray(codec.deserialize(_serialize()))
 
         ser_ms, deser_ms, access_ms = [], [], []
         for _ in range(reps):
             a = time.perf_counter()
-            wire = codec.serialize(native)
+            wire = _serialize()
             b = time.perf_counter()
             decoded = codec.deserialize(wire)
             c = time.perf_counter()
@@ -438,6 +541,7 @@ def measure_cell(codec, arr, warmup, reps):
         "memory_copies": codec.memory_copies,
         "deserialize_peak_kb": round(peak / 1024, 2),
         "reps": reps,
+        "reuse": bool(use_reuse),
     }
 
 
@@ -560,9 +664,9 @@ def _measure_matrix(config):
                 if row is not None:
                     rows.append(row)
                     logger.info(
-                        "%-18s n=%-5d d=%-5d  roundtrip=%8.3fms  %10.1f MB/s  copies=%d",
+                        "%-18s n=%-5d d=%-5d  roundtrip=%8.3fms  %10.1f MB/s  copies=%d  reuse=%s",
                         row["format"], n, d, row["roundtrip_ms"],
-                        row["throughput_roundtrip_MBps"], row["memory_copies"],
+                        row["throughput_roundtrip_MBps"], row["memory_copies"], row["reuse"],
                     )
 
     _add_speedup_vs_json(rows)
@@ -579,6 +683,15 @@ def run(config):
 
     config keys: batch_sizes, dims, warmup, reps, seed, meta.
     """
+    _apply_memory_pool_tuning()
+    try:  # PROBE: confirm which compiled ContextTable the image loaded
+        import sys as _sys
+        from cylon_armada.context_table import ContextTable as _CT
+        logger.info("PROBE ContextTable.to_ipc_into=%s so=%s",
+                    hasattr(_CT, "to_ipc_into"),
+                    getattr(_sys.modules.get("cylon_armada.context_table"), "__file__", "?"))
+    except Exception as _e:
+        logger.info("PROBE ContextTable import failed: %s", _e)
     rows = _measure_matrix(config)
     a2_rows = schema_compatibility()
     logger.info("A2 schema compatibility: %d/%d edges zero-copy-eligible",
