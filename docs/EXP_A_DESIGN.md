@@ -2,7 +2,13 @@
 
 **Status:** proposed (pre-implementation review)
 **Validates:** Contribution C1 (zero-copy Arrow data plane), Arrow schema compatibility.
-**Proposal refs:** Table VIII row A/A2; Validation §Experiment A; IV1 (dim), IV2 (batch size), payload-schema-type axis.
+**Proposal refs:** Table VIII row A/A2; Validation §Experiment A and §Experiment A2; IV1 (dim), IV2 (batch size).
+
+> **Scope note.** The Arrow *schema payload-type* axis (dense `FixedSizeList<Float32>` vs
+> variable-length `LargeUtf8` document chunks) is **not** part of Experiment A or A2 in the proposal.
+> It is stated under **Experiment D (Data Communication Reduction)** as an additional independent
+> variable. It has been removed from this document; see the Experiment D design for that comparison.
+> Experiment A here is the dense embedding-payload throughput benchmark the proposal specifies.
 
 ## 1. What the proposal asks for
 
@@ -12,10 +18,16 @@ zero-copy data plane against serialization-based baselines (JSON, Pickle, Protob
 the largest gain vs JSON and a smaller but measurable gain vs Protobuf. The comparison isolates the
 benefit of *reduced memory copies*.
 
-**Experiment A2, Arrow Schema Compatibility.** Validate the zero-copy edge condition
-`schema_out(Oi) == schema_in(Oj)` across the operator DAG. Plus the proposal's payload-schema-type
-axis: dense fixed (`FixedSizeList<Float32>` embeddings) vs variable-length nested (`LargeUtf8`
-document chunks). Arrow's zero-copy advantage is strongest for dense, weakest for variable.
+**Experiment A2, Arrow Schema Compatibility Validation.** Per the proposal, validate that
+**Algorithm 1 correctly enforces Arrow schema compatibility before generating an execution plan**.
+For each connected operator pair in the five agentic workflows, verify three cases:
+1. **Compatible schemas** enable zero-copy Arrow IPC transfer without format conversion.
+2. **Incompatible schemas** are rejected during plan compilation with a `schema_mismatch_error`,
+   before any data transfer occurs.
+3. **Schema evolution** through nullable-column additions is supported without plan recompilation,
+   provided downstream operators do not require the added fields.
+
+The zero-copy edge condition `schema_out(Oi) == schema_in(Oj)` across the operator DAG is case 1.
 
 ## 2. Representative workload payload
 
@@ -28,7 +40,10 @@ framework's data plane rather than an arbitrary payload.
 **Grid** (proposal IV1/IV2):
 - Batch size `N ∈ {100, 500, 1000, 5000}` rows
 - Embedding dim `D ∈ {256, 512, 1024}` (Titan v2 dims used across all existing data; 768 optional)
-- Payload type ∈ {`embeddings` (dense FixedSizeList), `doc_chunks` (variable LargeUtf8)}
+
+The payload is dense `FixedSizeList<Float32>` throughout — Experiment A is the dense embedding-payload
+benchmark. The dense-vs-variable payload-type comparison belongs to Experiment D (see the scope note
+in the header).
 
 **Data-scale axis (separate sweep).** The node/agent axis (Experiment B/E, `N ≤ 64`) and the
 *data* axis are distinct dimensions and are argued separately. To exercise the data plane at the
@@ -80,11 +95,24 @@ Supplementary formats (not proposal Exp A baselines, kept for transparency):
 Rigor: `np.random.default_rng(42)` payloads (repo seed convention), `--warmup 3 --reps 20`, report
 median + p95. `--runs N` writes `run_{n}/` subdirs for cross-run std (matches runner convention).
 
-## 5. A2 Schema Compatibility
+## 5. A2 Schema Compatibility Validation
 
-Define the 5 operators as `(pattern, schema_in, schema_out)` per the proposal contracts, build the
-pipeline DAG, and check every edge for `schema_out(Oi)` Arrow-compatibility with `schema_in(Oj)`.
-Output: a compatibility matrix (zero-copy-eligible edges / total) plus which edges need serialization.
+Per the proposal, A2 validates that **Algorithm 1 enforces Arrow schema compatibility before plan
+generation**, checking three cases for each connected operator pair in the five agentic workflows:
+
+1. **Compatible → zero-copy.** Define the 5 operators as `(pattern, schema_in, schema_out)` per the
+   proposal contracts, build the pipeline DAG, and check every edge for `schema_out(Oi)`
+   Arrow-compatibility with `schema_in(Oj)`. Compatible edges must enable zero-copy Arrow IPC
+   transfer without format conversion. Output: a compatibility matrix (zero-copy-eligible / total).
+2. **Incompatible → rejected.** Feed an operator pair with mismatched schemas to the plan compiler
+   (Algorithm 1) and assert it raises `schema_mismatch_error` **during plan compilation, before any
+   data transfer** — not a runtime failure after bytes move.
+3. **Schema evolution → tolerated.** Add a nullable column to a producer's `schema_out` and assert
+   the plan still compiles without recompilation, provided the downstream operator does not require
+   the added field.
+
+Cases 2 and 3 exercise the actual compile-time enforcement path, not just a static string comparison;
+the current `schema_compatibility()` matrix covers case 1 only and is extended for cases 2–3.
 
 ## 6. Architecture and Code Reuse
 
@@ -123,8 +151,9 @@ Output dir: fresh `results/exp_a_zerocopy/`. It **does not touch** the protected
    embedding column returns as `FixedSizeList<Float32>` without a copy, verified locally in `cylon_dev`.
 2. Measured `throughput_roundtrip_MBps`: `arrow_ipc` > `pickle`/`tobytes` > `json`, with a clear,
    chartable gap; `memory_copies` and `deserialize_peak_kb` corroborate (Arrow lowest).
-3. A2: schema-compat matrix shows dense-embedding edges are zero-copy-eligible; variable `LargeUtf8`
-   edges are where Arrow's advantage narrows.
+3. A2: (case 1) the schema-compat matrix shows the compatible embedding edges are zero-copy-eligible;
+   (case 2) an incompatible operator pair is rejected at plan-compile time with `schema_mismatch_error`;
+   (case 3) a nullable-column addition compiles without recompilation when downstream does not need it.
 4. The same harness runs on AWS Lambda (10 GB), results are written to S3, and the charts regenerate
    from the collected data.
 
@@ -235,74 +264,79 @@ The benchmark Lambda bills only per invocation — no idle cost — so it can st
 reused for Experiment J's L3 test). Experiment A adds no GPU/EC2, so there is nothing here to
 tear down; the continuously billing `terraform-gpu` / `terraform-ec2` modules are separate.
 
-## 10. Serverless allocator sensitivity (empirical finding)
+## 10. Buffer reuse and the large-payload collapse (empirical finding)
 
 The first AWS Lambda run (10 GB, 3 runs, all 7 formats) surfaced a result the local runs did not:
-`arrow_ipc` and `contexttable_ipc` throughput **collapses at the largest batch** (N=5000, D=1024,
-a ~20 MB payload), falling ~3.8x below their mid-range peak and, with the default allocator, below
-pickle. In the mid-range (N=500 to 1000) Arrow wins clearly, so the effect is a crossover, not a
-flat loss.
+`arrow_ipc` and `contexttable_ipc` throughput **collapsed at the largest batch** (N=5000, D=1024,
+a ~20 MB payload), falling ~6.5x below their mid-range peak and, on that naive run, below pickle
+(arrow 1,373 vs pickle 2,355 MB/s). In the mid-range (N=500 to 1000) Arrow won clearly, so the
+effect was a crossover confined to the largest cell, not a flat loss.
 
-**Root cause.** The benchmark reserializes every rep, allocating a fresh ~20 MB Arrow IPC buffer;
-the default arena allocator classifies that as a huge allocation and returns it to the OS on free
-(`munmap`), so each rep re-`mmap`s and first-touch-faults the whole buffer. That page-fault churn
-is memory-bandwidth-bound and dominates on Lambda's constrained bandwidth (~18 GB/s); the local
-machine (~40 GB/s) hides it. The deserialize timing is the tell: at N=1000 it runs at ~120 GB/s
-(genuine zero-copy view), but at N=5000 it drops to memcpy speed, i.e. the churn taxes even the
-zero-copy read path. The structural memory-copies claim (arrow 0, pickle 1, json 2) is unaffected.
+**Root cause: a measurement artifact, not a property of Arrow.** The benchmark reserializes every
+rep, and the original codecs allocated a **fresh ~20 MB IPC buffer every rep**, freed after. The
+default allocator returns a freed huge block to the OS (`munmap`), so each rep re-`mmap`s and
+first-touch-faults the entire buffer — memory-bandwidth-bound work that dominates on Lambda's
+constrained bandwidth (~18 GB/s) and is hidden on the local machine (~40 GB/s). The tell is the
+deserialize timing: at N=1000 it runs faster than memcpy (a genuine zero-copy view), but at N=5000
+it drops to memcpy speed, i.e. the allocation churn was taxing even the zero-copy read path. A real
+data plane serializes into a **pooled, reused** buffer; it does not allocate-and-free per transfer.
+The benchmark was therefore measuring allocator churn, not encode efficiency.
 
-**Allocator sweep** (arrow_ipc round-trip MB/s at N=5000, D=1024):
+**The fix: pool the serialization buffer (a data-plane design choice, not allocator tuning).** Each
+codec now always uses its best path. Formats that can serialize into a caller-provided buffer reuse
+one across reps: `arrow_ipc` via `pyarrow.FixedSizeBufferWriter`, and `contexttable_ipc` via a new
+C++ `ContextTable::ToIpcInto` (bound as `to_ipc_into`) that writes into a `FixedSizeBufferWriter`
+instead of allocating a fresh `BufferOutputStream`. Formats whose API always allocates (json,
+pickle, protobuf, base64_tobytes) allocate — a real limitation of those formats, recorded per row as
+`reuse=False`. There is deliberately no unoptimized mode; measuring a re-allocate-every-rep loop
+benchmarks the allocator, not the format. This fix runs on the **default allocator** with no
+`MALLOC_*` environment tuning.
 
-| Allocator configuration | MB/s | Fixes collapse |
-|---|---|---|
-| default jemalloc (naive) | 1,373 | no |
-| jemalloc with `ARROW_JEMALLOC_DECAY_MS=-1` | 1,337 | no |
-| mimalloc | 1,353 | no |
-| `system` pool + `MALLOC_MMAP_MAX_=0` + `MALLOC_TRIM_THRESHOLD_=-1` | 4,556 | yes (3.3x) |
+**Result: with buffer reuse the collapse is gone and both zero-copy formats win across the entire
+grid.** Definitive sweep, default allocator, median of 3 runs, throughput MB/s at D=1024:
 
-Both arena allocators (jemalloc, mimalloc) `munmap` huge blocks on free regardless of their decay
-or retention knobs, so their tuning does nothing here. Only forcing every allocation onto the
-retained glibc heap (system pool, no `mmap`, no trim) keeps the freed buffer resident for reuse and
-removes the churn. `exp_a_zerocopy.py` exposes `ARROW_JEMALLOC_DECAY_MS` as an optional tuning lever
-(calls `pyarrow.jemalloc_set_decay_ms`); it is retained as a documented knob but does not help this
-workload for the reason above.
+| Format | reuse | copies | N=100 | N=500 | N=1000 | N=5000 | vs pickle @ N=5000 |
+|---|---|---|---|---|---|---|---|
+| **arrow_ipc** | yes | **0** | 6,821 | 8,581 | 9,440 | **4,671** | **2.03x** |
+| **contexttable_ipc** | yes | **0** | 4,659 | 7,275 | 8,503 | **4,590** | **1.99x** |
+| flatbuffers | no | 0 | 2,228 | 1,836 | 1,363 | 829 | 0.36x |
+| pickle | no | 1 | 5,123 | 5,181 | 3,190 | 2,301 | 1.00x |
+| base64_tobytes | no | 1 | 187 | 184 | 184 | 184 | 0.08x |
+| protobuf | no | 2 | 17 | 17 | 17 | 17 | 0.01x |
+| json | no | 2 | 3 | 3 | 3 | 3 | 0.00x |
 
-**Tuned result.** With the system allocator config, the crossover disappears and Arrow wins across
-the whole grid. Full sweep, N=5000, D=1024, median of 3 runs, naive to tuned:
+At the previously-collapsing cell (N=5000, D=1024), `arrow_ipc` went from 1,373 (naive, losing to
+pickle) to 4,671 (2.03x pickle) and `contexttable_ipc` from 884 to 4,590 (1.99x pickle) — both purely
+by pooling the send buffer, on the stock allocator. The proposal's actual `memory_copies` metric is
+validated unconditionally (zero-copy formats 0, pickle 1, json/protobuf 2), backed empirically by
+`deserialize_peak_kb`.
 
-| Format | naive | tuned | factor |
+**Allocator sweep (secondary confirmation, superseded by the reuse fix).** Before the reuse fix, an
+allocator sweep isolated the mechanism. It confirmed the churn is a huge-allocation `munmap`
+behaviour: `jemalloc` with `ARROW_JEMALLOC_DECAY_MS=-1` and `mimalloc` did **not** help (both
+`munmap` huge blocks regardless of decay/retention knobs); only forcing allocations onto the
+retained glibc heap (`ARROW_DEFAULT_MEMORY_POOL=system` + `MALLOC_MMAP_MAX_=0` +
+`MALLOC_TRIM_THRESHOLD_=-1`) removed it, recovering ~3.3x at N=5000. That config is a valid
+alternative for paths that cannot pool a buffer, but it carries a ~20 percent mid-range penalty and
+is unnecessary once the buffer is reused. `exp_a_zerocopy.py` retains `ARROW_JEMALLOC_DECAY_MS` as a
+documented no-op-by-default knob; the buffer-reuse fix is the recommendation.
+
+**Distributed implication.** The cost is on the serialize (send) side, so the lesson carries to
+multi-worker Arrow transfers in Experiments B/E independent of the FMI channel (`direct` / `redis` /
+`s3`) or the TCPunch rendezvous server (which brokers connection setup only and never touches the
+payload). The data-plane send path should reuse/pool its serialization buffer. Data-scale runs
+(Section 2) that push the payload past 20 MB will re-encounter this and should use the pooled path.
+
+**Artifacts and notebooks (for review).** Paths are relative to `target/shared/scripts/experiment/`:
+
+| Result set | Directory | Notebook | What it shows |
 |---|---|---|---|
-| arrow_ipc | 1,373 | 5,258 | 3.8x |
-| contexttable_ipc | 884 | 3,376 | 3.8x |
-| pickle | 2,355 | 2,478 | 1.0x |
+| **Definitive (reuse, default allocator)** | `results/exp_a_zerocopy_reuse/` | `exp_a_zerocopy_reuse/exp_a_zerocopy_charts.ipynb` | The headline grid above; both zero-copy formats pooled, no collapse |
+| Naive (cold, re-alloc every rep) | `results/exp_a_zerocopy_cloud/` | `exp_a_zerocopy_cloud/exp_a_zerocopy_charts.ipynb` | The original collapse; kept as the "what re-allocating every op measures" comparison |
 
-arrow vs pickle at N=5000 goes from 0.58x (Arrow loses) to 2.12x (Arrow wins). The tradeoff is real
-and unavoidable: the glibc allocator is ~20 percent slower for frequent mid-range allocations
-(arrow N=1000, D=1024: 8,910 naive vs 6,856 tuned), so the config trades a modest mid-range cost for
-large-payload robustness. There is no allocator-tuning best of both.
-
-**How to report it.** Present naive and tuned as a before and after. The honest framing is that the
-zero-copy data-plane advantage is real and large, but realizing it on bandwidth-limited serverless
-requires pinning allocations to the heap to avoid huge-allocation `munmap` churn; the naive default
-shows a large-payload cliff. That is a systems contribution, config-only, no change to the data
-plane. Tuned config (Lambda env, or the equivalent on any host):
-
-```bash
-ARROW_DEFAULT_MEMORY_POOL=system
-MALLOC_MMAP_MAX_=0
-MALLOC_TRIM_THRESHOLD_=-1
-```
-
-**Distributed implication.** The cost is on the serialize (send) side, so it carries to multi-worker
-Arrow transfers in Experiments B/E independent of the FMI channel (`direct` / `redis` / `s3`) or the
-TCPunch rendezvous server (which brokers connection setup only and never touches the payload). A
-real transfer serializes once rather than in a tight rep loop, so the effect is smaller there, but
-the allocator config should travel with the data-plane code. Data-scale runs (Section 2) that push
-the payload past 20 MB will re-encounter this and should use the tuned config.
-
-Artifacts: naive `results/exp_a_zerocopy_cloud/`, tuned `results/exp_a_zerocopy_tuned/` (each with a
-median CSV, four charts, and a notebook); S3 prefixes `results/benchmark/exp_a/` and
-`.../exp_a_tuned/`.
-
-## Placeholder to keep the cost note intact
-tear down; the continuously billing `terraform-gpu` / `terraform-ec2` modules are separate.
+Each directory holds the 3 raw run CSVs, the median `exp_a_zerocopy_results.csv`, four PNG charts
+under `charts/` (throughput-by-format, memory-copies, throughput-scaling, A2 schema-compat), and the
+tweakable notebook. Regenerate any set with
+`python -m results.pipeline --experiment zerocopy --local-dir <dir> --chart-format png` (run from
+`target/shared/scripts/`). S3 source prefixes: `s3://staylor.dev2/results/benchmark/exp_a_reuse/`
+(definitive) and `.../exp_a/` (naive).

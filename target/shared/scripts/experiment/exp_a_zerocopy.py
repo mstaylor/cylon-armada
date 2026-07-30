@@ -684,14 +684,6 @@ def run(config):
     config keys: batch_sizes, dims, warmup, reps, seed, meta.
     """
     _apply_memory_pool_tuning()
-    try:  # PROBE: confirm which compiled ContextTable the image loaded
-        import sys as _sys
-        from cylon_armada.context_table import ContextTable as _CT
-        logger.info("PROBE ContextTable.to_ipc_into=%s so=%s",
-                    hasattr(_CT, "to_ipc_into"),
-                    getattr(_sys.modules.get("cylon_armada.context_table"), "__file__", "?"))
-    except Exception as _e:
-        logger.info("PROBE ContextTable import failed: %s", _e)
     rows = _measure_matrix(config)
     a2_rows = schema_compatibility()
     logger.info("A2 schema compatibility: %d/%d edges zero-copy-eligible",

@@ -1,0 +1,11 @@
+key,value
+hostname,ubuntu-linux-22-04-02-desktop
+system,Linux
+machine,aarch64
+processor,aarch64
+cpu_count,4
+python_version,3.11.14
+numpy_version,1.26.4
+run,1
+warmup,3
+reps,12
