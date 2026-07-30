@@ -1,0 +1,14 @@
+key,value
+hostname,169.254.88.227
+system,Linux
+machine,x86_64
+processor,x86_64
+cpu_count,6
+python_version,3.11.15
+numpy_version,1.26.4
+run,1
+warmup,3
+reps,20
+platform,lambda
+lambda_memory_mb,10240
+experiment_name,benchmark_exp_a_run1_07301857

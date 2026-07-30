@@ -28,6 +28,12 @@ TITLE_SIZE = 14
 TICK_SIZE = 10
 LEGEND_SIZE = 10
 
+# No frame lines: drop all axis spines (the box border) for a clean look.
+plt.rcParams.update({
+    "axes.spines.top": False, "axes.spines.right": False,
+    "axes.spines.left": False, "axes.spines.bottom": False,
+})
+
 # Semantic colors: the proposed system green, naive text red, binary baselines
 # muted, zero-copy binary (flatbuffers) orange.
 FORMAT_COLORS = {
@@ -120,9 +126,6 @@ def chart_memory_behavior(rows, output_dir, chart_format, chart_dpi):
     ax.set_ylabel("Deserialize peak allocation (KB, log scale)", fontsize=FONT_SIZE)
     ax.set_title(f"Memory copies on read  (N={n}, D={d}; payload = {payload_kb:,.0f} KB)",
                  fontsize=TITLE_SIZE)
-    ax.axhline(payload_kb, color="#555555", ls="--", lw=1, alpha=0.7)
-    ax.text(len(fmts) - 0.5, payload_kb * 1.1, "1x payload", fontsize=TICK_SIZE - 1,
-            ha="right", color="#555555")
     for i, (p, c) in enumerate(zip(peaks, copies)):
         ax.text(i, p * 1.3, f"{c} cop{'y' if str(c)=='1' else 'ies'}",
                 ha="center", fontsize=TICK_SIZE - 1)

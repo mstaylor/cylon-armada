@@ -245,6 +245,9 @@ plt.rcParams.update({
     'font.size': 12, 'axes.titlesize': 14, 'axes.labelsize': 12,
     'xtick.labelsize': 10, 'ytick.labelsize': 10, 'legend.fontsize': 10,
     'figure.figsize': (10, 6),
+    # No frame lines: drop all axis spines (the box border) for a clean look.
+    'axes.spines.top': False, 'axes.spines.right': False,
+    'axes.spines.left': False, 'axes.spines.bottom': False,
 })
 
 # Semantic colors: proposed system green, naive text red, zero-copy binary orange.
@@ -304,8 +307,6 @@ ax.bar(list(x), peaks, color=colors, alpha=0.85); ax.set_yscale('log')
 ax.set_xticks(list(x)); ax.set_xticklabels(fmts, rotation=30, ha='right')
 ax.set_ylabel('Deserialize peak allocation (KB, log scale)')
 ax.set_title(f'Memory copies on read  (N={N_REP}, D={D_REP}; payload = {payload_kb:,.0f} KB)')
-ax.axhline(payload_kb, color='#555', ls='--', lw=1, alpha=0.7)
-ax.text(len(fmts) - 0.5, payload_kb * 1.1, '1x payload', fontsize=9, ha='right', color='#555')
 for i, (p, c) in enumerate(zip(peaks, copies)):
     ax.text(i, p * 1.3, f"{int(c)} cop{'y' if int(c) == 1 else 'ies'}", ha='center', fontsize=9)
 plt.tight_layout(); plt.savefig('charts/exp_a_memory_copies.svg', bbox_inches='tight'); plt.show()
