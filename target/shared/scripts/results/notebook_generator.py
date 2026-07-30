@@ -287,7 +287,7 @@ ax.set_title(f'Zero-copy data plane throughput by format  (N={N_REP}, D={D_REP})
 for i, (v, s) in enumerate(zip(vals, sp)):
     lbl = f'{v:,.0f} MB/s' + (f'  ({s:,.0f}x vs JSON)' if pd.notna(s) else '')
     ax.text(v * 1.05, i, lbl, va='center', fontsize=9)
-ax.grid(axis='x', alpha=0.3, which='both'); ax.set_xlim(right=max(vals) * 12)
+ax.set_xlim(right=max(vals) * 12)
 plt.tight_layout(); plt.savefig('charts/exp_a_throughput_by_format.svg', bbox_inches='tight'); plt.show()
 """
 
@@ -308,7 +308,6 @@ ax.axhline(payload_kb, color='#555', ls='--', lw=1, alpha=0.7)
 ax.text(len(fmts) - 0.5, payload_kb * 1.1, '1x payload', fontsize=9, ha='right', color='#555')
 for i, (p, c) in enumerate(zip(peaks, copies)):
     ax.text(i, p * 1.3, f"{int(c)} cop{'y' if int(c) == 1 else 'ies'}", ha='center', fontsize=9)
-ax.grid(axis='y', alpha=0.3, which='both')
 plt.tight_layout(); plt.savefig('charts/exp_a_memory_copies.svg', bbox_inches='tight'); plt.show()
 """
 
@@ -326,7 +325,7 @@ for f in present:
 ax.set_yscale('log'); ax.set_xticks(dims)
 ax.set_xlabel('Embedding dimension D'); ax.set_ylabel('Round-trip throughput (MB/s, log scale)')
 ax.set_title('Throughput vs embedding dimension')
-ax.legend(ncol=2); ax.grid(alpha=0.3, which='both')
+ax.legend(ncol=2)
 plt.tight_layout(); plt.savefig('charts/exp_a_throughput_scaling.svg', bbox_inches='tight'); plt.show()
 """
 

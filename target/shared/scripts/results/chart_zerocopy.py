@@ -95,7 +95,6 @@ def chart_throughput_by_format(rows, output_dir, chart_format, chart_dpi):
         if s not in (None, "", "None"):
             label += f"  ({float(s):,.0f}x vs JSON)"
         ax.text(v * 1.05, i, label, va="center", fontsize=TICK_SIZE - 1)
-    ax.grid(axis="x", alpha=0.3, which="both")
     ax.set_xlim(right=max(vals) * 12)
     return _save(fig, output_dir, "exp_a_throughput_by_format", chart_format, chart_dpi)
 
@@ -127,7 +126,6 @@ def chart_memory_behavior(rows, output_dir, chart_format, chart_dpi):
     for i, (p, c) in enumerate(zip(peaks, copies)):
         ax.text(i, p * 1.3, f"{c} cop{'y' if str(c)=='1' else 'ies'}",
                 ha="center", fontsize=TICK_SIZE - 1)
-    ax.grid(axis="y", alpha=0.3, which="both")
     return _save(fig, output_dir, "exp_a_memory_copies", chart_format, chart_dpi)
 
 
@@ -154,7 +152,6 @@ def chart_throughput_scaling(rows, output_dir, chart_format, chart_dpi):
     ax.set_title("Throughput vs embedding dimension", fontsize=TITLE_SIZE)
     ax.set_xticks(dims)
     ax.legend(fontsize=LEGEND_SIZE, ncol=2)
-    ax.grid(alpha=0.3, which="both")
     return _save(fig, output_dir, "exp_a_throughput_scaling", chart_format, chart_dpi)
 
 
