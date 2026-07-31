@@ -284,9 +284,10 @@ colors = [FORMAT_COLORS.get(f, '#333') for f in fmts]
 
 fig, ax = plt.subplots()
 y = range(len(fmts))
+# Bar chart is a representative-cell snapshot — no error bars (per convention).
 ax.barh(list(y), vals, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW)
 ax.set_yticks(list(y)); ax.set_yticklabels(fmts); ax.invert_yaxis()
-ax.set_xscale('log')
+ax.set_xscale('log'); ax.minorticks_off()
 ax.set_xlabel('Round-trip throughput (MB/s, log scale)')
 ax.set_title(f'Zero-copy data plane throughput by format  (N={N_REP}, D={D_REP})')
 for i, (v, s) in enumerate(zip(vals, sp)):
@@ -305,7 +306,7 @@ payload_kb = N_REP * D_REP * 4 / 1024
 
 fig, ax = plt.subplots()
 x = range(len(fmts))
-ax.bar(list(x), peaks, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW); ax.set_yscale('log')
+ax.bar(list(x), peaks, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW); ax.set_yscale('log'); ax.minorticks_off()
 ax.set_xticks(list(x)); ax.set_xticklabels(fmts, rotation=30, ha='right')
 ax.set_ylabel('Deserialize peak allocation (KB, log scale)')
 ax.set_title(f'Memory copies on read  (N={N_REP}, D={D_REP}; payload = {payload_kb:,.0f} KB)')
@@ -318,14 +319,22 @@ plt.tight_layout(); plt.savefig('charts/exp_a_memory_copies.svg', bbox_inches='t
 def _zc_cell_throughput_scaling() -> str:
     return """dims = sorted(df['d'].unique())
 present = [f for f in FORMAT_ORDER if f in set(df['format'])]
+STD = 'throughput_roundtrip_MBps_std'
 fig, ax = plt.subplots()
 for f in present:
-    ys = []
+    ys, es = [], []
     for dd in dims:
         cand = df[(df['format'] == f) & (df['d'] == dd)]
-        ys.append(cand.sort_values('n').iloc[-1]['throughput_roundtrip_MBps'] if len(cand) else None)
-    ax.plot(dims, ys, marker='o', label=f, color=FORMAT_COLORS.get(f, '#333'), lw=2)
-ax.set_yscale('log'); ax.set_xticks(dims)
+        if len(cand):
+            top = cand.sort_values('n').iloc[-1]
+            ys.append(top['throughput_roundtrip_MBps'])
+            es.append(top[STD] if STD in df.columns else 0)
+        else:
+            ys.append(None); es.append(0)
+    color = FORMAT_COLORS.get(f, '#333')
+    yerr = es if any(e > 0 for e in es) else None
+    ax.errorbar(dims, ys, yerr=yerr, marker='o', label=f, color=color, ecolor=color, lw=2, capsize=5)
+ax.set_yscale('log'); ax.minorticks_off(); ax.set_xticks(dims)
 ax.set_xlabel('Embedding dimension D'); ax.set_ylabel('Round-trip throughput (MB/s, log scale)')
 ax.set_title('Throughput vs embedding dimension')
 ax.legend(ncol=2, loc='lower center', bbox_to_anchor=(0.5, -0.32), frameon=True)

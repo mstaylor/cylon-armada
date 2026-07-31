@@ -144,17 +144,112 @@ def run_pipeline(config: PipelineConfig, steps: list, local_dir: str = None) -> 
         logger.info("Notebook saved to %s", notebook_path)
 
 
+def aggregate_zerocopy_runs(results_dir: str) -> bool:
+    """Aggregate per-run sweep CSVs into the canonical median CSV with a std column.
+
+    A multi-run cloud sweep writes `<experiment>_run{n}_..._exp_a_zerocopy_results.csv`
+    (and `_exp_a2_schema_compat.csv` / `_exp_a_zerocopy_env.csv`) per run. This reduces
+    them to `exp_a_zerocopy_results.csv`: for each (format, n, d) cell, every numeric
+    column is the median across runs, plus `throughput_roundtrip_MBps_std` (sample std
+    across runs) for error bars. `speedup_vs_json` is recomputed from the medians. The
+    canonical A2/env CSVs are copied from run 1. Returns True if it aggregated, False if
+    no per-run files were found (single-run outputs already write the canonical CSV).
+    """
+    import csv
+    import glob
+    import shutil
+    import statistics
+
+    # Any prefixed per-run/per-invocation results CSV, excluding the canonical
+    # aggregate itself. Catches the multi-execution sweep (`..._run1_...`) and a
+    # single warm-container invocation (`warm_measure_...`).
+    all_csvs = sorted(glob.glob(os.path.join(results_dir, "*_exp_a_zerocopy_results.csv")))
+    run_csvs = [p for p in all_csvs if os.path.basename(p) != "exp_a_zerocopy_results.csv"]
+    if not run_csvs:
+        return False
+
+    agg, header = {}, None
+    for path in run_csvs:
+        with open(path) as f:
+            reader = csv.DictReader(f)
+            header = reader.fieldnames
+            for r in reader:
+                agg.setdefault((r["format"], r["n"], r["d"]), []).append(r)
+
+    keep = {"format", "n", "d", "memory_copies", "reuse", "reps"}  # identity/constant cols
+    tput = "throughput_roundtrip_MBps"
+    out_header = list(header) + ([f"{tput}_std"] if f"{tput}_std" not in header else [])
+    rows = []
+    for (fmt, n, d), cells in agg.items():
+        m = dict(cells[0])
+        # Central value = MEAN across runs (matches the scaling spreadsheet's
+        # =AVERAGE(runs); "Cylon AWS ECS Scaling Round 2.xlsx", Lambda sheets).
+        for col in header:
+            if col in keep:
+                continue
+            vals = []
+            for c in cells:
+                try:
+                    vals.append(float(c[col]))
+                except (ValueError, TypeError):
+                    vals = None
+                    break
+            if vals:
+                m[col] = statistics.mean(vals)
+        # Error bar = SAMPLE std (n-1) across the runs, matching Excel STDEV(runs)
+        # in that spreadsheet. statistics.stdev is the sample std. With a single
+        # run there is no cross-run spread; fall back to the within-run std the
+        # benchmark emits (never clobber it with 0).
+        tvals = [float(c[tput]) for c in cells if c.get(tput) not in (None, "", "None")]
+        if len(tvals) >= 2:
+            m[f"{tput}_std"] = round(statistics.stdev(tvals), 4)
+        else:
+            try:
+                m[f"{tput}_std"] = round(float(cells[0].get(f"{tput}_std", 0.0)), 4)
+            except (ValueError, TypeError):
+                m[f"{tput}_std"] = 0.0
+        rows.append(m)
+
+    # speedup_vs_json is a throughput ratio: format throughput / json throughput
+    # (json is the slow baseline, so faster formats are >1). Not json/format.
+    json_tp = {(r["n"], r["d"]): float(r[tput]) for r in rows if r["format"] == "json"}
+    for r in rows:
+        base = json_tp.get((r["n"], r["d"]))
+        r["speedup_vs_json"] = round(float(r[tput]) / base, 3) if base and base > 0 else ""
+    rows.sort(key=lambda r: (int(r["d"]), int(r["n"])))
+
+    with open(os.path.join(results_dir, "exp_a_zerocopy_results.csv"), "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=out_header)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, "") for k in out_header})
+
+    # Canonical A2 / env from run 1 (schema-compat + provenance are per-run identical).
+    stem = os.path.basename(run_csvs[0]).replace("_exp_a_zerocopy_results.csv", "")
+    for suffix, canonical in (("_exp_a2_schema_compat.csv", "exp_a2_schema_compat.csv"),
+                              ("_exp_a_zerocopy_env.csv", "exp_a_zerocopy_env.csv")):
+        src = os.path.join(results_dir, stem + suffix)
+        if os.path.exists(src):
+            shutil.copyfile(src, os.path.join(results_dir, canonical))
+
+    logger.info("Aggregated %d run(s) → exp_a_zerocopy_results.csv (%d cells, +std)",
+                len(run_csvs), len(rows))
+    return True
+
+
 def run_zerocopy_pipeline(results_dir: str, steps: list, chart_format: str = "svg",
                           chart_dpi: int = 300, notebook_name: str = "exp_a_zerocopy_charts") -> None:
-    """Experiment A / A2 visuals pipeline: charts -> notebook on a results dir.
+    """Experiment A / A2 visuals pipeline: aggregate -> charts -> notebook on a results dir.
 
-    exp_a_zerocopy.py already writes final CSVs (medians computed in-run), so
-    there is no download/aggregate — the charts and notebook read the CSVs in
-    `results_dir` directly. Charts land in `results_dir/charts`; the notebook is
-    written to `results_dir` with relative paths so it runs from there.
+    A multi-run sweep's per-run CSVs are aggregated to the canonical median CSV (with a
+    cross-run std column for error bars); single-run outputs already write it directly.
+    Charts land in `results_dir/charts`; the notebook is written to `results_dir` with
+    relative paths so it runs from there.
     """
     from .chart_zerocopy import generate_zerocopy_charts
     from .notebook_generator import generate_zerocopy_notebook
+
+    aggregate_zerocopy_runs(results_dir)
 
     results_csv = os.path.join(results_dir, "exp_a_zerocopy_results.csv")
     if not os.path.exists(results_csv):

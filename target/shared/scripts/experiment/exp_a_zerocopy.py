@@ -519,6 +519,19 @@ def measure_cell(codec, arr, warmup, reps):
     roundtrip = ser + deser + access
     to_mbps = lambda ms: (payload_bytes / (1024 * 1024)) / (ms / 1e3) if ms > 0 else 0.0
 
+    # Within-run throughput spread for error bars: trimmed std of per-rep
+    # round-trip throughput, measured on one warm container after the warmup reps.
+    # This is a clean precision estimate (cold start and container placement held
+    # constant), unlike cross-invocation std which is confounded by Lambda host
+    # placement. The extreme reps on each side (transient GC / scheduler pauses)
+    # are trimmed before the std so one outlier rep cannot inflate the error bar;
+    # the central value is already the robust median.
+    rt_reps = [s + d_ + a for s, d_, a in zip(ser_ms, deser_ms, access_ms)]
+    tput_reps = sorted(to_mbps(ms) for ms in rt_reps if ms > 0)
+    trim = max(1, len(tput_reps) // 10) if len(tput_reps) >= 5 else 0
+    trimmed = tput_reps[trim:len(tput_reps) - trim] if trim else tput_reps
+    tput_std = statistics.stdev(trimmed) if len(trimmed) >= 2 else 0.0
+
     return {
         "format": codec.name,
         "n": n,
@@ -538,6 +551,7 @@ def measure_cell(codec, arr, warmup, reps):
         "throughput_serialize_MBps": round(to_mbps(ser), 2),
         "throughput_deserialize_MBps": round(to_mbps(deser), 2),
         "throughput_roundtrip_MBps": round(to_mbps(roundtrip), 2),
+        "throughput_roundtrip_MBps_std": round(tput_std, 2),
         "memory_copies": codec.memory_copies,
         "deserialize_peak_kb": round(peak / 1024, 2),
         "reps": reps,

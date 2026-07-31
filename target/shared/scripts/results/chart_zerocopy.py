@@ -94,11 +94,13 @@ def chart_throughput_by_format(rows, output_dir, chart_format, chart_dpi):
 
     fig, ax = plt.subplots(figsize=(10, 6))
     y = range(len(fmts))
+    # Bar chart is a representative-cell snapshot — no error bars (per convention).
     ax.barh(list(y), vals, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW)
     ax.set_yticks(list(y))
     ax.set_yticklabels(fmts, fontsize=TICK_SIZE)
     ax.invert_yaxis()  # fastest on top
     ax.set_xscale("log")
+    ax.minorticks_off()  # major ticks only, matching the quals notebook
     ax.set_xlabel("Round-trip throughput (MB/s, log scale)", fontsize=FONT_SIZE)
     ax.set_title(f"Zero-copy data plane throughput by format  (N={n}, D={d})",
                  fontsize=TITLE_SIZE)
@@ -127,6 +129,7 @@ def chart_memory_behavior(rows, output_dir, chart_format, chart_dpi):
     x = range(len(fmts))
     ax.bar(list(x), peaks, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW)
     ax.set_yscale("log")
+    ax.minorticks_off()  # major ticks only, matching the quals notebook
     ax.set_xticks(list(x))
     ax.set_xticklabels(fmts, fontsize=TICK_SIZE, rotation=30, ha="right")
     ax.set_ylabel("Deserialize peak allocation (KB, log scale)", fontsize=FONT_SIZE)
@@ -146,16 +149,23 @@ def chart_throughput_scaling(rows, output_dir, chart_format, chart_dpi):
     # Aggregate over N by taking the largest N per (format, d) for a clean line.
     fig, ax = plt.subplots(figsize=(10, 6))
     for f in fmts:
-        ys = []
+        ys, es = [], []
         for d in dims:
             cand = [r for r in rows if r["format"] == f and int(r["d"]) == d]
             if not cand:
                 ys.append(None)
+                es.append(0.0)
                 continue
             top = max(cand, key=lambda r: int(r["n"]))
             ys.append(float(top["throughput_roundtrip_MBps"]))
-        ax.plot(dims, ys, marker="o", label=f, color=FORMAT_COLORS.get(f, "#333333"), lw=2)
+            es.append(float(top.get("throughput_roundtrip_MBps_std") or 0.0))
+        color = FORMAT_COLORS.get(f, "#333333")
+        # errorbar with caps (matches the quals notebook); no caps if no spread.
+        yerr = es if any(e > 0 for e in es) else None
+        ax.errorbar(dims, ys, yerr=yerr, marker="o", label=f, color=color,
+                    ecolor=color, lw=2, capsize=5)
     ax.set_yscale("log")
+    ax.minorticks_off()  # major ticks only, matching the quals notebook
     ax.set_xlabel("Embedding dimension D", fontsize=FONT_SIZE)
     ax.set_ylabel("Round-trip throughput (MB/s, log scale)", fontsize=FONT_SIZE)
     ax.set_title("Throughput vs embedding dimension", fontsize=TITLE_SIZE)
