@@ -111,8 +111,12 @@ generation**, checking three cases for each connected operator pair in the five 
    the plan still compiles without recompilation, provided the downstream operator does not require
    the added field.
 
-Cases 2 and 3 exercise the actual compile-time enforcement path, not just a static string comparison;
-the current `schema_compatibility()` matrix covers case 1 only and is extended for cases 2–3.
+Cases 2 and 3 exercise the actual compile-time enforcement path, not just a static string comparison.
+
+**Implementation.** A2 is implemented by the compiled `cylon_armada.dag_compiler` (C++
+`AgentDAGCompiler`) driven by `experiment/exp_a2_schema.py`; the three cases run against real
+compile-time schema enforcement (compatible → zero-copy, incompatible → `schema_mismatch_error` /
+`SchemaMismatchError`, nullable-column evolution tolerated), not a string comparison.
 
 ## 6. Architecture and Code Reuse
 

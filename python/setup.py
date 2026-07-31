@@ -72,18 +72,33 @@ if os.environ.get('CYLON_REDIS'):
 if os.environ.get('CYLON_FMI'):
     macros.append(('BUILD_CYLON_FMI', '1'))
 
-extensions = [
-    Extension(
-        "cylon_armada.context_table",
-        sources=["cylon_armada/context_table.pyx"],
-        include_dirs=include_dirs,
-        language='c++',
-        extra_compile_args=extra_compile_args,
-        libraries=libraries,
-        library_dirs=library_dirs,
-        define_macros=macros,
-    )
-]
+ext_context_table = Extension(
+    "cylon_armada.context_table",
+    sources=["cylon_armada/context_table.pyx"],
+    include_dirs=include_dirs,
+    language='c++',
+    extra_compile_args=extra_compile_args,
+    libraries=libraries,
+    library_dirs=library_dirs,
+    define_macros=macros,
+)
+
+ext_dag_compiler = Extension(
+    "cylon_armada.dag_compiler",
+    sources=["cylon_armada/dag_compiler.pyx"],
+    include_dirs=include_dirs,
+    library_dirs=library_dirs,
+    libraries=libraries,      # same list that links -lcylon_armada + arrow
+    language="c++",
+    extra_compile_args=extra_compile_args,
+)
+
+_ALL_EXTS = [ext_context_table, ext_dag_compiler]
+_only = os.environ.get("CYLON_ARMADA_ONLY")  # e.g. "dag_compiler"
+if _only:
+    _ALL_EXTS = [e for e in _ALL_EXTS if e.name.split(".")[-1] == _only]
+
+extensions = _ALL_EXTS
 
 compile_time_env = {
     'CYTHON_REDIS': bool(os.environ.get('CYLON_REDIS')),

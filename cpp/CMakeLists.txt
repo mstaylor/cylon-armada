@@ -25,7 +25,9 @@ set(ARMADA_SOURCES
         src/context/context_table.hpp
         src/context/context_table.cpp
         src/context/context_serialize.hpp
-        src/context/context_serialize.cpp)
+        src/context/context_serialize.cpp
+        src/compiler/dag_compiler.hpp
+        src/compiler/dag_compiler.cpp)
 
 add_library(cylon_armada SHARED ${ARMADA_SOURCES})
 
@@ -65,3 +67,5 @@ install(FILES
         src/context/context_table.hpp
         src/context/context_serialize.hpp
         DESTINATION include/cylon_armada/context)
+install(FILES src/compiler/dag_compiler.hpp
+        DESTINATION include/cylon_armada/compiler)

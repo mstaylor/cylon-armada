@@ -562,56 +562,10 @@ def measure_cell(codec, arr, warmup, reps):
 # ---------------------------------------------------------------------------
 # A2 — Arrow schema compatibility across the five canonical operators
 # ---------------------------------------------------------------------------
-
-# Operator = (pattern, schema_in, schema_out) per proposal Table II. Schemas are
-# named by their Arrow logical type so edges can be checked for the zero-copy
-# condition schema_out(Oi) == schema_in(Oj).
-CANONICAL_OPERATORS = [
-    # name, pattern, schema_in, schema_out
-    ("Preprocess", "SCATTER", "raw_text:large_utf8", "chunked_text:large_utf8"),
-    ("Embed", "SCATTER-GATHER", "chunked_text:large_utf8", "embedding:fixed_size_list<float32>"),
-    ("Retrieve", "REDUCE", "query_embedding:fixed_size_list<float32>", "ranked_docs:struct"),
-    ("Reason", "POINT_TO_POINT", "context:struct", "response:large_utf8"),
-    ("MemoryUpsert", "BROADCAST", "kv_pairs:struct", "ack:bool"),
-]
-
-# The pipeline DAG edges under test (producer -> consumer).
-PIPELINE_EDGES = [
-    ("Preprocess", "Embed"),
-    ("Embed", "Retrieve"),
-    ("Retrieve", "Reason"),
-    ("Reason", "MemoryUpsert"),
-]
-
-# A schema is "dense zero-copy friendly" if it is a fixed-size list of a
-# primitive — the case where Arrow's advantage is strongest.
-_DENSE = "fixed_size_list"
-_VARIABLE = "large_utf8"
-
-
-def schema_compatibility():
-    """Return the A2 edge-compatibility rows for the pipeline DAG."""
-    out_by_op = {name: sout for name, _, _, sout in CANONICAL_OPERATORS}
-    in_by_op = {name: sin for name, _, sin, _ in CANONICAL_OPERATORS}
-
-    rows = []
-    for producer, consumer in PIPELINE_EDGES:
-        s_out = out_by_op[producer].split(":", 1)[1]
-        s_in = in_by_op[consumer].split(":", 1)[1]
-        compatible = s_out == s_in
-        payload_class = (
-            "dense" if _DENSE in s_out else "variable" if _VARIABLE in s_out else "nested"
-        )
-        rows.append({
-            "edge": f"{producer}->{consumer}",
-            "schema_out": s_out,
-            "schema_in": s_in,
-            "arrow_compatible": compatible,
-            "zero_copy_eligible": compatible and _DENSE in s_out,
-            "payload_class": payload_class,
-        })
-    return rows
-
+#
+# The A2 driver (real pyarrow schemas run through the compiled
+# cylon_armada.dag_compiler AgentDAGCompiler) lives in experiment.exp_a2_schema;
+# see run_a2() below in run(config).
 
 # ---------------------------------------------------------------------------
 # Orchestration
@@ -699,7 +653,8 @@ def run(config):
     """
     _apply_memory_pool_tuning()
     rows = _measure_matrix(config)
-    a2_rows = schema_compatibility()
+    from experiment.exp_a2_schema import run_a2
+    a2_rows = run_a2(d=max(config.get("dims", [1024])))
     logger.info("A2 schema compatibility: %d/%d edges zero-copy-eligible",
                 sum(r["zero_copy_eligible"] for r in a2_rows), len(a2_rows))
 
