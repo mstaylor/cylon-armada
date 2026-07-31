@@ -245,10 +245,12 @@ plt.rcParams.update({
     'font.size': 12, 'axes.titlesize': 14, 'axes.labelsize': 12,
     'xtick.labelsize': 10, 'ytick.labelsize': 10, 'legend.fontsize': 10,
     'figure.figsize': (10, 6),
-    # No frame lines: drop all axis spines (the box border) for a clean look.
-    'axes.spines.top': False, 'axes.spines.right': False,
-    'axes.spines.left': False, 'axes.spines.bottom': False,
+    # Match the quals scaling notebook: keep the box frame, no gridlines,
+    # white background, black-edged bars, legend in a bordered box below.
+    'figure.facecolor': 'white', 'axes.facecolor': 'white',
+    'savefig.facecolor': 'white', 'axes.grid': False,
 })
+BAR_EDGE, BAR_LW = 'black', 0.8
 
 # Semantic colors: proposed system green, naive text red, zero-copy binary orange.
 FORMAT_COLORS = {
@@ -282,7 +284,7 @@ colors = [FORMAT_COLORS.get(f, '#333') for f in fmts]
 
 fig, ax = plt.subplots()
 y = range(len(fmts))
-ax.barh(list(y), vals, color=colors, alpha=0.85)
+ax.barh(list(y), vals, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW)
 ax.set_yticks(list(y)); ax.set_yticklabels(fmts); ax.invert_yaxis()
 ax.set_xscale('log')
 ax.set_xlabel('Round-trip throughput (MB/s, log scale)')
@@ -303,7 +305,7 @@ payload_kb = N_REP * D_REP * 4 / 1024
 
 fig, ax = plt.subplots()
 x = range(len(fmts))
-ax.bar(list(x), peaks, color=colors, alpha=0.85); ax.set_yscale('log')
+ax.bar(list(x), peaks, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW); ax.set_yscale('log')
 ax.set_xticks(list(x)); ax.set_xticklabels(fmts, rotation=30, ha='right')
 ax.set_ylabel('Deserialize peak allocation (KB, log scale)')
 ax.set_title(f'Memory copies on read  (N={N_REP}, D={D_REP}; payload = {payload_kb:,.0f} KB)')
@@ -326,7 +328,7 @@ for f in present:
 ax.set_yscale('log'); ax.set_xticks(dims)
 ax.set_xlabel('Embedding dimension D'); ax.set_ylabel('Round-trip throughput (MB/s, log scale)')
 ax.set_title('Throughput vs embedding dimension')
-ax.legend(ncol=2)
+ax.legend(ncol=2, loc='lower center', bbox_to_anchor=(0.5, -0.32), frameon=True)
 plt.tight_layout(); plt.savefig('charts/exp_a_throughput_scaling.svg', bbox_inches='tight'); plt.show()
 """
 

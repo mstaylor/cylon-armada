@@ -28,11 +28,17 @@ TITLE_SIZE = 14
 TICK_SIZE = 10
 LEGEND_SIZE = 10
 
-# No frame lines: drop all axis spines (the box border) for a clean look.
+# Match the quals scaling notebook (Join_Weak_Scaling_quals2.ipynb): keep the
+# thin box frame (all spines), no gridlines, white background, black-edged bars,
+# legend in a bordered box below the plot.
 plt.rcParams.update({
-    "axes.spines.top": False, "axes.spines.right": False,
-    "axes.spines.left": False, "axes.spines.bottom": False,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "savefig.facecolor": "white",
+    "axes.grid": False,
 })
+BAR_EDGE = "black"
+BAR_LW = 0.8
 
 # Semantic colors: the proposed system green, naive text red, binary baselines
 # muted, zero-copy binary (flatbuffers) orange.
@@ -88,7 +94,7 @@ def chart_throughput_by_format(rows, output_dir, chart_format, chart_dpi):
 
     fig, ax = plt.subplots(figsize=(10, 6))
     y = range(len(fmts))
-    ax.barh(list(y), vals, color=colors, alpha=0.85)
+    ax.barh(list(y), vals, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW)
     ax.set_yticks(list(y))
     ax.set_yticklabels(fmts, fontsize=TICK_SIZE)
     ax.invert_yaxis()  # fastest on top
@@ -119,7 +125,7 @@ def chart_memory_behavior(rows, output_dir, chart_format, chart_dpi):
 
     fig, ax = plt.subplots(figsize=(10, 6))
     x = range(len(fmts))
-    ax.bar(list(x), peaks, color=colors, alpha=0.85)
+    ax.bar(list(x), peaks, color=colors, alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW)
     ax.set_yscale("log")
     ax.set_xticks(list(x))
     ax.set_xticklabels(fmts, fontsize=TICK_SIZE, rotation=30, ha="right")
@@ -154,7 +160,8 @@ def chart_throughput_scaling(rows, output_dir, chart_format, chart_dpi):
     ax.set_ylabel("Round-trip throughput (MB/s, log scale)", fontsize=FONT_SIZE)
     ax.set_title("Throughput vs embedding dimension", fontsize=TITLE_SIZE)
     ax.set_xticks(dims)
-    ax.legend(fontsize=LEGEND_SIZE, ncol=2)
+    ax.legend(fontsize=LEGEND_SIZE, ncol=2, loc="lower center",
+              bbox_to_anchor=(0.5, -0.32), frameon=True)
     return _save(fig, output_dir, "exp_a_throughput_scaling", chart_format, chart_dpi)
 
 
