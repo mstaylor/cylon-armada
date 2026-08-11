@@ -175,36 +175,72 @@ def chart_throughput_scaling(rows, output_dir, chart_format, chart_dpi):
     return _save(fig, output_dir, "exp_a_throughput_scaling", chart_format, chart_dpi)
 
 
+def _abbrev_arrow_type(s):
+    """Compact display for an Arrow type string (struct checked before large_,
+    since a struct's str contains its field types)."""
+    import re
+    s = (s or "").strip()
+    nullable = s.endswith("+nullable")
+    if nullable:
+        s = s[: -len("+nullable")].strip()
+    if s.startswith("struct"):
+        out = "struct"
+    elif "fixed_size_list" in s:
+        m = re.search(r"\[(\d+)\]", s)
+        out = f"FixedSizeList[{m.group(1)}]" if m else "FixedSizeList"
+    elif s.startswith("large_string") or s.startswith("large_utf8"):
+        out = "LargeUtf8"
+    elif s.startswith("bool"):
+        out = "bool"
+    else:
+        out = s
+    return out + " +null" if nullable else out
+
+
 def chart_schema_compat(a2_csv, output_dir, chart_format, chart_dpi):
-    """A2: per-edge Arrow schema compatibility / zero-copy eligibility matrix."""
+    """A2 results table: every operator-DAG edge plus the incompatible and
+    schema-evolution test cases, with the compatibility check and the compiler's
+    result (zero-copy / convert / rejected / tolerated). Built from
+    exp_a2_schema_compat.csv, the CSV the experiment emits."""
     with open(a2_csv) as f:
-        edges = list(csv.DictReader(f))
-    if not edges:
+        rows = list(csv.DictReader(f))
+    if not rows:
         return None
-    fig, ax = plt.subplots(figsize=(10, max(3, 0.9 * len(edges) + 1)))
+    NAVY = "#1E2761"
+    RESULT_COLOR = {"zero_copy": "#2ca02c", "tolerated": "#2ca02c",
+                    "convert": "#ff7f0e", "rejected": "#d62728"}
+    RESULT_LABEL = {"zero_copy": "zero-copy", "convert": "convert",
+                    "rejected": "rejected", "tolerated": "tolerated"}
+    cell_text, res_colors = [], []
+    for r in rows:
+        res = r.get("result", "")
+        cell_text.append([
+            r["edge"],
+            f"{_abbrev_arrow_type(r['schema_out'])}  ->  {_abbrev_arrow_type(r['schema_in'])}",
+            r.get("case", ""),
+            RESULT_LABEL.get(res, res),
+        ])
+        res_colors.append(RESULT_COLOR.get(res, "#999999"))
+    n = len(cell_text)
+    fig, ax = plt.subplots(figsize=(11, 0.62 * n + 1.5))
     ax.axis("off")
-    rows = []
-    colors = []
-    for e in edges:
-        zc = e["zero_copy_eligible"] == "True"
-        compat = e["arrow_compatible"] == "True"
-        status = "zero-copy" if zc else ("compatible" if compat else "needs serialization")
-        rows.append([e["edge"], e["payload_class"], status])
-        colors.append("#2ca02c" if zc else ("#ff7f0e" if compat else "#d62728"))
-    table = ax.table(
-        cellText=rows,
-        colLabels=["Operator edge", "Payload class", "Transfer"],
-        loc="center", cellLoc="left",
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(FONT_SIZE)
-    table.scale(1, 1.8)
-    for i, c in enumerate(colors):
-        cell = table[i + 1, 2]
+    tbl = ax.table(cellText=cell_text,
+                   colLabels=["Operator edge / test", "schema_out  ->  schema_in", "Case", "Result"],
+                   loc="center", cellLoc="left", colWidths=[0.24, 0.48, 0.13, 0.15])
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(FONT_SIZE - 2)
+    tbl.scale(1, 1.9)
+    for j in range(4):
+        h = tbl[0, j]
+        h.set_facecolor(NAVY)
+        h.set_text_props(color="white", fontweight="bold")
+    for i, c in enumerate(res_colors):
+        cell = tbl[i + 1, 3]
         cell.set_facecolor(c)
-        cell.set_alpha(0.35)
-    ax.set_title("A2: Arrow schema compatibility across the operator DAG",
-                 fontsize=TITLE_SIZE, pad=20)
+        cell.set_alpha(0.30)
+        cell.set_text_props(fontweight="bold")
+    ax.set_title("A2: Arrow schema compatibility results  (AgentDAGCompiler enforcement)",
+                 fontsize=TITLE_SIZE, color=NAVY, pad=16)
     return _save(fig, output_dir, "exp_a2_schema_compat", chart_format, chart_dpi)
 
 

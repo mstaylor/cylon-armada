@@ -1,5 +1,7 @@
-edge,schema_out,schema_in,arrow_compatible,zero_copy_eligible,payload_class
-Preprocess->Embed,large_utf8,large_utf8,True,False,variable
-Embed->Retrieve,fixed_size_list<float32>,fixed_size_list<float32>,True,True,dense
-Retrieve->Reason,struct,struct,True,False,nested
-Reason->MemoryUpsert,large_utf8,struct,False,False,variable
+edge,schema_out,schema_in,arrow_compatible,zero_copy_eligible,payload_class,case,result
+Preprocess->Embed,large_string,large_string,True,False,variable,compatible,zero_copy
+Embed->Retrieve,fixed_size_list<item: float>[1024],fixed_size_list<item: float>[1024],True,True,dense,compatible,zero_copy
+Retrieve->Reason,"struct<doc: large_string, score: float>","struct<doc: large_string, score: float>",True,False,nested,compatible,zero_copy
+Reason->MemoryUpsert,large_string,"struct<k: large_string, v: large_string>",False,False,variable,compatible,convert
+A->B,large_utf8,fixed_size_list<float>[1024],False,False,variable,incompatible,rejected
+E1->E2 (+nullable),fixed_size_list<float>[1024]+nullable,fixed_size_list<float>[1024],True,True,dense,evolution,tolerated
