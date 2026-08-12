@@ -37,10 +37,16 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate cylon_dev
 
 # From-source UCX/UCC FIRST on the loader path (the SP1 lib-order lesson), then conda.
+# libcylon/UCC RUNPATH already point at $UCX_HOME first, so this just reinforces it.
 export LD_LIBRARY_PATH="$UCX_HOME/lib:$UCC_HOME/lib:$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
-# Force the from-source UCX resident first so it wins over any conda UCX a plugin
-# might drag in via DT_RPATH (the conda-cpp CI lesson).
-export LD_PRELOAD="$UCX_HOME/lib/libucm.so.0:$UCX_HOME/lib/libucs.so.0:$UCX_HOME/lib/libuct.so.0:$UCX_HOME/lib/libucp.so.0"
+# LD_PRELOAD of the from-source UCX is a CI-only fix (there, openmpi's mca_pml_ucx.so
+# DT_RPATH would otherwise force conda's UCX under mpirun). This launcher runs plain
+# processes (no mpirun), so RUNPATH already resolves UCX to $UCX_HOME — preloading is
+# redundant and, if $UCX_HOME is an older build than what UCC expects, forces a UCX
+# version mismatch warning. Off by default; set EXPB_UCX_PRELOAD=1 to force it.
+if [ "${EXPB_UCX_PRELOAD:-0}" = "1" ]; then
+    export LD_PRELOAD="$UCX_HOME/lib/libucm.so.0:$UCX_HOME/lib/libucs.so.0:$UCX_HOME/lib/libuct.so.0:$UCX_HOME/lib/libucp.so.0"
+fi
 # pycylon (in-place build, with the SP1 collective bindings) + the shared scripts.
 # The pycylon package lives at $CYLON_HOME/python/pycylon/pycylon, so its parent
 # ($CYLON_HOME/python/pycylon) is what goes on PYTHONPATH.

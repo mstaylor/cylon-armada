@@ -65,6 +65,15 @@ BENCHMARK_WORKFLOW_ARN = (
     f"arn:aws:states:{REGION}:{ACCOUNT_ID}:stateMachine:cylon-armada-benchmark-workflow"
 )
 
+# Experiment B collective benchmark: a Map-over-N state machine that runs
+# exp_b_collectives.py per rank (redis OOB / FMI channel), one execution per world
+# size N. Reached explicitly via `--arch collectives`. The state machine itself is a
+# deployment follow-on (Map over world_size ranks); the sweep logic + payloads +
+# S3 keys here are verified with `--dry-run`.
+COLLECTIVES_WORKFLOW_ARN = (
+    f"arn:aws:states:{REGION}:{ACCOUNT_ID}:stateMachine:cylon-armada-collectives-workflow"
+)
+
 SCENARIOS_DIR = Path(__file__).parent.parent.parent.parent / "shared" / "scripts" / "experiment" / "scenarios"
 
 # ---------------------------------------------------------------------------
@@ -147,6 +156,33 @@ def build_benchmark_input(experiment_name, results_s3_dir, batch_sizes, dims,
         "reps":            reps,
         "seed":            seed,
         "runs":            matrix_runs,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Experiment B collective benchmark input — Map over `world_size` ranks
+# ---------------------------------------------------------------------------
+
+def build_collectives_input(experiment_name, results_s3_dir, world_size, channel,
+                            collectives, msg_sizes, warmup, reps, runs):
+    """Payload for the Experiment B collective-benchmark state machine.
+
+    Forwarded to the Map-over-N workflow, which runs exp_b_collectives.py on each of
+    `world_size` ranks over the given `channel` (redis-OOB UCC / FMI). The `runs`
+    warmed measurement passes happen inside one execution on the same warm workers
+    (writing run{n}_exp_b_collectives_results.csv), mirroring the local launcher; the
+    world_size sweep fires separate executions.
+    """
+    return {
+        "experiment_name": experiment_name,
+        "results_s3_dir":  results_s3_dir,
+        "world_size":      world_size,
+        "channel":         channel,
+        "collectives":     collectives,
+        "msg_sizes":       msg_sizes,
+        "warmup":          warmup,
+        "reps":            reps,
+        "runs":            runs,
     }
 
 
@@ -389,6 +425,75 @@ def run_benchmark_sweep(args, sweep_tag=""):
     logger.info("Benchmark sweep complete: %d succeeded, %d failed", succeeded, failed)
 
 
+def run_collectives_sweep(args, sweep_tag=""):
+    """Fire the Experiment B collective benchmark once per world_size N, poll S3 for
+    each run's results CSV. World size is the sweep axis; the warmed --runs passes
+    happen inside each execution (run{n}_ keys), like the local launcher."""
+    sfn = boto3.client("stepfunctions", region_name=REGION)
+    arn = COLLECTIVES_WORKFLOW_ARN
+    tag = f"_{sweep_tag}" if sweep_tag else ""
+    results_prefix = args.collectives_prefix.rstrip("/")
+
+    logger.info("=" * 60)
+    logger.info("Experiment B collective benchmark  channel=%s runs=%d", args.channel, args.runs)
+    logger.info("  collectives=%s msg_sizes=%s world_sizes=%s",
+                args.collectives, args.msg_sizes, args.world_sizes)
+    logger.info("=" * 60)
+
+    all_configs = []  # [(exp_name, sfn_input, s3_key), ...]
+    for ws in args.world_sizes:
+        exp_name = f"expb_{args.channel.replace('-', '_')}_ws{ws}{tag}"[:80]
+        results_s3_dir = f"{results_prefix}/{args.channel}/ws{ws}/"
+        sfn_input = build_collectives_input(
+            experiment_name=exp_name,
+            results_s3_dir=results_s3_dir,
+            world_size=ws,
+            channel=args.channel,
+            collectives=args.collectives,
+            msg_sizes=args.msg_sizes,
+            warmup=args.warmup,
+            reps=args.reps,
+            runs=args.runs,
+        )
+        # Completion marker: rank 0's last warmed run CSV (name matches the aggregator
+        # glob `*_exp_b_collectives_results.csv`).
+        marker = ("exp_b_collectives_results.csv" if args.runs == 1
+                  else f"run{args.runs}_exp_b_collectives_results.csv")
+        s3_key = f"{results_s3_dir}{marker}"
+        all_configs.append((exp_name, sfn_input, s3_key))
+
+    logger.info("Firing %d collective execution(s)", len(all_configs))
+
+    if args.dry_run:
+        for name, sfn_input, key in all_configs:
+            logger.info("  [dry-run] %s → s3://%s/%s", name, RESULTS_BUCKET, key)
+            logger.info("            input=%s", json.dumps(sfn_input))
+        return
+
+    batch_size = args.max_parallel
+    all_results = {}
+    for i in range(0, len(all_configs), batch_size):
+        batch = all_configs[i:i + batch_size]
+        pending = {}
+        for name, sfn_input, s3_key in batch:
+            try:
+                fire_execution(sfn, arn, name, sfn_input)
+                pending[name] = s3_key
+            except Exception as e:
+                logger.error("Failed to fire %s: %s", name, e)
+                all_results[name] = "FAILED"
+        batch_results = poll_s3_results(
+            pending,
+            poll_interval=getattr(args, "poll_interval", 20),
+            timeout_seconds=max(getattr(args, "timeout", 600), 900),
+        )
+        all_results.update(batch_results)
+
+    succeeded = sum(1 for s in all_results.values() if s == "SUCCEEDED")
+    failed    = sum(1 for s in all_results.values() if s != "SUCCEEDED")
+    logger.info("Collective sweep complete: %d succeeded, %d failed", succeeded, failed)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -397,9 +502,10 @@ def main():
     parser = argparse.ArgumentParser(description="Phase 1 cloud experiment sweep")
 
     parser.add_argument("--arch", required=True,
-                        choices=ALL_ARCHITECTURES + ["all", "benchmark"],
-                        help="Architecture to sweep, 'all' (reuse workflows), or "
-                             "'benchmark' (Experiment A/A2 zero-copy state machine)")
+                        choices=ALL_ARCHITECTURES + ["all", "benchmark", "collectives"],
+                        help="Architecture to sweep, 'all' (reuse workflows), "
+                             "'benchmark' (Experiment A/A2 zero-copy state machine), or "
+                             "'collectives' (Experiment B collective benchmark, N-sweep)")
     parser.add_argument("--scenario", default="all",
                         choices=ALL_SCENARIOS + ["all"],
                         help="Scenario to run, or 'all'")
@@ -449,6 +555,22 @@ def main():
                        help="S3 prefix for benchmark result CSVs "
                             "(default: results/benchmark/exp_a)")
 
+    # --- Experiment B collective options (only used with --arch collectives) ---
+    # Reuses --world-sizes (the N sweep), --runs (warmed passes), --warmup, --reps.
+    coll = parser.add_argument_group("collectives (--arch collectives)")
+    coll.add_argument("--collectives", nargs="+",
+                      default=["scatter", "scatterv", "gather", "allgather",
+                               "reduce", "broadcast", "allreduce", "barrier"],
+                      help="Collectives to benchmark (default: all eight)")
+    coll.add_argument("--msg-sizes", type=int, nargs="+",
+                      default=[8, 64, 512, 4096, 32768, 262144, 1048576],
+                      help="Message sizes in bytes (default: 8B..1MB powers of two)")
+    coll.add_argument("--channel", default="ucc",
+                      choices=["ucc", "fmi-redis", "fmi-direct"],
+                      help="Collective channel (default: ucc)")
+    coll.add_argument("--collectives-prefix", default="results/collectives",
+                      help="S3 prefix for collective result CSVs (default: results/collectives)")
+
     args = parser.parse_args()
 
     # Unique sweep tag prevents ExecutionAlreadyExists on retries
@@ -459,6 +581,14 @@ def main():
         logger.info("Benchmark plan: %d execution(s) (dry_run=%s, tag=%s)",
                     args.runs, args.dry_run, sweep_tag)
         run_benchmark_sweep(args, sweep_tag)
+        return
+
+    # Experiment B collective benchmark: N-sweep (one execution per world_size), no
+    # scenarios/scaling. Warmed --runs happen inside each execution.
+    if args.arch == "collectives":
+        logger.info("Collective plan: %d execution(s) over N=%s (dry_run=%s, tag=%s)",
+                    len(args.world_sizes), args.world_sizes, args.dry_run, sweep_tag)
+        run_collectives_sweep(args, sweep_tag)
         return
 
     total = (
