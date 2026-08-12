@@ -343,20 +343,39 @@ plt.tight_layout(); plt.savefig('charts/exp_a_throughput_scaling.svg', bbox_inch
 
 
 def _zc_cell_schema_compat() -> str:
-    return """fig, ax = plt.subplots(figsize=(10, max(3, 0.9 * len(a2) + 1))); ax.axis('off')
-tbl, colcolors = [], []
-for _, e in a2.iterrows():
-    zc = bool(e['zero_copy_eligible']); compat = bool(e['arrow_compatible'])
-    status = 'zero-copy' if zc else ('compatible' if compat else 'needs serialization')
-    tbl.append([e['edge'], e['payload_class'], status])
-    colcolors.append('#2ca02c' if zc else ('#ff7f0e' if compat else '#d62728'))
-t = ax.table(cellText=tbl, colLabels=['Operator edge', 'Payload class', 'Transfer'],
-             loc='center', cellLoc='left')
-t.auto_set_font_size(False); t.set_fontsize(12); t.scale(1, 1.8)
-for i, c in enumerate(colcolors):
-    t[i + 1, 2].set_facecolor(c); t[i + 1, 2].set_alpha(0.35)
-ax.set_title('A2: Arrow schema compatibility across the operator DAG', pad=20)
-plt.tight_layout(); plt.savefig('charts/exp_a2_schema_compat.svg', bbox_inches='tight'); plt.show()
+    # A2 results table: every operator-DAG edge + the incompatible / evolution
+    # test cases, with the compatibility case and the compiler's result.
+    return """NAVY = '#1E2761'
+RCOLOR = {'zero_copy': '#2ca02c', 'tolerated': '#2ca02c', 'convert': '#ff7f0e', 'rejected': '#d62728'}
+RLABEL = {'zero_copy': 'zero-copy', 'convert': 'convert', 'rejected': 'rejected', 'tolerated': 'tolerated'}
+def _abbrev(s):
+    s = str(s or '').strip(); nn = s.endswith('+nullable')
+    if nn: s = s[:-9].strip()
+    if s.startswith('struct'): o = 'struct'
+    elif 'fixed_size_list' in s:
+        d = s.split('[')[-1].rstrip(']') if '[' in s else ''
+        o = 'FixedSizeList[' + d + ']' if d else 'FixedSizeList'
+    elif s.startswith('large_'): o = 'LargeUtf8'
+    elif s.startswith('bool'): o = 'bool'
+    else: o = s
+    return o + ' +null' if nn else o
+ct, rc = [], []
+for _, r in a2.iterrows():
+    res = str(r.get('result', ''))
+    ct.append([r['edge'], _abbrev(r['schema_out']) + '  ->  ' + _abbrev(r['schema_in']),
+               str(r.get('case', '')), RLABEL.get(res, res)])
+    rc.append(RCOLOR.get(res, '#999'))
+n = len(ct)
+fig, ax = plt.subplots(figsize=(11, 0.62 * n + 1.5)); ax.axis('off')
+tb = ax.table(cellText=ct, colLabels=['Operator edge / test', 'schema_out  ->  schema_in', 'Case', 'Result'],
+              loc='center', cellLoc='left', colWidths=[0.24, 0.48, 0.13, 0.15])
+tb.auto_set_font_size(False); tb.set_fontsize(10); tb.scale(1, 1.9)
+for j in range(4):
+    tb[0, j].set_facecolor(NAVY); tb[0, j].set_text_props(color='white', fontweight='bold')
+for i, c in enumerate(rc):
+    tb[i + 1, 3].set_facecolor(c); tb[i + 1, 3].set_alpha(0.30); tb[i + 1, 3].set_text_props(fontweight='bold')
+ax.set_title('A2: Arrow schema compatibility results  (AgentDAGCompiler enforcement)', fontsize=14, color=NAVY, pad=16)
+plt.savefig('charts/exp_a2_schema_compat.svg', bbox_inches='tight'); plt.show()
 """
 
 
