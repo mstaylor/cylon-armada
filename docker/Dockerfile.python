@@ -46,7 +46,9 @@ RUN cd $CYLON_HOME && git checkout -b cylon-uccucx-collectives-additions origin/
 
 SHELL ["/bin/bash", "--login", "-c"]
 
-RUN conda install -n base -c conda-forge mamba -y
+RUN conda install -n base -c conda-forge conda-libmamba-solver -y && \
+    conda config --set solver libmamba && \
+    conda install -n base -c conda-forge mamba -y
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     mamba env create -f $CYLON_HOME/conda/environments/cylon_NoUCX.yml
