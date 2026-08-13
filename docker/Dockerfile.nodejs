@@ -19,7 +19,7 @@ RUN rustup target add wasm32-unknown-unknown
 ADD https://google.com cache_bust
 
 # Clone cylon (source for both WASM and native FMI addon)
-ARG CYLON_BRANCH=cylon-context-support
+ARG CYLON_BRANCH=cylon-uccucx-collectives-additions
 RUN git clone --depth 1 --branch ${CYLON_BRANCH} \
     https://github.com/mstaylor/cylon.git /cylon
 

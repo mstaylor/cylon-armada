@@ -75,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Experiment family: which chart/notebook set to produce.
     parser.add_argument("--experiment", type=str, default="reuse",
-                        choices=["reuse", "zerocopy"],
+                        choices=["reuse", "zerocopy", "collectives"],
                         help="reuse = cost/reuse charts (download/aggregate/charts/notebook); "
                              "zerocopy = Experiment A/A2 charts (charts/notebook on the results dir)")
 
@@ -237,6 +237,115 @@ def aggregate_zerocopy_runs(results_dir: str) -> bool:
     return True
 
 
+def aggregate_collectives_runs(results_dir: str) -> bool:
+    """Aggregate per-run Experiment B collective CSVs into the canonical CSV with std.
+
+    A warmed multi-run local launch (or cloud sweep) writes
+    `run{n}_exp_b_collectives_results.csv` per run. This reduces them to
+    `exp_b_collectives_results.csv`: for each (channel, collective, msg_size, N) cell,
+    every numeric metric is the MEAN across runs, plus `latency_p50_ms_std` and
+    `throughput_MBps_std` (sample std, n-1) for the error bars. Returns True if it
+    aggregated, False if no per-run files were found (a single run already writes the
+    canonical CSV).
+    """
+    import csv
+    import glob
+    import statistics
+
+    all_csvs = sorted(glob.glob(os.path.join(results_dir, "*_exp_b_collectives_results.csv")))
+    run_csvs = [p for p in all_csvs if os.path.basename(p) != "exp_b_collectives_results.csv"]
+    if not run_csvs:
+        return False
+
+    agg, header = {}, None
+    for path in run_csvs:
+        with open(path) as f:
+            reader = csv.DictReader(f)
+            header = reader.fieldnames
+            for r in reader:
+                agg.setdefault((r["channel"], r["collective"], r["msg_size"], r["N"]), []).append(r)
+
+    # Identity / constant columns carried through unchanged (not averaged). run_id is
+    # meaningless post-aggregation, so keep it fixed rather than averaging it to a
+    # fractional value.
+    keep = {"channel", "collective", "msg_size", "payload_bytes", "reps",
+            "unsupported", "rank", "world_size", "N", "run_id"}
+    # Metrics that get a cross-run sample-std column for error bars.
+    std_cols = ["latency_p50_ms", "throughput_MBps"]
+
+    out_header = list(header)
+    for sc in std_cols:
+        if f"{sc}_std" not in out_header:
+            out_header.append(f"{sc}_std")
+
+    rows = []
+    for key, cells in agg.items():
+        m = dict(cells[0])
+        # Central value = MEAN across runs (the scaling-spreadsheet convention).
+        for col in header:
+            if col in keep:
+                continue
+            vals = []
+            for c in cells:
+                try:
+                    vals.append(float(c[col]))
+                except (ValueError, TypeError):
+                    vals = None
+                    break
+            if vals:
+                m[col] = round(statistics.mean(vals), 6)
+        # Error bar = SAMPLE std (n-1) across runs on the warmed containers.
+        for sc in std_cols:
+            svals = []
+            for c in cells:
+                try:
+                    svals.append(float(c[sc]))
+                except (ValueError, TypeError):
+                    svals = None
+                    break
+            m[f"{sc}_std"] = round(statistics.stdev(svals), 6) if (svals and len(svals) >= 2) else 0.0
+        rows.append(m)
+
+    rows.sort(key=lambda r: (r["channel"], r["collective"], int(r["N"]), int(r["msg_size"])))
+
+    with open(os.path.join(results_dir, "exp_b_collectives_results.csv"), "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=out_header)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, "") for k in out_header})
+
+    logger.info("Aggregated %d run(s) → exp_b_collectives_results.csv (%d cells, +std)",
+                len(run_csvs), len(rows))
+    return True
+
+
+def run_collectives_pipeline(results_dir: str, steps: list, chart_format: str = "svg",
+                             chart_dpi: int = 300) -> None:
+    """Experiment B collective visuals pipeline: aggregate -> charts on a results dir.
+
+    Per-run CSVs are aggregated to the canonical CSV (with cross-run std for error
+    bars); a single run already writes it directly. Charts land in
+    `results_dir/charts`.
+    """
+    aggregate_collectives_runs(results_dir)
+
+    results_csv = os.path.join(results_dir, "exp_b_collectives_results.csv")
+    if not os.path.exists(results_csv):
+        logger.error("No exp_b_collectives_results.csv in %s — run exp_b_collectives.py first.", results_dir)
+        return
+
+    if "charts" in steps:
+        try:
+            from .chart_collectives import generate_collectives_charts
+        except ImportError:
+            logger.warning("chart_collectives not available yet (SP4 Task 5); aggregation only.")
+            return
+        charts_dir = os.path.join(results_dir, "charts")
+        logger.info("=== Step: Collective charts ===")
+        written = generate_collectives_charts(results_dir, charts_dir, chart_format, chart_dpi)
+        logger.info("Wrote %d chart(s) to %s", len(written), charts_dir)
+
+
 def run_zerocopy_pipeline(results_dir: str, steps: list, chart_format: str = "svg",
                           chart_dpi: int = 300, notebook_name: str = "exp_a_zerocopy_charts") -> None:
     """Experiment A / A2 visuals pipeline: aggregate -> charts -> notebook on a results dir.
@@ -297,6 +406,19 @@ def main():
             chart_dpi=args.chart_dpi,
             notebook_name=(args.notebook_name if args.notebook_name != "context_reuse_results"
                            else "exp_a_zerocopy_charts"),
+        )
+        return
+
+    # Experiment B collective benchmark: aggregate per-run CSVs (+cross-run std) then
+    # chart, on the results dir. Same lightweight flow as zerocopy.
+    if args.experiment == "collectives":
+        if not args.local_dir:
+            parser.error("--local-dir (the exp_b_collectives results dir) is required for --experiment collectives")
+        run_collectives_pipeline(
+            results_dir=args.local_dir,
+            steps=steps,
+            chart_format=args.chart_format,
+            chart_dpi=args.chart_dpi,
         )
         return
 
