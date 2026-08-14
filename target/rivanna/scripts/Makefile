@@ -12,13 +12,15 @@ DOCKER_USER ?= mstaylor
 SCRATCH      ?= /scratch/$(USER)
 CPU_SIF      ?= $(SCRATCH)/cylon-armada/cylon-armada.sif
 GPU_SIF      ?= $(SCRATCH)/cylon-armada/cylon-armada-gpu.sif
+UCCUCX_SIF   ?= $(SCRATCH)/cylon-armada/cylon-armada-uccucx.sif
 CPU_RESULTS  ?= $(SCRATCH)/armada-results
 GPU_RESULTS  ?= $(SCRATCH)/armada-results-gpu
+EXPB_RESULTS ?= $(SCRATCH)/expb-results
 REDIS_HOST   ?= dev-cylon-redis1.aws-cylondata.com
 # AWS credentials: run 'aws configure' on Rivanna login node once.
 # Stored in ~/.aws/credentials (home dir, NFS-mounted on all compute nodes).
 
-.PHONY: image-pull image-pull-gpu smoke-cpu smoke-gpu cpu cpu-all gpu gpu-all q qq cancel clean
+.PHONY: image-pull image-pull-gpu image-pull-uccucx smoke-cpu smoke-gpu expb-smoke cpu cpu-all gpu gpu-all q qq cancel clean
 
 # ---------------------------------------------------------------------------
 # Apptainer image management
@@ -48,6 +50,14 @@ image-pull-gpu:
 	APPTAINER_TMPDIR=$(APPTAINER_TMP) \
 	apptainer pull $(GPU_SIF) docker://docker.io/$(DOCKER_USER)/cylon-armada-gpu:latest
 
+image-pull-uccucx:
+	mkdir -p $(APPTAINER_CACHE) $(APPTAINER_TMP) $(dir $(UCCUCX_SIF))
+	rm -f $(UCCUCX_SIF)
+	module load apptainer && \
+	APPTAINER_CACHEDIR=$(APPTAINER_CACHE) \
+	APPTAINER_TMPDIR=$(APPTAINER_TMP) \
+	apptainer pull $(UCCUCX_SIF) docker://docker.io/$(DOCKER_USER)/cylon-armada-uccucx-python:latest
+
 image-cache-clean:
 	rm -rf $(APPTAINER_CACHE) $(APPTAINER_TMP)
 	@echo "Apptainer cache cleared from scratch"
@@ -75,6 +85,16 @@ smoke-gpu:
 		-m 16G \
 		-l1 $(GPU_RESULTS) -l2 /output \
 		-p2 bii-gpu
+
+# Experiment B collectives — multi-rank (--ntasks=4) UCC connectivity smoke
+# test. Real distributed ranks (not threads), self-assigned via redis-OOB.
+EXPB_WORLD_SIZE ?= 4
+
+expb-smoke:
+	mkdir -p logs $(EXPB_RESULTS)
+	sbatch --ntasks=$(EXPB_WORLD_SIZE) \
+		--export=ALL,SIF_IMAGE=$(UCCUCX_SIF),REDIS_HOST=$(REDIS_HOST),RESULTS_DIR_HOST=$(EXPB_RESULTS) \
+		run_exp_b_collectives.slurm
 
 # ---------------------------------------------------------------------------
 # Full experiment sweeps (generate + submit)

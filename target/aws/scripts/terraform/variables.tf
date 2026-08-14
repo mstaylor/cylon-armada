@@ -29,9 +29,15 @@ variable "ecr_repository_name" {
 # ---------------------------------------------------------------------------
 
 variable "python_image_tag" {
-  description = "ECR image tag for the Python Lambda image"
+  description = "ECR image tag for the Python Lambda image (FMI channel; Dockerfile.fmi.python)"
   type        = string
-  default     = "python-latest"
+  default     = "cylon-armada-fmi-python"
+}
+
+variable "uccucx_image_tag" {
+  description = "ECR image tag for the UCC/UCX-enabled Python Lambda image (Dockerfile.uccucx.python)"
+  type        = string
+  default     = "cylon-armada-uccucx-python"
 }
 
 variable "nodejs_image_tag" {

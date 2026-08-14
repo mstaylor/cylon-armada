@@ -6,7 +6,8 @@ ecr_repository_name = "cylon-armada"
 
 # ECR image tags — Terraform constructs the full URI as:
 #   <ecr_repository_url>:<tag>
-python_image_tag = "cylon-armada-python"
+python_image_tag = "cylon-armada-fmi-python"
+uccucx_image_tag = "cylon-armada-uccucx-python"
 nodejs_image_tag = "cylon-armada-nodejs"
 
 # Lambda configuration
