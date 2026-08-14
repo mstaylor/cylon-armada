@@ -8,9 +8,9 @@
 
 ## Architecture
 
-Rivanna uses Apptainer (formerly Singularity) — Docker images are converted to `.sif` files pulled from Docker Hub. There are two independent pipelines on Rivanna, using two different images: the agentic pipeline (FMI) and Experiment B's collective benchmark (UCC/UCX). Rivanna's compute nodes have real, routable network connectivity (no NAT), so the collective path uses UCC/UCX directly — it does not need FMI's rendezvous/NAT-traversal machinery, which exists specifically to work around Lambda's inability to accept inbound connections.
+Rivanna uses Apptainer (formerly Singularity) — Docker images are converted to `.sif` files pulled from Docker Hub. There are two independent pipelines on Rivanna, using two different images: the agentic pipeline and Experiment B's collective benchmark (UCC/UCX). The agentic pipeline does not use any distributed communication library at all on Rivanna/ECS — `armada_ecs_runner.py` simulates `world_size` as in-process Python threads (`ThreadPoolExecutor`) sharing memory directly, not real separate processes, so there is nothing to broadcast across a network. (FMI is only exercised by the genuinely-distributed Lambda deployment, `armada_executor.py`, where Step Functions Maps each rank to a separate Lambda invocation.) Experiment B's collectives, by contrast, are real separate processes and use UCC/UCX directly — Rivanna's compute nodes have real, routable network connectivity (no NAT), so there's no need for FMI's rendezvous/NAT-traversal machinery either, which exists specifically to work around Lambda's inability to accept inbound connections.
 
-**Agentic pipeline (FMI)** — pattern mirrors `cylon/target/rivanna/scripts/ucc-ucx-redis/cylon-experiment-setup-apptainer.py`:
+**Agentic pipeline** — pattern mirrors `cylon/target/rivanna/scripts/ucc-ucx-redis/cylon-experiment-setup-apptainer.py`:
 
 ```
 Docker Hub (mstaylor/cylon-armada-python)
@@ -76,7 +76,7 @@ docker push qad5gv/cylon-armada-gpu:latest
 docker push qad5gv/cylon-armada-uccucx-python:latest
 ```
 
-`cylon-armada-fmi-python` (built from `Dockerfile.fmi.python`) is the agentic-pipeline image; `cylon-armada-uccucx-python` (built from `Dockerfile.uccucx.python`, adds UCX v1.19.1 + UCC v1.6.0 built from source) is Experiment B's collective-benchmark image.
+`cylon-armada-fmi-python` (built from `Dockerfile.fmi.python`) is the image the agentic pipeline reuses on Rivanna — it's FMI-capable because the same image also serves Lambda, but `armada_ecs_runner.py` never exercises FMI here (see Architecture above). `cylon-armada-uccucx-python` (built from `Dockerfile.uccucx.python`, adds UCX v1.19.1 + UCC v1.6.0 built from source) is Experiment B's collective-benchmark image, and its UCC path is genuinely exercised on Rivanna.
 
 ### 2. Pull SIF images on Rivanna (login node)
 
@@ -89,7 +89,7 @@ docker push qad5gv/cylon-armada-uccucx-python:latest
 ```bash
 cd /scratch/$USER/cylon-armada/target/rivanna/scripts
 
-# CPU image (~6 GB SIF, ~15 GB scratch during pull) — agentic pipeline (FMI)
+# CPU image (~6 GB SIF, ~15 GB scratch during pull) — agentic pipeline
 make image-pull DOCKER_USER=qad5gv
 
 # GPU image (~20 GB SIF, ~50 GB scratch during pull) — allow 30–60 min
