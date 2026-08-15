@@ -10,7 +10,6 @@ PYTHON ?= python
 DOCKER_USER ?= mstaylor
 
 SCRATCH      ?= /scratch/$(USER)
-CPU_SIF      ?= $(SCRATCH)/cylon-armada/cylon-armada.sif
 GPU_SIF      ?= $(SCRATCH)/cylon-armada/cylon-armada-gpu.sif
 UCCUCX_SIF   ?= $(SCRATCH)/cylon-armada/cylon-armada-uccucx.sif
 CPU_RESULTS  ?= $(SCRATCH)/armada-results
@@ -20,7 +19,7 @@ REDIS_HOST   ?= dev-cylon-redis1.aws-cylondata.com
 # AWS credentials: run 'aws configure' on Rivanna login node once.
 # Stored in ~/.aws/credentials (home dir, NFS-mounted on all compute nodes).
 
-.PHONY: image-pull image-pull-gpu image-pull-uccucx smoke-cpu smoke-gpu expb-smoke cpu cpu-all gpu gpu-all q qq cancel clean
+.PHONY: image-pull-gpu image-pull-uccucx smoke-cpu smoke-gpu expb-smoke cpu cpu-all gpu gpu-all q qq cancel clean
 
 # ---------------------------------------------------------------------------
 # Apptainer image management
@@ -28,19 +27,19 @@ REDIS_HOST   ?= dev-cylon-redis1.aws-cylondata.com
 #
 # APPTAINER_CACHEDIR and APPTAINER_TMPDIR are redirected to scratch so that
 # layer decompression (~2-3x SIF size) does not fill the home directory quota.
-# CPU SIF ~6 GB, GPU SIF ~20 GB; cache overhead can reach 50-70 GB total.
+# GPU SIF ~20 GB, UCC/UCX SIF ~6-7 GB; cache overhead can reach 50-70 GB total.
+#
+# cylon-armada-uccucx-python serves BOTH the agentic pipeline (cpu/cpu-all/
+# smoke-cpu) and Experiment B collectives (expb-smoke) on Rivanna — it's a
+# strict superset of the FMI-only image (same shared scripts, same
+# armada_ecs_runner.py, same FMI support, plus UCX/UCC), and Rivanna has none
+# of Lambda's constraints against running UCC/UCX. The FMI-only image
+# (cylon-armada-fmi-python) is Lambda-specific; there's no reason to pull it
+# here too.
 # ---------------------------------------------------------------------------
 
 APPTAINER_CACHE ?= $(SCRATCH)/apptainer-cache
 APPTAINER_TMP   ?= $(SCRATCH)/apptainer-tmp
-
-image-pull:
-	mkdir -p $(APPTAINER_CACHE) $(APPTAINER_TMP) $(dir $(CPU_SIF))
-	rm -f $(CPU_SIF)
-	module load apptainer && \
-	APPTAINER_CACHEDIR=$(APPTAINER_CACHE) \
-	APPTAINER_TMPDIR=$(APPTAINER_TMP) \
-	apptainer pull $(CPU_SIF) docker://docker.io/$(DOCKER_USER)/cylon-armada-python:latest
 
 image-pull-gpu:
 	mkdir -p $(APPTAINER_CACHE) $(APPTAINER_TMP) $(dir $(GPU_SIF))
@@ -69,7 +68,7 @@ image-cache-clean:
 smoke-cpu:
 	mkdir -p logs
 	$(PYTHON) armada-experiment-setup.py --smoke \
-		-d $(CPU_SIF) \
+		-d $(UCCUCX_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 4 --time 00:30:00 \
 		-m 16G \
@@ -108,7 +107,7 @@ SCENARIO ?= hydrology
 cpu:
 	mkdir -p logs
 	$(PYTHON) armada-experiment-setup.py \
-		-d $(CPU_SIF) \
+		-d $(UCCUCX_SIF) \
 		-r1 $(REDIS_HOST) \
 		-n 1 -t 1 -c 10 \
 		--tasks 8 16 --thresholds 0.70 0.80 0.90 \
@@ -121,7 +120,7 @@ cpu-all:
 	for scenario in hydrology epidemiology seismology mixed_scientific; do \
 		mkdir -p logs && \
 		$(PYTHON) armada-experiment-setup.py \
-			-d $(CPU_SIF) \
+			-d $(UCCUCX_SIF) \
 			-r1 $(REDIS_HOST) \
 			-n 1 -t 1 -c 10 \
 			--tasks 8 16 --thresholds 0.70 0.80 0.90 \
