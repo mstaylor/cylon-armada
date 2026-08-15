@@ -40,7 +40,8 @@
 # =============================================================================
 
 #SBATCH --job-name=expb-collectives
-#SBATCH --partition=standard
+#SBATCH --partition=bii
+#SBATCH -A bii_dsc_community
 #SBATCH --time=00:30:00
 #SBATCH --mem-per-cpu=4G
 #SBATCH --ntasks-per-node=1
