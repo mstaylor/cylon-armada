@@ -43,6 +43,7 @@
 #SBATCH --partition=standard
 #SBATCH --time=00:30:00
 #SBATCH --mem-per-cpu=4G
+#SBATCH --ntasks-per-node=1
 #SBATCH --output=logs/expb-%j.out
 #SBATCH --error=logs/expb-%j.err
 
@@ -61,6 +62,7 @@ RUNS="${RUNS:-1}"
 RESULTS_DIR_HOST="${RESULTS_DIR_HOST:-/scratch/$USER/expb-results}"
 
 WORLD_SIZE="$SLURM_NTASKS"
+export CYLON_SESSION_ID="expb_${SLURM_JOB_ID}"
 
 module load apptainer
 
@@ -81,10 +83,11 @@ JOB_TMP=/scratch/${USER}/tmp_${SLURM_JOB_ID}
 mkdir -p "$JOB_TMP"
 
 srun --exact apptainer exec \
+    --env CYLON_SESSION_ID="${CYLON_SESSION_ID}" \
     --bind "${RESULTS_DIR_HOST}:/output" \
     --bind "${SLURM_SUBMIT_DIR}:/rivanna" \
     --bind "${JOB_TMP}:/tmp" \
-    --containall \
+    --contain \
     "$SIF_IMAGE" \
     /bin/bash /rivanna/runExpBCollectives.sh \
         --channel "$CHANNEL" \
