@@ -19,7 +19,7 @@ REDIS_HOST   ?= dev-cylon-redis1.aws-cylondata.com
 # AWS credentials: run 'aws configure' on Rivanna login node once.
 # Stored in ~/.aws/credentials (home dir, NFS-mounted on all compute nodes).
 
-.PHONY: image-pull-gpu image-pull-uccucx smoke-cpu smoke-gpu expb-smoke cpu cpu-all gpu gpu-all q qq cancel clean
+.PHONY: image-pull-gpu image-pull-uccucx smoke-cpu smoke-gpu expb-smoke expb-sweep-dry-run expb-sweep cpu cpu-all gpu gpu-all q qq cancel clean
 
 # ---------------------------------------------------------------------------
 # Apptainer image management
@@ -94,6 +94,20 @@ expb-smoke:
 	sbatch --ntasks=$(EXPB_WORLD_SIZE) \
 		--export=ALL,SIF_IMAGE=$(UCCUCX_SIF),REDIS_HOST=$(REDIS_HOST),RESULTS_DIR_HOST=$(EXPB_RESULTS) \
 		run_exp_b_collectives.slurm
+
+# Experiment B collectives — full N-sweep (full collective/msg-size grid,
+# warmed runs=4). EXPB_WORLD_SIZES defaults to the sweep script's own
+# "4 8 16 32 64"; override with e.g. EXPB_WORLD_SIZES="4 8 16".
+EXPB_WORLD_SIZES ?=
+
+expb-sweep-dry-run:
+	SIF_IMAGE=$(UCCUCX_SIF) REDIS_HOST=$(REDIS_HOST) RESULTS_DIR_HOST=$(EXPB_RESULTS) \
+		./sweep_exp_b_collectives.sh --dry-run $(EXPB_WORLD_SIZES)
+
+expb-sweep:
+	mkdir -p logs $(EXPB_RESULTS)
+	SIF_IMAGE=$(UCCUCX_SIF) REDIS_HOST=$(REDIS_HOST) RESULTS_DIR_HOST=$(EXPB_RESULTS) \
+		./sweep_exp_b_collectives.sh $(EXPB_WORLD_SIZES)
 
 # ---------------------------------------------------------------------------
 # Full experiment sweeps (generate + submit)
