@@ -62,6 +62,7 @@ REPS="${REPS:-4}"
 RUNS="${RUNS:-1}"
 RESULTS_DIR_HOST="${RESULTS_DIR_HOST:-/scratch/$USER/expb-results}"
 UCX_LOG_LEVEL="${UCX_LOG_LEVEL:-debug}"
+UCX_NET_DEVICES="${UCX_NET_DEVICES:-ib0}"
 
 WORLD_SIZE="$SLURM_NTASKS"
 export CYLON_SESSION_ID="expb_${SLURM_JOB_ID}"
@@ -87,6 +88,7 @@ mkdir -p "$JOB_TMP"
 srun --exact apptainer exec \
     --env CYLON_SESSION_ID="${CYLON_SESSION_ID}" \
     --env UCX_LOG_LEVEL="${UCX_LOG_LEVEL}" \
+    --env UCX_NET_DEVICES="${UCX_NET_DEVICES}" \
     --bind "${RESULTS_DIR_HOST}:/output" \
     --bind "${SLURM_SUBMIT_DIR}:/rivanna" \
     --bind "${JOB_TMP}:/tmp" \
