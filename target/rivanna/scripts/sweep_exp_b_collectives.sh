@@ -16,7 +16,7 @@
 #     ./sweep_exp_b_collectives.sh --dry-run
 #
 #   SIF_IMAGE=/scratch/$USER/cylon-armada/cylon-armada-uccucx.sif \
-#     ./sweep_exp_b_collectives.sh 4 8 16 32 64
+#     ./sweep_exp_b_collectives.sh 1 4 8 16 32 64
 #
 # Required:
 #   SIF_IMAGE   path to the cylon-armada-uccucx .sif
@@ -39,7 +39,7 @@ for arg in "$@"; do
     fi
 done
 if [ ${#WORLD_SIZES[@]} -eq 0 ]; then
-    WORLD_SIZES=(4 8 16 32 64)
+    WORLD_SIZES=(1 4 8 16 32 64)
 fi
 
 : "${SIF_IMAGE:?SIF_IMAGE must be set (path to the cylon-armada-uccucx .sif)}"
