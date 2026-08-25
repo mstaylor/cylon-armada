@@ -63,3 +63,4 @@ override.tf.json
 .claude-flow/data/
 .claude-flow/logs/
 .claude-flow/sessions/
+.worktrees/

@@ -25,7 +25,7 @@ Task payload (each item from armada_init's body array):
         "workflow_id": "...",
         "rank": 0,
         "world_size": 4,
-        "fmi_channel_type": "redis",   # "redis" | "direct" | "s3"
+        "fmi_channel_type": "redis",   # "redis" | "direct" | "direct-redis" | "s3"
         "fmi_hint": "fast",            # "fast" | "low_latency"
         "config": {
             "llm_model_id": "...",

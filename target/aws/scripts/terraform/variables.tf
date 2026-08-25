@@ -148,6 +148,12 @@ variable "ecs_assign_public_ip" {
   default     = "ENABLED"
 }
 
+variable "fmi_direct_redis_port" {
+  description = "TCP port FMI's direct-redis channel listens on for peer-to-peer rank connections within the VPC (Fargate only)"
+  type        = number
+  default     = 50055
+}
+
 # ---------------------------------------------------------------------------
 # Redis / ElastiCache
 # ---------------------------------------------------------------------------

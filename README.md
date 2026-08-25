@@ -94,7 +94,7 @@ REDIS_PORT=6379
 AWS_DEFAULT_REGION=us-east-1
 
 # FMI communicator
-FMI_CHANNEL_TYPE=redis  # "redis", "direct", "s3"
+FMI_CHANNEL_TYPE=redis  # "redis", "direct", "direct-redis", "s3"
 FMI_HINT=fast
 RANK=0
 WORLD_SIZE=1

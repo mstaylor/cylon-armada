@@ -63,6 +63,7 @@ locals {
     { name = "AWS_DEFAULT_REGION", value = var.aws_region },
     { name = "RENDEZVOUS_HOST", value = var.rendezvous_host },
     { name = "RENDEZVOUS_PORT", value = tostring(var.rendezvous_port) },
+    { name = "FMI_LISTEN_PORT", value = tostring(var.fmi_direct_redis_port) },
     { name = "CYLON_SESSION_ID", value = var.project_name },
   ]
 
@@ -87,6 +88,21 @@ locals {
     RESULTS_PREFIX_EC2     = var.results_prefix_ecs_ec2
     CAPACITY_PROVIDER_NAME = var.ec2_capacity_provider_name
   }
+}
+
+# ---------------------------------------------------------------------------
+# FMI direct-redis — rank-to-rank TCP within the ECS security group
+# ---------------------------------------------------------------------------
+
+resource "aws_security_group_rule" "fmi_direct_redis_ingress" {
+  count                    = length(var.ecs_security_group_ids) > 0 ? 1 : 0
+  type                     = "ingress"
+  from_port                = var.fmi_direct_redis_port
+  to_port                  = var.fmi_direct_redis_port
+  protocol                 = "tcp"
+  security_group_id        = var.ecs_security_group_ids[0]
+  source_security_group_id = var.ecs_security_group_ids[0]
+  description              = "FMI direct-redis channel - rank-to-rank TCP within the VPC"
 }
 
 # ---------------------------------------------------------------------------

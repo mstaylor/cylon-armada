@@ -27,6 +27,23 @@ import os
 
 logger = logging.getLogger(__name__)
 
+FMI_CHANNEL_TYPES = frozenset({"direct", "direct-redis", "redis", "s3"})
+
+FMI_CHANNEL_ALIASES = {"tcpunch": "direct"}
+
+
+def _resolve_port(channel_type):
+    """Resolve the FMI rendezvous/listen port for a channel type.
+
+    'direct' (TCPunch) dials a remote rendezvous server on RENDEZVOUS_PORT.
+    'direct-redis' binds this rank's own local listen port instead — a
+    different config axis (local bind vs. remote dial) — from FMI_LISTEN_PORT.
+    """
+    normalized = FMI_CHANNEL_ALIASES.get(channel_type.lower(), channel_type.lower())
+    if normalized == "direct-redis":
+        return int(os.environ.get("FMI_LISTEN_PORT", 10000))
+    return int(os.environ.get("RENDEZVOUS_PORT", 10000))
+
 
 def _import_fmi():
     """Lazy-import pycylon FMI — only available in Cylon Lambda containers.
@@ -60,7 +77,10 @@ class FMIBridge:
     Args:
         world_size:       Total number of Lambda workers.
         rank:             This worker's rank (0-indexed).
-        channel_type:     FMI channel type ('direct', 'redis', 's3'). Default: 'redis'.
+        channel_type:     FMI channel type — 'direct' (TCPunch hole punching),
+                          'direct-redis' (plain TCP listen/connect within a VPC via
+                          Redis-published addresses; Fargate/ECS), 'redis', or 's3'.
+                          Matched case-insensitively. Default: 'redis'.
         rendezvous_host:  Rendezvous server host (required for 'direct' channel).
         rendezvous_port:  Rendezvous server port. Default: 10000.
         redis_host:       Redis host (required for 'redis' channel).
@@ -78,7 +98,16 @@ class FMIBridge:
                  enableping=False, nonblocking=True):
         self.world_size = int(world_size)
         self.rank = int(rank)
-        self.channel_type = channel_type
+
+        normalized = channel_type.lower()
+        normalized = FMI_CHANNEL_ALIASES.get(normalized, normalized)
+        if normalized not in FMI_CHANNEL_TYPES:
+            raise ValueError(
+                f"unknown FMI channel type {channel_type!r} "
+                f"(rank={self.rank}, world_size={self.world_size}, comm_name={comm_name!r}); "
+                f"valid types: {sorted(FMI_CHANNEL_TYPES)}"
+            )
+        self.channel_type = normalized
 
         self._FMIConfig, self._CylonEnv, self._ReduceOp = _import_fmi()
         self._env = None
@@ -101,13 +130,13 @@ class FMIBridge:
                 redis_port=int(redis_port),
                 redis_namespace=comm_name,
                 enableping=enableping,
-                channel_type=channel_type,
+                channel_type=self.channel_type,
             )
             self._env = self._CylonEnv(config=fmi_config, distributed=True)
             self._comm = self._env.context.get_communicator()
             logger.info(
                 "FMI communicator initialized: rank=%d world_size=%d channel=%s",
-                self.rank, self.world_size, channel_type,
+                self.rank, self.world_size, self.channel_type,
             )
         except Exception as e:
             logger.error("FMI communicator init failed: %s", e)
@@ -117,12 +146,13 @@ class FMIBridge:
     @classmethod
     def from_env(cls):
         """Create FMIBridge from environment variables (Lambda context)."""
+        channel_type = os.environ.get("FMI_CHANNEL_TYPE", "redis")
         return cls(
             world_size=int(os.environ.get("WORLD_SIZE", 1)),
             rank=int(os.environ.get("RANK", 0)),
-            channel_type=os.environ.get("FMI_CHANNEL_TYPE", "redis"),
+            channel_type=channel_type,
             rendezvous_host=os.environ.get("RENDEZVOUS_HOST", ""),
-            rendezvous_port=int(os.environ.get("RENDEZVOUS_PORT", 10000)),
+            rendezvous_port=_resolve_port(channel_type),
             redis_host=os.environ.get("REDIS_HOST", ""),
             redis_port=int(os.environ.get("REDIS_PORT", 6379)),
         )
@@ -139,9 +169,7 @@ class FMIBridge:
         workflow_id = payload.get("workflow_id", "")
         comm_name_base = experiment_name or workflow_id
         comm_name = f"cylon_armada_{comm_name_base}" if comm_name_base else "cylon_armada"
-        # Map 'tcpunch' → 'direct' for pycylon compatibility.
-        raw_channel = payload.get("fmi_channel_type", "direct")
-        channel_type = "direct" if raw_channel in ("tcpunch", "direct") else raw_channel
+        channel_type = payload.get("fmi_channel_type", "direct")
         # nonblocking=True: async connection attempts allow simultaneous SYN
         # exchange — required for TCP hole punching. nonblocking=False causes
         # sequential blocking which breaks the TCPunch timing window.
@@ -152,7 +180,7 @@ class FMIBridge:
             rank=int(payload.get("rank", 0)),
             channel_type=channel_type,
             rendezvous_host=os.environ.get("RENDEZVOUS_HOST", ""),
-            rendezvous_port=int(os.environ.get("RENDEZVOUS_PORT", 10000)),
+            rendezvous_port=_resolve_port(channel_type),
             redis_host=os.environ.get("REDIS_HOST", ""),
             redis_port=int(os.environ.get("REDIS_PORT", 6379)),
             comm_name=comm_name,

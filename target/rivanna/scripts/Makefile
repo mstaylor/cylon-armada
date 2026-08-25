@@ -97,7 +97,7 @@ expb-smoke:
 
 # Experiment B collectives — full N-sweep (full collective/msg-size grid,
 # warmed runs=4). EXPB_WORLD_SIZES defaults to the sweep script's own
-# "1 4 8 16 32 64"; override with e.g. EXPB_WORLD_SIZES="1 4 8 16".
+# "1 2 4 8 16 32 64"; override with e.g. EXPB_WORLD_SIZES="1 2 4 8".
 EXPB_WORLD_SIZES ?=
 
 expb-sweep-dry-run:
