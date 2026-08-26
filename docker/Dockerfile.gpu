@@ -5,7 +5,7 @@ FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
 LABEL maintainer="cylondata@googlegroups.com"
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG CYLON_BRANCH=cylon-uccucx-collectives-additions
+ARG CYLON_BRANCH=main
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV PATH=/opt/conda/bin:$PATH
@@ -52,8 +52,7 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-L
 # Cylon source
 # ---------------------------------------------------------------------------
 
-RUN git clone https://github.com/mstaylor/cylon.git $CYLON_HOME
-RUN cd $CYLON_HOME && git checkout -b ${CYLON_BRANCH} origin/${CYLON_BRANCH}
+RUN git clone -b ${CYLON_BRANCH} https://github.com/mstaylor/cylon.git $CYLON_HOME
 
 SHELL ["/bin/bash", "--login", "-c"]
 
