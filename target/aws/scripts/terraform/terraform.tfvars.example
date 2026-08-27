@@ -9,6 +9,7 @@ ecr_repository_name = "cylon-armada"
 python_image_tag = "cylon-armada-fmi-python"
 uccucx_image_tag = "cylon-armada-uccucx-python"
 nodejs_image_tag = "cylon-armada-nodejs"
+ecs_image_tag    = "cylon-armada-fmi-python"
 
 # Lambda configuration
 python_memory_mb = 1024

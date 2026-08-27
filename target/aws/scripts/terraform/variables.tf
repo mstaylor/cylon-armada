@@ -115,9 +115,9 @@ variable "ecs_python_memory_mb" {
 }
 
 variable "ecs_image_tag" {
-  description = "ECR image tag for the ECS Python runner image"
+  description = "ECR image tag for the ECS Python runner image (built from Dockerfile.fmi.python)"
   type        = string
-  default     = "python-latest"
+  default     = "cylon-armada-fmi-python"
 }
 
 variable "ecs_log_retention_days" {

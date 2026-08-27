@@ -415,12 +415,35 @@ def build_env(channel, world_size, redis_addr, comm_name):
         )
         return CylonEnv(config=fmi_cfg, distributed=True)
 
-    raise ValueError(f"unknown channel '{channel}': expected ucc|fmi-redis|fmi-direct")
+    if channel == "fmi-direct-redis":
+        from pycylon.net.fmi_config import FMIConfig
+
+        redis_host, redis_port = redis_addr.split(":")
+        rank = int(os.environ.get("RANK", "0"))
+        fmi_cfg = FMIConfig(
+            rank,
+            world_size,
+            "",  # host unused by direct-redis — see advertise_host below
+            int(os.environ.get("FMI_LISTEN_PORT", "50055")),
+            int(os.environ.get("FMI_MAX_TIMEOUT", "60000")),
+            False,  # resolveip — no host to resolve
+            comm_name,
+            True,  # nonblocking
+            redis_host,
+            int(redis_port),
+            os.environ.get("FMI_REDIS_NAMESPACE", "cylon_armada"),
+            channel_type="direct-redis",
+            advertise_host=os.environ.get("ADVERTISE_HOST", ""),
+        )
+        return CylonEnv(config=fmi_cfg, distributed=True)
+
+    raise ValueError(f"unknown channel '{channel}': expected ucc|fmi-redis|fmi-direct|fmi-direct-redis")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Experiment B collective benchmark (per rank)")
-    parser.add_argument("--channel", default="ucc", choices=["ucc", "fmi-redis", "fmi-direct"])
+    parser.add_argument("--channel", default="ucc",
+                        choices=["ucc", "fmi-redis", "fmi-direct", "fmi-direct-redis"])
     parser.add_argument("--collectives", nargs="+", default=DEFAULT_COLLECTIVES)
     parser.add_argument("--msg-sizes", type=int, nargs="+", default=DEFAULT_MSG_SIZES)
     parser.add_argument("--warmup", type=int, default=3)
