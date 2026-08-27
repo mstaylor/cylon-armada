@@ -89,13 +89,18 @@ class FMIBridge:
                           must use the same value. Default: 'cylon_armada'.
         maxtimeout:       FMI max timeout ms. Default: 120000.
         enableping:       Enable FMI ping. Default: False.
+        advertise_host:   Explicit address to advertise to peers for the
+                          'direct-redis' channel — distinct from rendezvous_host,
+                          which is TCPunch-specific. Leave unset (default) on
+                          Fargate/ECS to let ECS metadata auto-discovery resolve
+                          the task's real address.
     """
 
     def __init__(self, world_size, rank, channel_type="redis",
                  rendezvous_host="", rendezvous_port=10000,
                  redis_host="", redis_port=6379,
                  comm_name="cylon_armada", maxtimeout=120000,
-                 enableping=False, nonblocking=True):
+                 enableping=False, nonblocking=True, advertise_host=""):
         self.world_size = int(world_size)
         self.rank = int(rank)
 
@@ -131,6 +136,7 @@ class FMIBridge:
                 redis_namespace=comm_name,
                 enableping=enableping,
                 channel_type=self.channel_type,
+                advertise_host=advertise_host,
             )
             self._env = self._CylonEnv(config=fmi_config, distributed=True)
             self._comm = self._env.context.get_communicator()
@@ -155,6 +161,7 @@ class FMIBridge:
             rendezvous_port=_resolve_port(channel_type),
             redis_host=os.environ.get("REDIS_HOST", ""),
             redis_port=int(os.environ.get("REDIS_PORT", 6379)),
+            advertise_host=os.environ.get("ADVERTISE_HOST", ""),
         )
 
     @classmethod
@@ -186,6 +193,7 @@ class FMIBridge:
             comm_name=comm_name,
             maxtimeout=300000,
             nonblocking=nonblocking,
+            advertise_host=os.environ.get("ADVERTISE_HOST", ""),
         )
 
     @property

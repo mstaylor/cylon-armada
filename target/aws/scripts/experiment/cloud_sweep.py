@@ -526,9 +526,10 @@ def main():
                         help="Context similarity backend: redis (numpy, concurrent-safe) "
                              "or cylon (Arrow SIMD, for FMI Phase 2)")
     parser.add_argument("--fmi-channel", default="direct",
-                        choices=["direct", "redis", "s3"],
+                        choices=["direct", "direct-redis", "redis", "s3"],
                         help="FMI channel type for cylon backend: direct (TCPunch P2P), "
-                             "redis, or s3 (default: direct)")
+                             "direct-redis (plain TCP within a VPC via Redis-published "
+                             "addresses; Fargate/ECS only), redis, or s3 (default: direct)")
     parser.add_argument("--poll-interval", type=int, default=20,
                         help="Seconds between S3 result polls (default 20)")
     parser.add_argument("--timeout", type=int, default=600,
