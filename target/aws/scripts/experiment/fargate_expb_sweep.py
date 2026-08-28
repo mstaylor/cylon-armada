@@ -35,7 +35,6 @@ RESULTS_PREFIX = "cylon-armada/results/exp_b_collectives_fargate"
 
 RUNNER_SCRIPT = """import sys, os, subprocess, boto3
 sys.path.insert(0, '/cylon-armada/scripts')
-rank = int(os.environ['RANK'])
 world_size = int(os.environ['WORLD_SIZE'])
 output_dir = '/tmp/expb_results'
 boto3.client('s3').download_file(
@@ -51,15 +50,14 @@ cmd = [
     '--output', output_dir,
 ]
 result = subprocess.run(cmd)
-if rank == 0:
+if os.path.isdir(output_dir) and os.listdir(output_dir):
     s3 = boto3.client('s3')
     bucket = os.environ.get('RESULTS_BUCKET', 'staylor.dev2')
     prefix = os.environ['S3_RESULTS_PREFIX']
-    if os.path.isdir(output_dir):
-        for fname in os.listdir(output_dir):
-            local_path = os.path.join(output_dir, fname)
-            s3.upload_file(local_path, bucket, prefix + fname)
-            print('uploaded', fname, 'to s3://' + bucket + '/' + prefix + fname)
+    for fname in os.listdir(output_dir):
+        local_path = os.path.join(output_dir, fname)
+        s3.upload_file(local_path, bucket, prefix + fname)
+        print('uploaded', fname, 'to s3://' + bucket + '/' + prefix + fname)
 sys.exit(result.returncode)
 """
 
