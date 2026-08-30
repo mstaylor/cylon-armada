@@ -522,6 +522,12 @@ def main():
         # MPI out of the pure-UCC path entirely.
         env.finalize()
 
+        config["comm"] = None
+        config["ctx"] = None
+        comm = None
+        ctx = None
+        del env
+
 
 if __name__ == "__main__":
     main()
