@@ -468,18 +468,11 @@ def main():
 
     from pycylon.net.reduce_op import ReduceOp
 
-    # Base session id from the launcher (shared across this run's rank processes). Each
-    # run derives a distinct CYLON_SESSION_ID from it so the redis OOB INCR counter does
-    # not carry over between runs (which makes ranks accumulate). The derivation is
-    # deterministic, so all rank processes compute the same id for a given run and still
-    # rendezvous.
     base_session = os.environ.get("CYLON_SESSION_ID", f"exp_b_{os.getpid()}")
 
     for run_idx in range(1, args.runs + 1):
         os.environ["CYLON_SESSION_ID"] = f"{base_session}_run{run_idx}"
-        # comm_name must also be unique per run so redis INCR rank assignment does not
-        # collide across concurrent/sequential runs (the CLAUDE.md rank-reuse rule).
-        comm_name = f"exp_b_{args.channel}_ws{args.world_size}_run{run_idx}"
+        comm_name = f"exp_b_{args.channel}_ws{args.world_size}_{base_session}_run{run_idx}"
         env = build_env(args.channel, args.world_size, args.redis_addr, comm_name)
         ctx = env.context
         comm = ctx.get_communicator()

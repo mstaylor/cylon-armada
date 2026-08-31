@@ -19,6 +19,7 @@ import concurrent.futures
 import json
 import logging
 import time
+import uuid
 
 import boto3
 
@@ -62,7 +63,7 @@ sys.exit(result.returncode)
 """
 
 
-def build_overrides(rank, world_size, runs, s3_prefix):
+def build_overrides(rank, world_size, runs, s3_prefix, session_id):
     return {
         "containerOverrides": [
             {
@@ -75,6 +76,7 @@ def build_overrides(rank, world_size, runs, s3_prefix):
                     {"name": "EXPB_RUNS", "value": str(runs)},
                     {"name": "RESULTS_BUCKET", "value": RESULTS_BUCKET},
                     {"name": "S3_RESULTS_PREFIX", "value": s3_prefix},
+                    {"name": "CYLON_SESSION_ID", "value": session_id},
                 ],
             }
         ]
@@ -85,11 +87,13 @@ def launch_world_size(ecs, world_size, runs, dry_run):
     """Launch world_size concurrent tasks for one world size, wait for all to
     stop, return per-rank exit codes."""
     s3_prefix = f"{RESULTS_PREFIX}/ws{world_size}/"
-    logger.info("world_size=%d: launching %d tasks (dry_run=%s)", world_size, world_size, dry_run)
+    session_id = f"expb_ws{world_size}_{uuid.uuid4().hex[:12]}"
+    logger.info("world_size=%d: launching %d tasks (dry_run=%s) session_id=%s",
+                world_size, world_size, dry_run, session_id)
 
     if dry_run:
         for rank in range(world_size):
-            overrides = build_overrides(rank, world_size, runs, s3_prefix)
+            overrides = build_overrides(rank, world_size, runs, s3_prefix, session_id)
             logger.info("[dry-run] rank=%d overrides=%s", rank, json.dumps(overrides))
         return {}
 
@@ -97,7 +101,7 @@ def launch_world_size(ecs, world_size, runs, dry_run):
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(16, world_size)) as pool:
         futures = []
         for rank in range(world_size):
-            overrides = build_overrides(rank, world_size, runs, s3_prefix)
+            overrides = build_overrides(rank, world_size, runs, s3_prefix, session_id)
 
             def _launch(overrides=overrides, rank=rank):
                 resp = ecs.run_task(
