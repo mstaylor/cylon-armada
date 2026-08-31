@@ -435,3 +435,175 @@ def generate_zerocopy_notebook(
         json.dump(notebook, f, indent=2)
 
     logger.info("Zero-copy notebook saved: %s", output_path)
+
+
+def _cmp_cell_imports() -> str:
+    return """%matplotlib inline
+import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
+from IPython.display import display
+
+plt.rcParams.update({
+    'font.size': 12, 'axes.titlesize': 14, 'axes.labelsize': 12,
+    'xtick.labelsize': 10, 'ytick.labelsize': 10, 'legend.fontsize': 10,
+    'figure.figsize': (11, 7),
+    'figure.facecolor': 'white', 'axes.facecolor': 'white',
+    'savefig.facecolor': 'white', 'axes.grid': False,
+})
+BAR_EDGE, BAR_LW = 'black', 0.8
+
+COLLECTIVE_COLORS = {
+    'scatter': '#2ca02c', 'scatterv': '#17becf', 'gather': '#1f77b4', 'allgather': '#9467bd',
+    'reduce': '#ff7f0e', 'allreduce': '#d62728', 'broadcast': '#8c564b', 'barrier': '#7f7f7f',
+}
+COLLECTIVE_ORDER = ['scatter', 'scatterv', 'gather', 'allgather', 'reduce', 'allreduce', 'broadcast', 'barrier']
+
+PLATFORM_STYLE = {
+    'rivanna': {'color': '#1f77b4', 'linestyle': '-', 'marker': 'o', 'label': 'Rivanna (UCC)'},
+    'fargate': {'color': '#d62728', 'linestyle': '--', 'marker': 's', 'label': 'Fargate (direct-redis)'},
+}
+PLATFORM_ORDER = ['rivanna', 'fargate']
+"""
+
+
+def _cmp_cell_load_data(results_csv: str) -> str:
+    return f"""df = pd.read_csv('{results_csv}')
+df = df[df['unsupported'] != True]
+print(f"platforms: {{list(df['platform'].unique())}}")
+print(f"collectives: {{list(df['collective'].unique())}}")
+print(f"world sizes: {{sorted(df['N'].unique())}}")
+display(df.head(10))
+"""
+
+
+def _cmp_cell_latency_vs_n() -> str:
+    return """fig, ax = plt.subplots()
+present = [c for c in COLLECTIVE_ORDER if c in set(df['collective'])]
+for coll in present:
+    color = COLLECTIVE_COLORS.get(coll, '#333')
+    for plat in PLATFORM_ORDER:
+        sub = df[(df['collective'] == coll) & (df['platform'] == plat)]
+        if sub.empty:
+            continue
+        rep_size = sub['msg_size'].max()
+        pts = sub[sub['msg_size'] == rep_size].sort_values('N')
+        if pts.empty:
+            continue
+        style = PLATFORM_STYLE[plat]
+        yerr = pts['latency_p50_ms_std'] if 'latency_p50_ms_std' in pts.columns else None
+        ax.errorbar(pts['N'], pts['latency_p50_ms'], yerr=yerr, marker=style['marker'],
+                    linestyle=style['linestyle'], color=color, lw=2, capsize=5,
+                    label=f"{coll} — {style['label']}")
+ax.set_xscale('log', base=2); ax.set_yscale('log'); ax.minorticks_off()
+ax.set_xlabel('World size N (log2)'); ax.set_ylabel('P50 latency (ms, log scale)')
+ax.set_title('Collective latency vs N — Rivanna (UCC) vs Fargate (direct-redis)')
+ax.legend(ncol=4, loc='lower center', bbox_to_anchor=(0.5, -0.38), frameon=True, fontsize=9)
+plt.tight_layout(); plt.savefig('charts/collectives_latency_vs_N_rivanna_vs_fargate.svg', bbox_inches='tight'); plt.show()
+"""
+
+
+def _cmp_cell_throughput_vs_msgsize() -> str:
+    return """size_swept = [c for c in COLLECTIVE_ORDER if c in set(df['collective']) and c not in ('reduce', 'allreduce', 'barrier')]
+n_common = min(df[df['platform'] == p]['N'].max() for p in PLATFORM_ORDER if (df['platform'] == p).any())
+
+fig, ax = plt.subplots()
+for coll in size_swept:
+    color = COLLECTIVE_COLORS.get(coll, '#333')
+    for plat in PLATFORM_ORDER:
+        pts = df[(df['collective'] == coll) & (df['platform'] == plat) & (df['N'] == n_common)].sort_values('msg_size')
+        if pts.empty:
+            continue
+        style = PLATFORM_STYLE[plat]
+        yerr = pts['throughput_MBps_std'] if 'throughput_MBps_std' in pts.columns else None
+        ax.errorbar(pts['msg_size'], pts['throughput_MBps'], yerr=yerr, marker=style['marker'],
+                    linestyle=style['linestyle'], color=color, lw=2, capsize=5,
+                    label=f"{coll} — {style['label']}")
+ax.set_xscale('log', base=2); ax.set_yscale('log'); ax.minorticks_off()
+ax.set_xlabel('Message size (bytes, log2)'); ax.set_ylabel('Throughput (MB/s, log scale)')
+ax.set_title(f'Collective throughput vs message size — Rivanna vs Fargate  (N={n_common})')
+ax.legend(ncol=4, loc='lower center', bbox_to_anchor=(0.5, -0.38), frameon=True, fontsize=9)
+plt.tight_layout(); plt.savefig('charts/collectives_throughput_vs_msgsize_rivanna_vs_fargate.svg', bbox_inches='tight'); plt.show()
+"""
+
+
+def _cmp_cell_barrier_vs_n() -> str:
+    return """import numpy as np
+bar = df[df['collective'] == 'barrier']
+ns = sorted(bar['N'].unique())
+x = np.arange(len(ns))
+width = 0.35
+
+fig, ax = plt.subplots(figsize=(10, 6))
+for i, plat in enumerate(PLATFORM_ORDER):
+    style = PLATFORM_STYLE[plat]
+    lat, err = [], []
+    for n in ns:
+        cell = bar[(bar['platform'] == plat) & (bar['N'] == n)]
+        lat.append(cell['latency_p50_ms'].iloc[0] if len(cell) else 0.0)
+        err.append(cell['latency_p50_ms_std'].iloc[0] if len(cell) and 'latency_p50_ms_std' in cell.columns else 0.0)
+    offset = (i - 0.5) * width
+    ax.bar(x + offset, lat, width=width, yerr=err if any(e > 0 for e in err) else None,
+          color=style['color'], alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW, capsize=5, label=style['label'])
+ax.set_xticks(x); ax.set_xticklabels([str(n) for n in ns])
+ax.set_xlabel('World size N'); ax.set_ylabel('Barrier P50 latency (ms)')
+ax.set_title('Barrier synchronization latency vs N — Rivanna vs Fargate')
+ax.legend(ncol=2, loc='lower center', bbox_to_anchor=(0.5, -0.28), frameon=True)
+plt.tight_layout(); plt.savefig('charts/collectives_barrier_vs_N_rivanna_vs_fargate.svg', bbox_inches='tight'); plt.show()
+"""
+
+
+def _cmp_cell_summary_table() -> str:
+    return """cols = ['platform', 'channel', 'collective', 'msg_size', 'N', 'latency_p50_ms',
+        'latency_p50_ms_std', 'throughput_MBps', 'throughput_MBps_std']
+available = [c for c in cols if c in df.columns]
+display(df[available].sort_values(['collective', 'N', 'msg_size', 'platform']))
+"""
+
+
+def generate_collectives_compare_notebook(
+    results_csv: str,
+    output_path: str,
+    output_chart_dir: str = "charts",
+) -> None:
+    """Generate a tweakable Jupyter notebook for the Rivanna-vs-Fargate Exp B charts.
+
+    Cells contain self-contained plotting code (no dependency on
+    chart_collectives_compare), so charts can be adjusted by hand. Run the notebook
+    from the results directory (e.g. charts_rivanna_vs_fargate/) so the relative CSV
+    and chart paths resolve.
+    """
+    cells = [
+        _make_cell("markdown",
+                   "# Experiment B: Rivanna (UCC) vs Fargate (direct-redis) Collectives\n\n"
+                   "Tweakable notebook. Each chart's plotting code is inline and self-contained "
+                   "— edit colors, labels, scales, and figure sizes here, then re-run the cell. "
+                   "Run this notebook from its own directory so the relative paths resolve."),
+        _make_cell("code", _cmp_cell_imports()),
+        _make_cell("code", _cmp_cell_load_data(results_csv)),
+        _make_cell("markdown", "## Latency vs world size N"),
+        _make_cell("code", _cmp_cell_latency_vs_n()),
+        _make_cell("markdown", "## Throughput vs message size"),
+        _make_cell("code", _cmp_cell_throughput_vs_msgsize()),
+        _make_cell("markdown", "## Barrier synchronization latency vs N"),
+        _make_cell("code", _cmp_cell_barrier_vs_n()),
+        _make_cell("markdown", "## Summary table"),
+        _make_cell("code", _cmp_cell_summary_table()),
+    ]
+
+    notebook = {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python", "version": "3.11.0"},
+        },
+        "cells": cells,
+    }
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    os.makedirs(os.path.join(os.path.dirname(output_path) or ".", output_chart_dir), exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(notebook, f, indent=2)
+
+    logger.info("Rivanna-vs-Fargate collectives notebook saved: %s", output_path)

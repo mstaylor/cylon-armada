@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import glob
 import logging
 import os
 import sys
@@ -58,6 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bucket", type=str, help="S3 bucket name")
     parser.add_argument("--s3-prefix", type=str, help="S3 prefix pattern")
     parser.add_argument("--local-dir", type=str, help="Local directory with summary CSVs")
+    parser.add_argument("--rivanna-dir", type=str,
+                        help="collectives_compare: dir containing rivanna ws*/ subdirs")
+    parser.add_argument("--fargate-dir", type=str,
+                        help="collectives_compare: dir containing fargate ws*/ subdirs")
 
     # Output
     parser.add_argument("--download-dir", type=str, default="./data/raw",
@@ -75,9 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Experiment family: which chart/notebook set to produce.
     parser.add_argument("--experiment", type=str, default="reuse",
-                        choices=["reuse", "zerocopy", "collectives"],
+                        choices=["reuse", "zerocopy", "collectives", "collectives_compare"],
                         help="reuse = cost/reuse charts (download/aggregate/charts/notebook); "
-                             "zerocopy = Experiment A/A2 charts (charts/notebook on the results dir)")
+                             "zerocopy = Experiment A/A2 charts (charts/notebook on the results dir); "
+                             "collectives_compare = Experiment B Rivanna-vs-Fargate charts "
+                             "(needs --rivanna-dir/--fargate-dir, writes to --output-dir)")
 
     # Steps
     parser.add_argument("--step", type=str, action="append", choices=STEPS,
@@ -346,6 +353,51 @@ def run_collectives_pipeline(results_dir: str, steps: list, chart_format: str = 
         logger.info("Wrote %d chart(s) to %s", len(written), charts_dir)
 
 
+def run_collectives_compare_pipeline(rivanna_dir: str, fargate_dir: str, output_dir: str,
+                                     steps: list, chart_format: str = "png",
+                                     chart_dpi: int = 300,
+                                     notebook_name: str = "exp_b_collectives_rivanna_vs_fargate") -> None:
+    """Experiment B Rivanna-vs-Fargate comparison pipeline: aggregate both platforms'
+    per-world-size directories, combine into one CSV, chart, notebook.
+
+    `rivanna_dir` / `fargate_dir` each contain `ws{N}/run{n}_exp_b_collectives_
+    results.csv` per world size; every ws dir is aggregated in place (cross-run mean
+    + std) via aggregate_collectives_runs, then combined with a `platform` column.
+    Charts land in `output_dir/charts`; the notebook and combined CSV in `output_dir`.
+    """
+    from .chart_collectives_compare import (
+        generate_compare_charts,
+        load_platform_rows,
+        write_combined_csv,
+    )
+    from .notebook_generator import generate_collectives_compare_notebook
+
+    rivanna_ws = sorted(glob.glob(os.path.join(rivanna_dir, "ws*")))
+    fargate_ws = sorted(glob.glob(os.path.join(fargate_dir, "ws*")))
+    rows = load_platform_rows("rivanna", rivanna_ws) + load_platform_rows("fargate", fargate_ws)
+    if not rows:
+        logger.error("no rows aggregated from %s / %s", rivanna_dir, fargate_dir)
+        return
+
+    combined_csv = write_combined_csv(rows, output_dir)
+
+    if "charts" in steps:
+        logger.info("=== Step: Collectives compare charts ===")
+        charts_dir = os.path.join(output_dir, "charts")
+        written = generate_compare_charts(rows, charts_dir, chart_format, chart_dpi)
+        logger.info("Wrote %d chart(s) to %s", len(written), charts_dir)
+
+    if "notebook" in steps:
+        logger.info("=== Step: Collectives compare notebook ===")
+        notebook_path = os.path.join(output_dir, f"{notebook_name}.ipynb")
+        generate_collectives_compare_notebook(
+            results_csv=os.path.basename(combined_csv),
+            output_path=notebook_path,
+            output_chart_dir="charts",
+        )
+        logger.info("Notebook saved to %s", notebook_path)
+
+
 def run_zerocopy_pipeline(results_dir: str, steps: list, chart_format: str = "svg",
                           chart_dpi: int = 300, notebook_name: str = "exp_a_zerocopy_charts") -> None:
     """Experiment A / A2 visuals pipeline: aggregate -> charts -> notebook on a results dir.
@@ -419,6 +471,25 @@ def main():
             steps=steps,
             chart_format=args.chart_format,
             chart_dpi=args.chart_dpi,
+        )
+        return
+
+    # Experiment B Rivanna-vs-Fargate comparison: aggregate both platforms'
+    # per-world-size dirs, combine, chart, notebook.
+    if args.experiment == "collectives_compare":
+        if not args.rivanna_dir or not args.fargate_dir:
+            parser.error("--rivanna-dir and --fargate-dir are required for --experiment collectives_compare")
+        if not args.output_dir or args.output_dir == "./output":
+            parser.error("--output-dir is required for --experiment collectives_compare")
+        run_collectives_compare_pipeline(
+            rivanna_dir=args.rivanna_dir,
+            fargate_dir=args.fargate_dir,
+            output_dir=args.output_dir,
+            steps=steps,
+            chart_format=args.chart_format,
+            chart_dpi=args.chart_dpi,
+            notebook_name=(args.notebook_name if args.notebook_name != "context_reuse_results"
+                           else "exp_b_collectives_rivanna_vs_fargate"),
         )
         return
 
