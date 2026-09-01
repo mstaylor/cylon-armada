@@ -3,11 +3,13 @@
 Wraps Cylon's FMI communicator (pycylon.net.fmi_communicator) for
 inter-Lambda communication in context reuse workflows.
 
-Available Python-level operations (pycylon exposes only allreduce):
+Available Python-level operations:
   - barrier()        → allreduce(0, SUM) — synchronise all workers
   - reduce_float()   → allreduce(value, SUM/MAX/MIN)
   - reduce_cost()    → reduce_float(cost, SUM)
   - reduce_metrics() → reduce_float per metric key
+  - scatter()/gather()/allgather()/broadcast() — Arrow Table collectives
+  - reduce_table()   → column-wise reduce/allreduce over an Arrow column
 
 Broadcast operations (broadcast_bytes, broadcast_embeddings, etc.) are NOT
 available at the Python level through pycylon. Those paths fall back to Redis
@@ -30,19 +32,6 @@ logger = logging.getLogger(__name__)
 FMI_CHANNEL_TYPES = frozenset({"direct", "direct-redis", "redis", "s3"})
 
 FMI_CHANNEL_ALIASES = {"tcpunch": "direct"}
-
-
-def _resolve_port(channel_type):
-    """Resolve the FMI rendezvous/listen port for a channel type.
-
-    'direct' (TCPunch) dials a remote rendezvous server on RENDEZVOUS_PORT.
-    'direct-redis' binds this rank's own local listen port instead — a
-    different config axis (local bind vs. remote dial) — from FMI_LISTEN_PORT.
-    """
-    normalized = FMI_CHANNEL_ALIASES.get(channel_type.lower(), channel_type.lower())
-    if normalized == "direct-redis":
-        return int(os.environ.get("FMI_LISTEN_PORT", 10000))
-    return int(os.environ.get("RENDEZVOUS_PORT", 10000))
 
 
 def _import_fmi():
@@ -76,13 +65,22 @@ class FMIBridge:
 
     Args:
         world_size:       Total number of Lambda workers.
-        rank:             This worker's rank (0-indexed).
+        rank:             This worker's rank (0-indexed). Advisory only when
+                          redis_host/redis_port are set — the communicator then
+                          assigns the real rank via a Redis INCR counter, and
+                          self.rank is updated to match after construction.
         channel_type:     FMI channel type — 'direct' (TCPunch hole punching),
                           'direct-redis' (plain TCP listen/connect within a VPC via
                           Redis-published addresses; Fargate/ECS), 'redis', or 's3'.
                           Matched case-insensitively. Default: 'redis'.
-        rendezvous_host:  Rendezvous server host (required for 'direct' channel).
-        rendezvous_port:  Rendezvous server port. Default: 10000.
+        rendezvous_host:  TCPunch rendezvous server host — 'direct' channel only.
+        rendezvous_port:  TCPunch rendezvous server port — 'direct' channel only.
+                          Default: 10000.
+        listen_port:      This rank's own local TCP listen port — 'direct-redis'
+                          channel only. A distinct config axis from
+                          rendezvous_port: 'direct' dials a remote server,
+                          'direct-redis' binds a local socket and publishes its
+                          address via Redis. Default: 10000.
         redis_host:       Redis host (required for 'redis' channel).
         redis_port:       Redis port. Default: 6379.
         comm_name:        Communication group name — all workers in the same run
@@ -97,7 +95,7 @@ class FMIBridge:
     """
 
     def __init__(self, world_size, rank, channel_type="redis",
-                 rendezvous_host="", rendezvous_port=10000,
+                 rendezvous_host="", rendezvous_port=10000, listen_port=10000,
                  redis_host="", redis_port=6379,
                  comm_name="cylon_armada", maxtimeout=120000,
                  enableping=False, nonblocking=True, advertise_host=""):
@@ -117,16 +115,20 @@ class FMIBridge:
         self._FMIConfig, self._CylonEnv, self._ReduceOp = _import_fmi()
         self._env = None
         self._comm = None
+        self._ctx = None
+        self._fmi_config = None
 
         if self._FMIConfig is None or self.world_size <= 1:
             return
 
+        port = int(listen_port) if self.channel_type == "direct-redis" else int(rendezvous_port)
+
         try:
-            fmi_config = self._FMIConfig(
+            self._fmi_config = self._FMIConfig(
                 rank=self.rank,
                 world_size=self.world_size,
                 host=rendezvous_host,
-                port=int(rendezvous_port),
+                port=port,
                 maxtimeout=int(maxtimeout),
                 resolveip=True,
                 comm_name=comm_name,
@@ -138,8 +140,10 @@ class FMIBridge:
                 channel_type=self.channel_type,
                 advertise_host=advertise_host,
             )
-            self._env = self._CylonEnv(config=fmi_config, distributed=True)
-            self._comm = self._env.context.get_communicator()
+            self._env = self._CylonEnv(config=self._fmi_config, distributed=True)
+            self._ctx = self._env.context
+            self._comm = self._ctx.get_communicator()
+            self.rank = self._ctx.get_rank()
             logger.info(
                 "FMI communicator initialized: rank=%d world_size=%d channel=%s",
                 self.rank, self.world_size, self.channel_type,
@@ -148,17 +152,19 @@ class FMIBridge:
             logger.error("FMI communicator init failed: %s", e)
             self._env = None
             self._comm = None
+            self._ctx = None
+            self._fmi_config = None
 
     @classmethod
     def from_env(cls):
         """Create FMIBridge from environment variables (Lambda context)."""
-        channel_type = os.environ.get("FMI_CHANNEL_TYPE", "redis")
         return cls(
             world_size=int(os.environ.get("WORLD_SIZE", 1)),
             rank=int(os.environ.get("RANK", 0)),
-            channel_type=channel_type,
+            channel_type=os.environ.get("FMI_CHANNEL_TYPE", "redis"),
             rendezvous_host=os.environ.get("RENDEZVOUS_HOST", ""),
-            rendezvous_port=_resolve_port(channel_type),
+            rendezvous_port=int(os.environ.get("RENDEZVOUS_PORT", 10000)),
+            listen_port=int(os.environ.get("FMI_LISTEN_PORT", 10000)),
             redis_host=os.environ.get("REDIS_HOST", ""),
             redis_port=int(os.environ.get("REDIS_PORT", 6379)),
             advertise_host=os.environ.get("ADVERTISE_HOST", ""),
@@ -187,7 +193,8 @@ class FMIBridge:
             rank=int(payload.get("rank", 0)),
             channel_type=channel_type,
             rendezvous_host=os.environ.get("RENDEZVOUS_HOST", ""),
-            rendezvous_port=_resolve_port(channel_type),
+            rendezvous_port=int(os.environ.get("RENDEZVOUS_PORT", 10000)),
+            listen_port=int(os.environ.get("FMI_LISTEN_PORT", 10000)),
             redis_host=os.environ.get("REDIS_HOST", ""),
             redis_port=int(os.environ.get("REDIS_PORT", 6379)),
             comm_name=comm_name,
@@ -250,6 +257,36 @@ class FMIBridge:
             else:
                 result[key] = value
         return result
+
+    def scatter(self, tables, root=0):
+        if not self.available:
+            raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")
+        return self._comm.scatter(tables, root, self._ctx)
+
+    def gather(self, table, root=0):
+        if not self.available:
+            raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")
+        return self._comm.gather(table, root)
+
+    def allgather(self, table):
+        if not self.available:
+            raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")
+        return self._comm.allgather(table)
+
+    def broadcast(self, table, root=0):
+        if not self.available:
+            raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")
+        return self._comm.broadcast(table, root, self._ctx)
+
+    def reduce_table(self, column, op, root=0):
+        if not self.available:
+            raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")
+        reduce_op = {
+            "sum": self._ReduceOp.SUM,
+            "max": self._ReduceOp.MAX,
+            "min": self._ReduceOp.MIN,
+        }.get(op, self._ReduceOp.SUM)
+        return self._comm.reduce_column(column, reduce_op, root)
 
     # ------------------------------------------------------------------
     # Broadcast — not available via pycylon allreduce; callers fall back

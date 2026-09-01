@@ -152,3 +152,50 @@ class TestAdvertiseHostIsSeparateFromRendezvousHost:
         FMIBridge.from_payload(payload)
 
         assert mock_fmi_config.call_args.kwargs["advertise_host"] == ""
+
+
+class TestListenPortIsSeparateFromRendezvousPort:
+    """listen_port and rendezvous_port are distinct constructor parameters —
+    direct-redis must never fall back to rendezvous_port's default, and direct
+    must never be affected by a caller-supplied listen_port."""
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_direct_redis_uses_listen_port_not_rendezvous_port_default(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge
+
+        mock_fmi_config = MagicMock()
+        mock_import_fmi.return_value = (mock_fmi_config, MagicMock(), MagicMock())
+
+        FMIBridge(world_size=4, rank=1, channel_type="direct-redis",
+                  listen_port=54321, rendezvous_port=10000)
+
+        assert mock_fmi_config.call_args.kwargs["port"] == 54321
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_direct_channel_uses_rendezvous_port_ignores_listen_port(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge
+
+        mock_fmi_config = MagicMock()
+        mock_import_fmi.return_value = (mock_fmi_config, MagicMock(), MagicMock())
+
+        FMIBridge(world_size=4, rank=1, channel_type="direct",
+                  listen_port=54321, rendezvous_port=10000)
+
+        assert mock_fmi_config.call_args.kwargs["port"] == 10000
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_two_direct_redis_ranks_with_distinct_listen_ports_get_distinct_ports(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge
+
+        mock_fmi_config = MagicMock()
+        mock_import_fmi.return_value = (mock_fmi_config, MagicMock(), MagicMock())
+
+        FMIBridge(world_size=4, rank=0, channel_type="direct-redis", listen_port=50100)
+        port_rank0 = mock_fmi_config.call_args.kwargs["port"]
+
+        FMIBridge(world_size=4, rank=1, channel_type="direct-redis", listen_port=50101)
+        port_rank1 = mock_fmi_config.call_args.kwargs["port"]
+
+        assert port_rank0 == 50100
+        assert port_rank1 == 50101
+        assert port_rank0 != port_rank1
