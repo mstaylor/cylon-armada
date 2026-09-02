@@ -107,7 +107,13 @@ WORKER_SCRIPT = textwrap.dedent("""
 
     executor = ArmadaExecutor(bridge)
 
-    input_tables = [tbl(float(i + 1)) for i in range(N)] if r == root else []
+    # world_size==1 has no scatter at all (single_rank just calls fn straight
+    # through, matching plain Runnable.invoke() chaining) — its input is the
+    # one shard directly, not a 1-element list of shards.
+    if N == 1:
+        input_tables = tbl(1.0)
+    else:
+        input_tables = [tbl(float(i + 1)) for i in range(N)] if r == root else []
     result = executor.run(seq, input_tables=input_tables, ctx=local_ctx, root=root)
 
     out = {{"rank": r}}

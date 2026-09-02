@@ -48,6 +48,7 @@ class SpyBridge:
         self.world_size = world_size
         self._scatter_result = scatter_result
         self._reduce_result = reduce_result
+        self._gather_result = None
 
     def scatter(self, tables, root=0):
         self.calls.append(("scatter", tables, root))
@@ -55,7 +56,7 @@ class SpyBridge:
 
     def gather(self, table, root=0):
         self.calls.append(("gather", table, root))
-        return None
+        return self._gather_result
 
     def allgather(self, table):
         self.calls.append(("allgather", table))
@@ -87,12 +88,14 @@ def test_run_dispatches_scatter_then_reduce_through_the_bridge():
 
     assert [c[0] for c in bridge.calls] == ["scatter", "reduce_table"]
 
+    # Scatter moves data BEFORE fn runs: bridge.scatter sees the raw input, not
+    # fn's output — each rank only gets its own shard to compute on afterward.
     scatter_call = bridge.calls[0]
-    assert scatter_call[1] == "prepared(raw-input)"
+    assert scatter_call[1] == "raw-input"
     assert scatter_call[2] == 0
 
     reduce_call = bridge.calls[1]
-    assert reduce_call[1] == f"column({scattered_value})"
+    assert reduce_call[1] == f"column(prepared({scattered_value}))"
     assert reduce_call[3] == 0
 
     assert result == reduced_value
@@ -135,3 +138,47 @@ def test_run_broadcast_dispatches_through_the_bridge():
     assert [c[0] for c in bridge.calls] == ["broadcast"]
     assert bridge.calls[0][1] == "ack(findings)"
     assert result == "ack(findings)"
+
+
+def test_run_scattergather_computes_locally_then_gathers_no_scatter_call():
+    s = _schema()
+    gathered_value = ["shard-0-embedding", "shard-1-embedding"]
+    bridge = SpyBridge()
+    bridge._gather_result = gathered_value
+
+    seq = ArmadaOperator("Embed", CollectivePattern.ScatterGather, s, s,
+                         fn=lambda x: f"embedded({x})")
+    executor = ArmadaExecutor(bridge)
+    result = executor.run(seq, input_tables="my-shard", ctx=None)
+
+    # ScatterGather computes locally first (each rank already has its own
+    # shard from the prior Scatter step) then only gathers — no redundant
+    # scatter call at this operator.
+    assert [c[0] for c in bridge.calls] == ["gather"]
+    assert bridge.calls[0][1] == "embedded(my-shard)"
+    assert result == gathered_value
+
+
+def test_world_size_one_equals_plain_sequence_invoke():
+    """The swap-equivalence seed for E-SP2: at world_size==1, executor.run()
+    must produce the exact same result as calling seq.invoke() directly, with
+    no bridge involved at all — proving single_rank execution really is plain
+    local invocation, not a distribution-shape-preserving approximation of it.
+    """
+    s = _schema()
+    bridge = SpyBridge(world_size=1)
+
+    seq = (
+        ArmadaOperator("Preprocess", CollectivePattern.Scatter, s, s, fn=lambda x: x + 1)
+        | ArmadaOperator("Embed", CollectivePattern.ScatterGather, s, s, fn=lambda x: x * 2)
+        | ArmadaOperator("Retrieve", CollectivePattern.Reduce, s, s, fn=lambda x: x - 3)
+        | ArmadaOperator("Reason", CollectivePattern.PointToPoint, s, s, fn=lambda x: x + 100)
+        | ArmadaOperator("MemoryUpsert", CollectivePattern.Broadcast, s, s, fn=lambda x: x)
+    )
+
+    executor = ArmadaExecutor(bridge)
+    executor_result = executor.run(seq, input_tables=5, ctx=None)
+    invoke_result = seq.invoke(5)
+
+    assert bridge.calls == []
+    assert executor_result == invoke_result == (((5 + 1) * 2) - 3) + 100

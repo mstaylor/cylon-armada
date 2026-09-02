@@ -49,9 +49,15 @@ class ArmadaOperator(Runnable):
         return f"ArmadaOperator({self.name!r}, pattern={self.pattern})"
 
 
-class ArmadaSequence:
+class ArmadaSequence(Runnable):
     def __init__(self, operators: List[ArmadaOperator]):
         self.operators = list(operators)
+
+    def invoke(self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any) -> Any:
+        result = input
+        for op in self.operators:
+            result = op.invoke(result, config, **kwargs)
+        return result
 
     def __or__(self, other: ArmadaOperator) -> "ArmadaSequence":
         return ArmadaSequence(self.operators + [other])

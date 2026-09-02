@@ -78,6 +78,22 @@ def test_sequence_or_operator_appends():
     assert [op.name for op in seq2.operators] == ["A", "B", "C"]
 
 
+def test_sequence_is_a_langchain_runnable():
+    s = _schema()
+    a = ArmadaOperator("A", CollectivePattern.Scatter, s, s, fn=lambda x: x)
+    b = ArmadaOperator("B", CollectivePattern.Reduce, s, s, fn=lambda x: x)
+    assert isinstance(a | b, Runnable)
+
+
+def test_sequence_invoke_chains_each_operators_fn_in_order():
+    s = _schema()
+    a = ArmadaOperator("A", CollectivePattern.Scatter, s, s, fn=lambda x: x + 1)
+    b = ArmadaOperator("B", CollectivePattern.ScatterGather, s, s, fn=lambda x: x * 2)
+    c = ArmadaOperator("C", CollectivePattern.Reduce, s, s, fn=lambda x: x - 3)
+    seq = a | b | c
+    assert seq.invoke(5) == ((5 + 1) * 2) - 3
+
+
 def test_operator_carries_schema_and_pattern():
     s_in = pa.schema([pa.field("text", pa.large_utf8())])
     s_out = pa.schema([pa.field("chunks", pa.large_utf8())])

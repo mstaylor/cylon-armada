@@ -49,12 +49,17 @@ def lower(seq):
 class ArmadaExecutor:
     """Drives a compiled ExecutionPlan over a FMIBridge.
 
-    At world_size <= 1 every collective is mathematically an identity
-    operation with a single participant, so the executor computes that
-    identity directly rather than calling the bridge — this is not an
-    in-process fallback masking a broken distributed run, it is what the
-    same collective would produce for a single rank. For world_size > 1 an
-    unavailable bridge always raises; there is no silent local execution.
+    Scatter moves data before computing (each rank must have its own shard
+    before it can run fn on it); every other pattern computes first, then
+    moves the result (each rank computes its own contribution, then that
+    contribution is consolidated/broadcast). Getting this order right matters
+    beyond correctness at world_size > 1: at world_size <= 1 there is exactly
+    one participant, so every pattern collapses to the same thing — call fn,
+    do nothing else — which only equals plain Runnable.invoke() chaining
+    (ArmadaSequence.invoke, no distribution at all) if the *real* dispatch
+    order for every pattern already treats fn as a pure, uniformly-shaped
+    per-rank transform. For world_size > 1 an unavailable bridge always
+    raises; there is no silent local execution.
     """
 
     def __init__(self, bridge):
@@ -73,23 +78,26 @@ class ArmadaExecutor:
         current = input_tables
 
         for op in operators:
-            local_result = op.fn(current)
             pattern = plan.assignments[op.name]
 
+            if single_rank:
+                current = op.fn(current)
+                continue
+
             if pattern == CollectivePattern.Scatter:
-                current = local_result[root] if single_rank else self.bridge.scatter(local_result, root)
+                current = self.bridge.scatter(current, root)
+                current = op.fn(current)
             elif pattern == CollectivePattern.ScatterGather:
-                if single_rank:
-                    current = [local_result]
-                else:
-                    scattered = self.bridge.scatter(local_result, root)
-                    current = self.bridge.gather(scattered, root)
+                local_result = op.fn(current)
+                current = self.bridge.gather(local_result, root)
             elif pattern == CollectivePattern.Reduce:
-                current = local_result if single_rank else self.bridge.reduce_table(local_result, reduce_op, root)
+                local_result = op.fn(current)
+                current = self.bridge.reduce_table(local_result, reduce_op, root)
             elif pattern == CollectivePattern.PointToPoint:
-                current = local_result
+                current = op.fn(current)
             elif pattern == CollectivePattern.Broadcast:
-                current = local_result if single_rank else self.bridge.broadcast(local_result, root)
+                local_result = op.fn(current)
+                current = self.bridge.broadcast(local_result, root)
             else:
                 raise ValueError(f"unknown collective pattern {pattern!r} for operator {op.name!r}")
 
