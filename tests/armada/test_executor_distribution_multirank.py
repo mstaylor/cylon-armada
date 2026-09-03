@@ -68,29 +68,13 @@ WORKER_SCRIPT = textwrap.dedent("""
     from pycylon import CylonContext, Table
     from pycylon.data.column import Column
 
-    from armada.executor import ArmadaExecutor
+    from armada.executor import ArmadaExecutor, required_peer_map
     from armada.operator import ArmadaOperator
     from communicator.fmi_bridge import FMIBridge
     from cylon_armada.dag_compiler import CollectivePattern
 
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
-
-    bridge = FMIBridge(
-        world_size=world_size, rank=rank, channel_type="direct-redis",
-        listen_port=int(os.environ["FMI_LISTEN_PORT"]),
-        redis_host=os.environ["REDIS_HOST"], redis_port=int(os.environ["REDIS_PORT"]),
-        comm_name=os.environ["COMM_NAME"], maxtimeout=20000,
-        advertise_host="127.0.0.1",
-    )
-    r = bridge.rank
-    N = bridge.world_size
-    root = 0
-
-    local_ctx = bridge._ctx if bridge._ctx is not None else CylonContext()
-
-    def tbl(v, n=3):
-        return Table.from_arrow(local_ctx, pa.table({{"v": pa.array(np.full(n, v, dtype=np.float32))}}))
 
     s = pa.schema([pa.field("v", pa.float32())])
 
@@ -100,10 +84,33 @@ WORKER_SCRIPT = textwrap.dedent("""
     def retrieve_fn(table):
         return Column(table.to_pandas()["v"].to_numpy().astype(np.float32))
 
+    # Built before the bridge: the channel establishes its connections while the
+    # communicator is constructed, so the peer map has to be derived first.
     seq = (
         ArmadaOperator("Preprocess", CollectivePattern.Scatter, s, s, fn=preprocess_fn)
         | ArmadaOperator("Retrieve", CollectivePattern.Reduce, s, s, fn=retrieve_fn)
     )
+
+    peers = None
+    if os.environ.get("USE_REQUIRED_PEERS") == "1":
+        peers = required_peer_map(seq, world_size)
+
+    bridge = FMIBridge(
+        world_size=world_size, rank=rank, channel_type="direct-redis",
+        listen_port=int(os.environ["FMI_LISTEN_PORT"]),
+        redis_host=os.environ["REDIS_HOST"], redis_port=int(os.environ["REDIS_PORT"]),
+        comm_name=os.environ["COMM_NAME"], maxtimeout=20000,
+        advertise_host="127.0.0.1",
+        required_peers=peers,
+    )
+    r = bridge.rank
+    N = bridge.world_size
+    root = 0
+
+    local_ctx = bridge._ctx if bridge._ctx is not None else CylonContext()
+
+    def tbl(v, n=3):
+        return Table.from_arrow(local_ctx, pa.table({{"v": pa.array(np.full(n, v, dtype=np.float32))}}))
 
     executor = ArmadaExecutor(bridge)
 
@@ -129,7 +136,7 @@ WORKER_SCRIPT = textwrap.dedent("""
 """)
 
 
-def _run_rank(rank, world_size, comm_name, result_dir, port_base):
+def _run_rank(rank, world_size, comm_name, result_dir, port_base, restrict_peers=False):
     script_path = os.path.join(result_dir, f"worker_{rank}.py")
     with open(script_path, "w") as f:
         f.write(WORKER_SCRIPT.format(scripts_dir=_SCRIPTS))
@@ -144,6 +151,7 @@ def _run_rank(rank, world_size, comm_name, result_dir, port_base):
         "FMI_LISTEN_PORT": str(port_base + rank),
         "ADVERTISE_HOST": "127.0.0.1",
         "RESULT_PATH": os.path.join(result_dir, f"result_{rank}.json"),
+        "USE_REQUIRED_PEERS": "1" if restrict_peers else "0",
     })
     log_path = os.path.join(result_dir, f"log_{rank}.txt")
     log_file = open(log_path, "w")
@@ -152,13 +160,14 @@ def _run_rank(rank, world_size, comm_name, result_dir, port_base):
     return proc, log_file, log_path
 
 
-def _run_world(world_size, tmp_path):
+def _run_world(world_size, tmp_path, restrict_peers=False):
     comm_name = f"armada_test_executor_{uuid.uuid4().hex[:8]}"
     result_dir = str(tmp_path)
     port_base = 20000 + (os.getpid() % 20000)
     procs = []
     for rank in range(world_size):
-        proc, log_file, log_path = _run_rank(rank, world_size, comm_name, result_dir, port_base)
+        proc, log_file, log_path = _run_rank(rank, world_size, comm_name, result_dir,
+                                             port_base, restrict_peers)
         procs.append((rank, proc, log_file, log_path))
 
     try:
@@ -187,8 +196,24 @@ def _run_world(world_size, tmp_path):
 
 @pytest.mark.skipif(not _redis_available(), reason="host redis not reachable")
 @pytest.mark.skipif(not _pycylon_fmi_available(), reason="pycylon FMI native stack not importable")
-@pytest.mark.parametrize("world_size", [1, 4, 8])
+@pytest.mark.parametrize("world_size", [1, 2, 3, 4, 5, 8])
 def test_executor_scatter_reduce_correct_over_real_collectives(world_size, tmp_path):
     results = _run_world(world_size, tmp_path)
+    expected_sum = [float(sum(range(1, world_size + 1)))] * 3
+    assert results[0]["reduce_result"] == expected_sum
+
+
+@pytest.mark.skipif(not _redis_available(), reason="host redis not reachable")
+@pytest.mark.skipif(not _pycylon_fmi_available(), reason="pycylon FMI native stack not importable")
+@pytest.mark.parametrize("world_size", [2, 3, 4, 5, 8])
+def test_same_result_when_only_plan_required_peers_are_connected(world_size, tmp_path):
+    """Restricting the connection set to what the plan needs must not change the answer.
+
+    FMI's direct channel otherwise connects every rank to every other rank
+    (N(N-1)/2 pairings) because it can't know the schedule. armada does know it,
+    so it passes the derived peer set down — a wrong or asymmetric set shows up
+    here as a hang or a wrong reduce, not as a silent degradation.
+    """
+    results = _run_world(world_size, tmp_path, restrict_peers=True)
     expected_sum = [float(sum(range(1, world_size + 1)))] * 3
     assert results[0]["reduce_result"] == expected_sum

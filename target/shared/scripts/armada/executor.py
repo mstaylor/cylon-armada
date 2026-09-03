@@ -27,6 +27,7 @@ executing locally, so the executor can never mask a broken distributed run.
 from cylon_armada.dag_compiler import AgentOperator, CollectivePattern, WorkflowDAG, compile_workflow
 
 from armada.operator import ArmadaOperator, ArmadaSequence
+from armada.topology import format_peer_map, peer_map
 
 
 def _operators(seq):
@@ -44,6 +45,28 @@ def lower(seq):
     edges = [(operators[i].name, operators[i + 1].name) for i in range(len(operators) - 1)]
     dag = WorkflowDAG(agent_operators, edges)
     return compile_workflow(dag)
+
+
+def required_peer_map(seq, world_size, roots=(0,)):
+    """Serialized FMI_REQUIRED_PEERS map for the collectives this sequence compiles to.
+
+    Pass to FMIBridge(required_peers=...) so the channel connects only the peers
+    the plan will use rather than the full N(N-1)/2 mesh. It has to be handed to
+    the bridge's constructor, not to run(): the channel establishes its
+    connections while the communicator is being built, which is over by the time
+    an executor exists.
+
+        peers = required_peer_map(seq, world_size)
+        bridge = FMIBridge(world_size=world_size, rank=rank, required_peers=peers, ...)
+        ArmadaExecutor(bridge).run(seq, ...)
+
+    Returns "" for world_size <= 1, which leaves the channel unrestricted —
+    there is nothing to connect at a single rank anyway.
+    """
+    if world_size <= 1:
+        return ""
+    patterns = set(lower(seq).assignments.values())
+    return format_peer_map(peer_map(world_size, patterns, roots))
 
 
 class ArmadaExecutor:

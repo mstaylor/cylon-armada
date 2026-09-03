@@ -92,13 +92,18 @@ class FMIBridge:
                           which is TCPunch-specific. Leave unset (default) on
                           Fargate/ECS to let ECS metadata auto-discovery resolve
                           the task's real address.
+        required_peers:   Serialized per-rank connection map from
+                          armada.topology.format_peer_map(), restricting the
+                          channel to the peers the compiled plan actually uses
+                          instead of the full N(N-1)/2 mesh. None keeps the mesh.
     """
 
     def __init__(self, world_size, rank, channel_type="redis",
                  rendezvous_host="", rendezvous_port=10000, listen_port=10000,
                  redis_host="", redis_port=6379,
                  comm_name="cylon_armada", maxtimeout=120000,
-                 enableping=False, nonblocking=True, advertise_host=""):
+                 enableping=False, nonblocking=True, advertise_host="",
+                 required_peers=None):
         self.world_size = int(world_size)
         self.rank = int(rank)
 
@@ -120,6 +125,17 @@ class FMIBridge:
 
         if self._FMIConfig is None or self.world_size <= 1:
             return
+
+        # Read by Direct::init() in cylon's C++ FMI channel, which otherwise
+        # eagerly connects to every peer — N(N-1)/2 rendezvous pairings. Must be
+        # set before the communicator is constructed, since that is when the
+        # channel establishes its connections. It carries every rank's row
+        # ("0:1,2;1:0,3") because the real rank is only assigned by the Redis INCR
+        # counter afterwards — see armada.topology.format_peer_map.
+        if required_peers:
+            os.environ["FMI_REQUIRED_PEERS"] = required_peers
+        else:
+            os.environ.pop("FMI_REQUIRED_PEERS", None)
 
         port = int(listen_port) if self.channel_type == "direct-redis" else int(rendezvous_port)
 
