@@ -65,6 +65,13 @@ locals {
     { name = "RENDEZVOUS_PORT", value = tostring(var.rendezvous_port) },
     { name = "FMI_LISTEN_PORT", value = tostring(var.fmi_direct_redis_port) },
     { name = "CYLON_SESSION_ID", value = var.project_name },
+    { name = "INFERENCE_DEVICE", value = var.inference_device },
+    { name = "INFERENCE_BATCH_SIZE", value = tostring(var.inference_batch_size) },
+    { name = "ASTROMAE_MODEL_PATH", value = "${var.cosmic_ai_local_dir}/model.pt" },
+    { name = "ASTROMAE_DATA_PATH", value = "${var.cosmic_ai_local_dir}/data.pt" },
+    { name = "ASTROMAE_MODEL_KEY", value = var.cosmic_ai_model_key },
+    { name = "ASTROMAE_DATA_KEY", value = var.cosmic_ai_data_key },
+    { name = "ARTIFACT_BUCKET", value = var.scripts_bucket_name },
   ]
 
   # Template variables for Lambda Step Functions ASL files
@@ -135,6 +142,35 @@ data "aws_s3_bucket" "results" {
 
 data "aws_s3_bucket" "scripts" {
   bucket = var.scripts_bucket_name
+}
+
+# Cosmic AI artifacts. Each ECS task pulls these at startup instead of carrying
+# ~90MB in the image. etag tracks content, so replacing a file locally triggers a
+# re-upload on the next apply. The count is gated on the file actually existing
+# rather than on the variable being set: the sources default to the standard
+# checkout so a plain apply uploads them with no tfvars, while an apply on a
+# machine without that checkout silently skips them instead of failing. try()
+# covers the empty-string case, where fileexists itself errors.
+resource "aws_s3_object" "cosmic_ai_model" {
+  count = try(fileexists(var.cosmic_ai_model_source), false) ? 1 : 0
+
+  bucket = data.aws_s3_bucket.scripts.id
+  key    = var.cosmic_ai_model_key
+  source = var.cosmic_ai_model_source
+  etag   = filemd5(var.cosmic_ai_model_source)
+
+  tags = local.common_tags
+}
+
+resource "aws_s3_object" "cosmic_ai_data" {
+  count = try(fileexists(var.cosmic_ai_data_source), false) ? 1 : 0
+
+  bucket = data.aws_s3_bucket.scripts.id
+  key    = var.cosmic_ai_data_key
+  source = var.cosmic_ai_data_source
+  etag   = filemd5(var.cosmic_ai_data_source)
+
+  tags = local.common_tags
 }
 
 # ---------------------------------------------------------------------------
@@ -428,6 +464,48 @@ resource "aws_ecs_task_definition" "python_armada" {
         "awslogs-group"         = aws_cloudwatch_log_group.ecs_python.name
         "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "ecs"
+      }
+    }
+  }])
+
+  tags = local.common_tags
+}
+
+# Cosmic AI inference tasks (Experiment E). A separate family from
+# python_armada purely so the PyTorch layer stays off every other ECS
+# experiment: run_task cannot override a container image, so a different image
+# requires a different task definition. Everything else — roles, env, log
+# group, entry point — is identical.
+resource "aws_ecs_task_definition" "cosmic_armada" {
+  family                   = "${var.project_name}-cosmic"
+  requires_compatibilities = ["FARGATE", "EC2"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.ecs_python_cpu)
+  memory                   = tostring(var.ecs_python_memory_mb)
+  task_role_arn            = aws_iam_role.ecs_task.arn
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+
+  container_definitions = jsonencode([{
+    name      = var.ecs_container_name
+    image     = "${data.aws_ecr_repository.main.repository_url}:${var.cosmic_image_tag}"
+    essential = true
+
+    entryPoint = ["/opt/conda/bin/conda", "run", "--no-capture-output", "-n", "cylon_dev"]
+    command    = ["python", "/cylon-armada/armada_ecs_runner.py"]
+
+    environment = local.ecs_env
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.ecs_python.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "cosmic"
       }
     }
   }])

@@ -30,22 +30,22 @@ BANDS = ("u", "g", "r", "i", "z")
 _DEFAULT_TEMPLATES = {
     "redshift_analysis": (
         "Analyze the photometric redshift prediction z={z_pred:.3f} "
-        "(true z={z_true:.3f}) for a galaxy with SDSS magnitudes "
-        "{band_str}. Assess the prediction accuracy and classify "
-        "the likely galaxy morphological type based on the color profile."
+        "(true z={z_true:.3f}) for a galaxy whose standardized ugriz "
+        "photometry features are {band_str}. Assess the prediction "
+        "accuracy and what it implies for this galaxy's distance estimate."
     ),
-    "color_classification": (
-        "Given SDSS color indices {color_str} and predicted redshift "
-        "z={z_pred:.3f}, classify this galaxy's morphological type "
-        "and assess whether the colors are consistent with the "
-        "predicted redshift."
+    "photometry_classification": (
+        "Given standardized ugriz photometry features {band_str} and "
+        "predicted redshift z={z_pred:.3f}, assess whether the "
+        "photometry is consistent with the predicted redshift and "
+        "flag any features that look anomalous."
     ),
     "outlier_analysis": (
         "The AstroMAE model predicted z={z_pred:.3f} for a galaxy "
         "with true spectroscopic redshift z={z_true:.3f} "
-        "(residual={residual:.4f}). The galaxy has magnitudes {band_str}. "
-        "Analyze whether this prediction error is significant and "
-        "identify possible causes."
+        "(residual={residual:.4f}). Its standardized ugriz photometry "
+        "features are {band_str}. Analyze whether this prediction error "
+        "is significant and identify possible causes."
     ),
     "batch_summary": (
         "Summarize the inference results for a batch of {n} galaxies: "
@@ -58,8 +58,8 @@ _DEFAULT_TEMPLATES = {
         "For a serverless inference run processing {n} galaxy images "
         "in {time_s:.1f} seconds at {throughput:.1f} Gbps throughput, "
         "analyze the cost-effectiveness compared to traditional HPC. "
-        "The batch used {batch_size} samples with magnitudes ranging "
-        "{mag_range}."
+        "The batch used {batch_size} samples with standardized photometry "
+        "features ranging {feature_range}."
     ),
 }
 
@@ -79,7 +79,7 @@ def load_config(config_path):
         {
             "templates": {
                 "redshift_analysis": "...",
-                "color_classification": "...",
+                "photometry_classification": "...",
                 ...
             },
             "survey_types": ["...", "..."],
@@ -142,20 +142,17 @@ def _resolve_config(templates=None, survey_types=None, config_path=None):
     return resolved_templates, resolved_survey_types, resolved_bands
 
 
-def _format_bands(magnitudes, bands=BANDS):
-    """Format magnitude values as 'u=22.31, g=21.08, ...'."""
+def _format_bands(photometry, bands=BANDS):
+    """Format per-band photometry features as 'u=0.37, g=1.21, ...'.
+
+    The values AstroMAE consumes are standardized per band (zero mean, unit
+    variance), not apparent magnitudes, so they are never labelled as
+    magnitudes in a prompt. Colour indices are deliberately not derived from
+    them either: a difference of two standardized values is not a colour.
+    """
     return ", ".join(
-        f"{band}={mag:.2f}" for band, mag in zip(bands, magnitudes)
+        f"{band}={value:.2f}" for band, value in zip(bands, photometry)
     )
-
-
-def _format_colors(magnitudes, bands=BANDS):
-    """Format color indices as 'u-g=1.23, g-r=0.63, ...'."""
-    colors = []
-    for i in range(len(bands) - 1):
-        diff = magnitudes[i] - magnitudes[i + 1]
-        colors.append(f"{bands[i]}-{bands[i+1]}={diff:.2f}")
-    return ", ".join(colors)
 
 
 def generate_tasks_from_results(
@@ -174,7 +171,8 @@ def generate_tasks_from_results(
     Args:
         predictions: Array of predicted redshifts (N,).
         true_redshifts: Array of true redshifts (N,).
-        magnitudes: Array of magnitude values (N, 5).
+        magnitudes: Array of per-band photometry features (N, 5). These are the
+            standardized values AstroMAE consumes, not apparent magnitudes.
         metrics: Optional inference metrics dict (for batch/cost tasks).
         max_tasks: Maximum number of tasks to generate. If None, generates
             one task per sample plus batch-level tasks.
@@ -226,7 +224,6 @@ def generate_tasks_from_results(
         z_true = float(true_redshifts[idx])
         residual = float(residuals[idx])
         band_str = _format_bands(mags, resolved_bands)
-        color_str = _format_colors(mags, resolved_bands)
 
         # Choose template based on residual — outliers get outlier_analysis
         if residual > outlier_threshold:
@@ -241,9 +238,9 @@ def generate_tasks_from_results(
                 z_pred=z_pred, z_true=z_true, band_str=band_str,
             ))
         else:
-            template = resolved_templates.get("color_classification", "")
+            template = resolved_templates.get("photometry_classification", "")
             tasks.append(template.format(
-                z_pred=z_pred, color_str=color_str,
+                z_pred=z_pred, band_str=band_str,
             ))
 
     # Batch-level tasks — summaries that cluster with each other
@@ -264,14 +261,14 @@ def generate_tasks_from_results(
             ))
 
         template = resolved_templates.get("cost_analysis", "")
-        mag_min = float(np.min(magnitudes))
-        mag_max = float(np.max(magnitudes))
+        feature_min = float(np.min(magnitudes))
+        feature_max = float(np.max(magnitudes))
         tasks.append(template.format(
             n=n_samples,
             time_s=metrics.get("total_time_s", 0),
             throughput=metrics.get("throughput_bps", 0) / 1e9,
             batch_size=metrics.get("batch_size", 512),
-            mag_range=f"{mag_min:.1f}-{mag_max:.1f}",
+            feature_range=f"{feature_min:.1f}-{feature_max:.1f}",
         ))
 
     logger.info(

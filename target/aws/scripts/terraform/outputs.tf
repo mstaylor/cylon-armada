@@ -59,6 +59,16 @@ output "ecs_task_definition_arn" {
   value       = aws_ecs_task_definition.python_armada.arn
 }
 
+output "cosmic_task_definition_arn" {
+  description = "ARN of the Cosmic AI inference ECS task definition (Experiment E)"
+  value       = aws_ecs_task_definition.cosmic_armada.arn
+}
+
+output "cosmic_task_definition_family" {
+  description = "Family name the Cosmic AI sweep driver passes to run_task"
+  value       = aws_ecs_task_definition.cosmic_armada.family
+}
+
 output "ecs_task_role_arn" {
   description = "ARN of the ECS task IAM role"
   value       = aws_iam_role.ecs_task.arn

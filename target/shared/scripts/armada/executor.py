@@ -24,10 +24,28 @@ in-process fallback — an unavailable bridge raises rather than silently
 executing locally, so the executor can never mask a broken distributed run.
 """
 
+from enum import Enum
+
 from cylon_armada.dag_compiler import AgentOperator, CollectivePattern, WorkflowDAG, compile_workflow
 
 from armada.operator import ArmadaOperator, ArmadaSequence
 from armada.topology import format_peer_map, peer_map
+
+
+class InputPlacement(Enum):
+    """Where the workflow's input already lives when run() is called.
+
+    Centralized is the default and the shape the five canonical operators
+    assume: root holds every rank's shard and the Scatter operator moves them
+    out. PreDistributed is for a workload whose upstream stage already ran
+    per-rank — AstroMAE inference over a shard of the survey, say — so each
+    rank holds its own input and scattering it would be a redundant round
+    trip through root. Only the Scatter operator's data movement differs;
+    every other pattern, and every operator's fn, is unchanged.
+    """
+
+    Centralized = "centralized"
+    PreDistributed = "pre_distributed"
 
 
 def _operators(seq):
@@ -88,7 +106,75 @@ class ArmadaExecutor:
     def __init__(self, bridge):
         self.bridge = bridge
 
-    def run(self, seq, input_tables, ctx, root=0, reduce_op="sum"):
+    @staticmethod
+    def _for_transport(value, ctx):
+        """pyarrow -> pycylon at the collective boundary.
+
+        Operators are Arrow-native (their contracts are pyarrow schemas, which is
+        what A2 checks), but FMIBridge's collectives move pycylon Tables. The
+        executor owns transport, so it owns this adaptation rather than pushing
+        pycylon types into every operator body. from_arrow/to_arrow wrap the same
+        buffers, so this is not a serialization step on the edge. Anything that is
+        not a pyarrow Table (a Column bound for reduce, a spy's stand-in value)
+        passes through untouched.
+        """
+        if ctx is None:
+            return value
+        try:
+            import pyarrow as pa
+            from pycylon import Table as CylonTable
+        except ImportError:
+            return value
+
+        if isinstance(value, list):
+            return [ArmadaExecutor._for_transport(v, ctx) for v in value]
+        if isinstance(value, pa.Table):
+            return CylonTable.from_arrow(ctx, value)
+        return value
+
+    @staticmethod
+    def _from_transport(value):
+        """pycylon -> pyarrow on the way back out of a collective."""
+        try:
+            from pycylon import Table as CylonTable
+        except ImportError:
+            return value
+
+        if isinstance(value, list):
+            return [ArmadaExecutor._from_transport(v) for v in value]
+        if isinstance(value, CylonTable):
+            return value.to_arrow()
+        return value
+
+    def _reduce(self, local_result, ctx, root, reduce_op):
+        """Reduce a rank's contribution, numerically or structurally.
+
+        FMIBridge.reduce_table maps onto reduce_column, which applies an
+        arithmetic op (sum/min/max) to a numeric column. A Reduce whose payload is
+        a table of structured records — Retrieve's ranked_docs, say — has no
+        arithmetic reduction; combining those means concatenating each rank's
+        records at root. MPI draws the same line: MPI_Reduce takes arithmetic ops,
+        and structural reductions are expressed as a gather plus a local combine.
+        Non-root ranks come back empty, as they would from any reduction to root.
+        """
+        try:
+            import pyarrow as pa
+        except ImportError:
+            pa = None
+
+        if pa is None or not isinstance(local_result, pa.Table):
+            return self._from_transport(
+                self.bridge.reduce_table(local_result, reduce_op, root))
+
+        gathered = self._from_transport(
+            self.bridge.gather(self._for_transport(local_result, ctx), root))
+        if not gathered:
+            return local_result.schema.empty_table()
+        populated = [t for t in gathered if t.num_rows]
+        return pa.concat_tables(populated) if populated else gathered[0]
+
+    def run(self, seq, input_tables, ctx, root=0, reduce_op="sum",
+            placement=InputPlacement.Centralized):
         single_rank = self.bridge.world_size <= 1
         if not single_rank and not self.bridge.available:
             raise RuntimeError(
@@ -108,19 +194,23 @@ class ArmadaExecutor:
                 continue
 
             if pattern == CollectivePattern.Scatter:
-                current = self.bridge.scatter(current, root)
-                current = op.fn(current)
+                if placement is InputPlacement.PreDistributed:
+                    current = op.fn(current)
+                else:
+                    current = self.bridge.scatter(self._for_transport(current, ctx), root)
+                    current = op.fn(self._from_transport(current))
             elif pattern == CollectivePattern.ScatterGather:
                 local_result = op.fn(current)
-                current = self.bridge.gather(local_result, root)
+                current = self._from_transport(
+                    self.bridge.gather(self._for_transport(local_result, ctx), root))
             elif pattern == CollectivePattern.Reduce:
-                local_result = op.fn(current)
-                current = self.bridge.reduce_table(local_result, reduce_op, root)
+                current = self._reduce(op.fn(current), ctx, root, reduce_op)
             elif pattern == CollectivePattern.PointToPoint:
                 current = op.fn(current)
             elif pattern == CollectivePattern.Broadcast:
                 local_result = op.fn(current)
-                current = self.bridge.broadcast(local_result, root)
+                current = self._from_transport(
+                    self.bridge.broadcast(self._for_transport(local_result, ctx), root))
             else:
                 raise ValueError(f"unknown collective pattern {pattern!r} for operator {op.name!r}")
 

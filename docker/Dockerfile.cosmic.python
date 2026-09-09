@@ -1,0 +1,58 @@
+# Cosmic AI inference image (Experiment E).
+#
+# A thin layer on the standard Python runner image, adding only what AstroMAE
+# needs. It is deliberately NOT folded into Dockerfile.fmi.python: that image is
+# shared by the Python Lambda functions, and Experiment E success criterion 5
+# compares Lambda cold-start latency between the Python and Rust-WASM workers.
+# Adding ~1GB of PyTorch the Lambda path never executes would slow the Python
+# arm's cold start and confound the comparison the WASM claim rests on. Keeping
+# it here means only the ECS tasks that run inference pay for it.
+#
+# Build (cross-compile: Fargate tasks are X86_64, the dev VM is aarch64):
+#   docker build --platform=linux/amd64 \
+#       -t cylon-armada-cosmic-python \
+#       -f docker/Dockerfile.cosmic.python .
+#
+# Against an ECR base rather than a local tag:
+#   --build-arg BASE_IMAGE=<acct>.dkr.ecr.<region>.amazonaws.com/<repo>:cylon-armada-fmi-python
+
+ARG BASE_IMAGE=cylon-armada-fmi-python
+FROM ${BASE_IMAGE}
+
+# CPU wheels only. Lambda has no GPU and neither does Fargate — GPU inference
+# goes to the ECS EC2 arm via Dockerfile.gpu, which would need its own CUDA
+# torch since it currently carries cuDF/cupy for gcylon rather than PyTorch.
+#
+# timm is pinned and installed with --no-deps deliberately. The AstroMAE weights
+# file is a pickled model rather than a state_dict, so unpickling reconstructs
+# timm's layer classes, and only 0.4.x carries the signatures the model was
+# trained against; --no-deps stops timm resolving a torch of its own over the
+# one installed here. torchvision is never imported directly, but timm.data
+# imports it and its compiled extensions are ABI-bound to a specific torch, so
+# the two versions have to move together.
+
+ARG TORCH_VERSION=2.5.0
+ARG TORCHVISION_VERSION=0.20.0
+ARG TIMM_VERSION=0.4.12
+
+SHELL ["/bin/bash", "--login", "-c"]
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    pip install "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
+        --index-url https://download.pytorch.org/whl/cpu && \
+    pip install "timm==${TIMM_VERSION}" --no-deps && \
+    python -c "import torch, torchvision, timm; \
+print('torch', torch.__version__, '| torchvision', torchvision.__version__, '| timm', timm.__version__)"
+
+# Fail the build rather than a Fargate task if the vendored AstroMAE sources
+# ever drift from what the weights file's pickle expects. The weights are not in
+# the image (each task pulls them from S3), so this checks the import graph the
+# aliases in cosmic_ai.inference set up, not the load itself.
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    cd /cylon-armada/scripts && \
+    python -c "from cosmic_ai.inference import _register_model_modules; \
+_register_model_modules(); import sys; \
+assert 'NormalCell' in sys.modules and 'blocks.photoz' in sys.modules; \
+print('AstroMAE module aliases OK')"

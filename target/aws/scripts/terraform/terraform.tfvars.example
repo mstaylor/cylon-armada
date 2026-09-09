@@ -79,3 +79,25 @@ step_functions_max_concurrency = 10
 # Rendezvous server (FMI direct channel)
 rendezvous_host = "cylon-rendezvous.aws-cylondata.com"
 rendezvous_port = 10000
+
+# Cosmic AI / AstroMAE inference (Experiment E)
+# Nothing below is required — the defaults in variables.tf already point at the
+# standard AI-for-Astronomy checkout, upload the weights and the SDSS partition
+# to the scripts bucket on apply, and have each ECS task pull them at startup
+# rather than baking ~90MB into the image. The upload skips itself when a source
+# file is not present, so an apply works on a machine without that checkout.
+# Uncomment only to override.
+
+# Artifact sources — set these if your checkout lives elsewhere.
+# cosmic_ai_model_source = "/path/to/Mixed_Inception_z_VITAE_Base_Img_Full_New_Full.pt"
+# cosmic_ai_data_source  = "/path/to/resized_inference.pt"
+
+# Where the artifacts land in S3 and where each task downloads them to.
+# cosmic_ai_model_key = "cylon-armada/cosmic-ai/astromae_model.pt"
+# cosmic_ai_data_key  = "cylon-armada/cosmic-ai/resized_inference.pt"
+# cosmic_ai_local_dir = "/tmp/astromae"
+
+# Fargate and Lambda are CPU-only — Fargate has no GPU support at all. The ECS
+# EC2 GPU arm (terraform-gpu) is where cuda belongs.
+# inference_device     = "cpu"
+# inference_batch_size = 32

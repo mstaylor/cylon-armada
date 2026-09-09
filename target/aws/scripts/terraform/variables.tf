@@ -237,6 +237,70 @@ variable "results_bucket_name" {
   type        = string
 }
 
+# ---------------------------------------------------------------------------
+# Cosmic AI / AstroMAE inference (Experiment E)
+#
+# The weights and the SDSS partition are uploaded to the scripts bucket and
+# pulled by each task at startup rather than baked into the image (~90MB), the
+# same way the shared scripts are already hot-reloaded. The source paths default
+# to the standard AI-for-Astronomy checkout so a plain apply needs no tfvars;
+# the upload self-disables when a file is not present, so an apply on a machine
+# without that checkout still succeeds instead of failing on a missing file.
+# ---------------------------------------------------------------------------
+
+variable "cosmic_image_tag" {
+  description = "ECR image tag for the Cosmic AI inference image (Dockerfile.cosmic.python). Kept separate from ecs_image_tag so only inference tasks carry PyTorch"
+  type        = string
+  default     = "cylon-armada-cosmic-python"
+}
+
+variable "cosmic_ai_model_source" {
+  description = "Local path to the AstroMAE weights .pt; skipped when the file is absent"
+  type        = string
+  default     = "/home/parallels/AI-for-Astronomy/code/Anomaly Detection/Fine_Tune_Model/Mixed_Inception_z_VITAE_Base_Img_Full_New_Full.pt"
+}
+
+variable "cosmic_ai_data_source" {
+  description = "Local path to the SDSS inference partition .pt; skipped when the file is absent"
+  type        = string
+  default     = "/home/parallels/AI-for-Astronomy/code/Anomaly Detection/Inference/resized_inference.pt"
+}
+
+variable "cosmic_ai_model_key" {
+  description = "S3 key for the AstroMAE weights"
+  type        = string
+  default     = "cylon-armada/cosmic-ai/astromae_model.pt"
+}
+
+variable "cosmic_ai_data_key" {
+  description = "S3 key for the SDSS inference partition"
+  type        = string
+  default     = "cylon-armada/cosmic-ai/resized_inference.pt"
+}
+
+variable "cosmic_ai_local_dir" {
+  description = "Directory inside the task where the artifacts are downloaded"
+  type        = string
+  default     = "/tmp/astromae"
+}
+
+variable "inference_device" {
+  description = "torch device for AstroMAE inference. Fargate and Lambda are CPU-only; the ECS EC2 GPU arm sets cuda"
+  type        = string
+  default     = "cpu"
+
+  validation {
+    condition     = contains(["cpu", "cuda"], var.inference_device)
+    error_message = "inference_device must be cpu or cuda."
+  }
+}
+
+variable "inference_batch_size" {
+  description = "Batch size for AstroMAE inference"
+  type        = number
+  default     = 32
+}
+
 variable "results_prefix_lambda" {
   description = "S3 key prefix for Lambda experiment results"
   type        = string

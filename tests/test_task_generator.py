@@ -14,7 +14,6 @@ from cosmic_ai.task_generator import (
     load_config,
     _resolve_config,
     _format_bands,
-    _format_colors,
     _DEFAULT_TEMPLATES,
     _DEFAULT_SURVEY_TYPES,
     BANDS,
@@ -46,13 +45,6 @@ class TestFormatHelpers:
         assert "u=22.31" in result
         assert "z=19.24" in result
         assert result.count(",") == 4
-
-    def test_format_colors(self):
-        mags = [22.0, 21.0, 20.0, 19.0, 18.0]
-        result = _format_colors(mags)
-        assert "u-g=1.00" in result
-        assert "i-z=1.00" in result
-        assert result.count(",") == 3
 
     def test_format_bands_custom_bands(self):
         mags = [1.0, 2.0, 3.0]
@@ -101,7 +93,7 @@ class TestGenerateTasksFromResults:
     def test_custom_templates(self, sample_data):
         custom = {
             "redshift_analysis": "CUSTOM: z={z_pred:.3f} for {band_str}",
-            "color_classification": "CUSTOM: colors {color_str}",
+            "photometry_classification": "CUSTOM: photometry {band_str}",
             "outlier_analysis": "CUSTOM: outlier z={z_pred:.3f}",
             "batch_summary": "CUSTOM: batch {n}",
             "cost_analysis": "CUSTOM: cost {n}",
@@ -135,7 +127,7 @@ class TestConfigResolution:
 
         assert templates["redshift_analysis"] == "file template"
         # Other templates should still have defaults
-        assert "color_classification" in templates
+        assert "photometry_classification" in templates
         assert survey_types == ["custom survey"]
         os.unlink(f.name)
 

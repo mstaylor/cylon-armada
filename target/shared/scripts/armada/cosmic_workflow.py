@@ -144,7 +144,25 @@ def build_retrieve_operator(context_router, workflow_id: str, dimensions: int = 
     struct_type = canon.schema_out.field(0).type
 
     def fn(table_or_tables) -> pa.Table:
-        table = pa.concat_tables(table_or_tables) if isinstance(table_or_tables, list) else table_or_tables
+        if isinstance(table_or_tables, list):
+            # A real gather consolidates onto root only; every other rank is
+            # handed nothing. Those ranks still have to walk the rest of the
+            # pipeline to reach MemoryUpsert's Broadcast, which every rank must
+            # enter, so an empty shard produces an empty result rather than an
+            # early exit.
+            if not table_or_tables:
+                # Must match the populated branch's schema column for column: the
+                # next collective gathers this, and a gather requires every rank
+                # to contribute the same schema — root derives the buffer layout
+                # from its own, so a short schema here corrupts the transfer.
+                return pa.table({
+                    "ranked_docs": pa.array([], type=struct_type),
+                    "raw_text": pa.array([], type=pa.large_utf8()),
+                    "query_embedding": pa.array([], type=canon.schema_in.field(0).type),
+                })
+            table = pa.concat_tables(table_or_tables)
+        else:
+            table = table_or_tables
         embeddings = table.column(0)
         rows = []
         for i in range(len(embeddings)):

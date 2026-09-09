@@ -11,6 +11,7 @@ Serverless Computing with FMI.
 import gc
 import logging
 import os
+import sys
 import time
 
 import numpy as np
@@ -18,6 +19,32 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 logger = logging.getLogger(__name__)
+
+
+def _register_model_modules():
+    """Expose the vendored model sources under the names the weights file expects.
+
+    This has nothing to do with BSP checkpoint/restore (`cylon/checkpoint/`) —
+    the AstroMAE weights file is a pickled model object rather than a
+    state_dict, so unpickling re-imports the layer classes by their original
+    module path: a top-level `NormalCell` and `blocks` from the upstream
+    AI-for-Astronomy tree. Our copies under `cosmic_ai.blocks` are
+    byte-identical to those, so aliasing them keeps the weights loadable
+    without that tree being present — which it is not inside the container.
+    `blocks.photoz` must be registered before `model_vit_inception` is
+    imported, since that module imports from it by the top-level name.
+    """
+    from cosmic_ai import blocks
+    from cosmic_ai.blocks import normal_cell, photoz
+
+    sys.modules.setdefault("blocks", blocks)
+    sys.modules.setdefault("blocks.photoz", photoz)
+    sys.modules.setdefault("blocks.normal_cell", normal_cell)
+    sys.modules.setdefault("NormalCell", normal_cell)
+
+    from cosmic_ai.blocks import model_vit_inception
+
+    sys.modules.setdefault("blocks.model_vit_inception", model_vit_inception)
 
 
 def load_data(data_path, device="cpu"):
@@ -30,11 +57,12 @@ def load_data(data_path, device="cpu"):
 
 
 def load_model(model_path, device="cpu"):
-    """Load a pre-trained AstroMAE model checkpoint.
+    """Load the pre-trained AstroMAE model weights.
 
     Returns:
         Model in eval mode on the specified device.
     """
+    _register_model_modules()
     model = torch.load(model_path, map_location=device, weights_only=False)
     if hasattr(model, "module"):
         model = model.module
