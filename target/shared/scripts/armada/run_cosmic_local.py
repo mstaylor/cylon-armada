@@ -22,6 +22,20 @@ galaxy), so it is opt-in rather than the default.
 
 Environment (set by the launcher): RANK, WORLD_SIZE, COMM_NAME, REDIS_HOST,
 REDIS_PORT, FMI_LISTEN_PORT.
+
+Rank identity differs by arm. Under the armada backend the rank is the one the
+FMI channel negotiates through Redis INCR (bridge.rank), which can differ from
+the RANK the launcher requested; under the langchain backend there is no
+channel to negotiate through, so the rank is RANK itself. Both are used to pick
+this rank's shard and to stamp the rank that originated each context, so the
+two mechanisms are interchangeable for correctness — but do not assume a rank's
+shard is the same under both arms of a local run, and never reuse COMM_NAME
+across runs or the INCR counters collide.
+
+The origination stamp is why the workflow is built after the bridge rather than
+before it: a context tagged with the requested rank instead of the negotiated
+one would be counted as ingested by the rank that actually created it, and
+records_written would stop meaning the same thing on the two arms.
 """
 
 import argparse
@@ -30,12 +44,15 @@ import logging
 import os
 import sys
 import time
+from enum import Enum
 
 import numpy as np
 import pyarrow as pa
 
 from armada.cosmic_workflow import build_cosmic_workflow
+from armada.epochs import plan_epochs
 from armada.executor import ArmadaExecutor, InputPlacement, required_peer_map
+from armada.run_metrics import RunMetrics
 from communicator.fmi_bridge import FMIBridge
 from cosmic_ai.task_generator import generate_tasks_from_results
 
@@ -101,7 +118,7 @@ def astromae_inference(data_path, model_path, world_size, rank, batch_size, devi
     shard = torch.utils.data.Subset(dataset, list(range(start, stop)))
     result = run_inference(model, shard, batch_size=batch_size, device=device)
     return (result["predictions"], result["true_redshifts"], result["magnitudes"],
-            result["metrics"])
+            result["metrics"], (start, stop))
 
 
 def mock_services(dimensions):
@@ -144,6 +161,79 @@ def live_services(dimensions):
     return embedding_service, context_router, context_manager, chain_executor
 
 
+class ExecutionBackend(Enum):
+    """Which runtime executes the workflow.
+
+    Armada drives the compiled plan over the Cylon collectives. LangChain runs
+    the same chain through Runnable.invoke() and shares context through the
+    store instead of through a collective, which is what a LangChain
+    deployment does and needs no bridge at all.
+    """
+
+    Armada = "armada"
+    LangChain = "langchain"
+
+
+_CONTEXT_STORE = {
+    ExecutionBackend.Armada: "cylon",
+    ExecutionBackend.LangChain: "redis",
+}
+
+
+def context_store_for(backend):
+    """The context store an arm runs on. The arm is its store: Armada on the
+    Arrow ContextTable, LangChain on Redis, so this is not independently
+    tunable. An environment that already names a different store is refused
+    rather than silently overridden.
+    """
+    required = _CONTEXT_STORE[backend]
+    configured = os.environ.get("CONTEXT_BACKEND")
+    if configured and configured != required:
+        raise ValueError(
+            f"CONTEXT_BACKEND={configured!r} conflicts with backend {backend.value!r}, "
+            f"which runs on {required!r}"
+        )
+    return required
+
+
+def run_epochs(seq, shards, backend, bridge, ctx, root=0):
+    """Execute one epoch per shard, returning each epoch's result table.
+
+    Under Armada each epoch is one executor pass with the input already in
+    place on this rank, ending in MemoryUpsert's AllGather. Under LangChain it
+    is a plain invoke(); nothing crosses ranks because the store is shared.
+    """
+    results = []
+    for shard in shards:
+        if backend is ExecutionBackend.LangChain:
+            results.append(seq.invoke(shard))
+        elif backend is ExecutionBackend.Armada:
+            results.append(ArmadaExecutor(bridge).run(
+                seq, input_tables=shard, ctx=ctx, root=root,
+                placement=InputPlacement.PreDistributed))
+        else:
+            raise ValueError(f"unknown execution backend {backend!r}")
+    return results
+
+
+def write_record(path, record):
+    """Write the result record atomically, never raising.
+
+    This runs on the way out even when the run itself raised, and it must not
+    replace that exception with one of its own — a rank that failed has to
+    report why it failed. The write goes to a sibling temp file and is renamed
+    into place, so an interruption mid-write cannot leave a truncated JSON for
+    the gate to choke on.
+    """
+    tmp = f"{path}.tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(record, f)
+        os.replace(tmp, path)
+    except Exception as exc:
+        logger.error("could not write result record to %s: %s", path, exc)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run one rank of the Cosmic AI agentic pipeline")
     parser.add_argument("--galaxies", type=int, default=None,
@@ -167,6 +257,13 @@ def main(argv=None):
                         default=int(os.environ.get("INFERENCE_BATCH_SIZE", 32)))
     parser.add_argument("--device", default=os.environ.get("INFERENCE_DEVICE", "cpu"),
                         help="torch device for inference (env INFERENCE_DEVICE)")
+    parser.add_argument("--backend",
+                        default=os.environ.get("EXECUTION_BACKEND", "armada"),
+                        choices=[b.value for b in ExecutionBackend],
+                        help="armada (collectives) or langchain (native invoke, Redis-shared context)")
+    parser.add_argument("--epoch-batch-size", type=int,
+                        default=int(os.environ.get("EPOCH_BATCH_SIZE", 4)),
+                        help="galaxies per epoch; identical across arms (env EPOCH_BATCH_SIZE)")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -178,31 +275,57 @@ def main(argv=None):
     n_galaxies = args.galaxies or world_size
     workflow_id = f"cosmic_local_{comm_name}"
 
+    backend = ExecutionBackend(args.backend)
+    os.environ["CONTEXT_BACKEND"] = context_store_for(backend)
+
     services = live_services(args.dimensions) if args.live else mock_services(args.dimensions)
-    seq = build_cosmic_workflow(*services, workflow_id=workflow_id,
-                                dimensions=args.dimensions, max_chars=args.max_chars)
+    metrics = RunMetrics()
 
-    # Derived before the bridge exists: the channel establishes its connections
-    # while the communicator is built, so the topology has to be known first.
-    peers = required_peer_map(seq, world_size)
+    def build_for(rank_id):
+        """The workflow wired for one rank identity.
 
-    t0 = time.perf_counter()
-    bridge = FMIBridge(
-        world_size=world_size, rank=rank, channel_type="direct-redis",
-        listen_port=int(os.environ.get("FMI_LISTEN_PORT", 10000)),
-        redis_host=os.environ.get("REDIS_HOST", ""),
-        redis_port=int(os.environ.get("REDIS_PORT", 6379)),
-        comm_name=comm_name, maxtimeout=int(os.environ.get("FMI_MAX_TIMEOUT", 60000)),
-        nonblocking=not args.blocking,
-        advertise_host=os.environ.get("ADVERTISE_HOST", ""),
-        required_peers=peers,
-    )
-    establish_s = time.perf_counter() - t0
+        Built twice on Arm A: once with the requested rank to derive the peer
+        map, which the channel needs before a bridge exists, and again with the
+        rank the channel actually assigned. FMI hands out ranks by Redis INCR,
+        so the two can differ, and an envelope stamped with the requested rank
+        would misattribute which rank originated a context. The peer map does
+        not depend on rank identity, only on the patterns the plan compiles to.
+        """
+        return build_cosmic_workflow(*services, workflow_id=workflow_id,
+                                     dimensions=args.dimensions, max_chars=args.max_chars,
+                                     metrics=metrics, rank=rank_id)
 
-    true_rank = bridge.rank
+    establish_s = 0.0
+    bridge = None
+    if backend is ExecutionBackend.Armada:
+        # Derived before the bridge exists: the channel establishes its
+        # connections while the communicator is built, so the topology has to
+        # be known first.
+        peers = required_peer_map(build_for(rank), world_size)
+        t0 = time.perf_counter()
+        bridge = FMIBridge(
+            world_size=world_size, rank=rank, channel_type="direct-redis",
+            listen_port=int(os.environ.get("FMI_LISTEN_PORT", 10000)),
+            redis_host=os.environ.get("REDIS_HOST", ""),
+            redis_port=int(os.environ.get("REDIS_PORT", 6379)),
+            comm_name=comm_name, maxtimeout=int(os.environ.get("FMI_MAX_TIMEOUT", 60000)),
+            nonblocking=not args.blocking,
+            advertise_host=os.environ.get("ADVERTISE_HOST", ""),
+            required_peers=peers,
+        )
+        establish_s = time.perf_counter() - t0
+        true_rank = bridge.rank
+        channel = bridge.channel_type
+    else:
+        true_rank = rank
+        channel = "none"
+
+    seq = build_for(true_rank)
+
     root = 0
-    logger.info("rank %d/%d ready in %.2fs (channel=%s)",
-                true_rank, world_size, establish_s, bridge.channel_type)
+    logger.info("rank %d/%d ready in %.2fs (backend=%s, channel=%s, store=%s)",
+                true_rank, world_size, establish_s, backend.value, channel,
+                os.environ["CONTEXT_BACKEND"])
 
     inference_s = 0.0
     if args.real_inference:
@@ -212,17 +335,19 @@ def main(argv=None):
                 "(or ASTROMAE_DATA_PATH / ASTROMAE_MODEL_PATH)"
             )
         t_inf = time.perf_counter()
-        predictions, true_redshifts, magnitudes, _ = astromae_inference(
+        predictions, true_redshifts, magnitudes, _, (start, stop) = astromae_inference(
             args.data_path, args.model_path, world_size, true_rank,
             args.batch_size, args.device, n_galaxies=args.galaxies,
         )
         inference_s = time.perf_counter() - t_inf
-        # Each rank inferred its own shard, so the input is already where it
-        # needs to be and Preprocess's Scatter would be a redundant round trip.
-        placement = InputPlacement.PreDistributed
     else:
-        predictions, true_redshifts, magnitudes = astromae_fixture(n_galaxies)
-        placement = InputPlacement.Centralized
+        all_predictions, all_true, all_magnitudes = astromae_fixture(n_galaxies)
+        start, stop = shard_bounds(n_galaxies, world_size, true_rank)
+        predictions = all_predictions[start:stop]
+        true_redshifts = all_true[start:stop]
+        magnitudes = all_magnitudes[start:stop]
+
+    placement = InputPlacement.PreDistributed
 
     n_local = len(predictions)
     prompts = generate_tasks_from_results(predictions, true_redshifts, magnitudes,
@@ -233,37 +358,44 @@ def main(argv=None):
     def raw_table(texts):
         return pa.table({"raw_text": list(texts)}, schema=schema_in)
 
-    if placement is InputPlacement.PreDistributed or world_size == 1:
-        input_tables = raw_table(prompts)
-    else:
-        input_tables = [raw_table([p]) for p in prompts] if true_rank == root else []
+    shards = [raw_table(prompts[start:stop])
+              for start, stop in plan_epochs(n_local, args.epoch_batch_size)]
 
-    t1 = time.perf_counter()
-    result = ArmadaExecutor(bridge).run(seq, input_tables=input_tables,
-                                        ctx=bridge._ctx, root=root,
-                                        placement=placement)
-    run_s = time.perf_counter() - t1
-
-    record = {"rank": true_rank, "world_size": world_size,
-              "establish_s": round(establish_s, 4), "run_s": round(run_s, 4),
+    record = {"rank": true_rank, "world_size": world_size, "backend": backend.value,
+              "context_backend": os.environ["CONTEXT_BACKEND"],
+              "establish_s": round(establish_s, 4),
               "inference_s": round(inference_s, 4), "galaxies": n_local,
+              "shard": [start, stop],
+              "epochs": len(shards), "epoch_batch_size": args.epoch_batch_size,
               "placement": placement.value, "live": args.live}
     if args.real_inference:
         record["device"] = args.device
-    if result is not None and hasattr(result, "column_names") and "ack" in result.column_names:
-        acks = result.column("ack").to_pylist()
-        record["records_written"] = sum(1 for a in acks if a)
-        record["records_failed"] = sum(1 for a in acks if not a)
 
-    logger.info("rank %d done in %.2fs: %s", true_rank, run_s, record)
+    results = []
+    t1 = time.perf_counter()
+    try:
+        results = run_epochs(seq, shards, backend, bridge=bridge,
+                             ctx=bridge._ctx if bridge is not None else None, root=root)
+    except Exception as exc:
+        record["error"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        record["run_s"] = round(time.perf_counter() - t1, 4)
+        record.update(metrics.summary())
+        record["acks_visible"] = sum(
+            1
+            for result in results
+            if hasattr(result, "column_names") and "ack" in result.column_names
+            for ack in result.column("ack").to_pylist()
+            if ack)
+        logger.info("rank %d done in %.2fs: %s", true_rank, record["run_s"], record)
+        if args.result_path:
+            write_record(args.result_path, record)
 
-    if bridge.available:
-        bridge.barrier()
-    bridge.finalize()
-
-    if args.result_path:
-        with open(args.result_path, "w") as f:
-            json.dump(record, f)
+    if bridge is not None:
+        if bridge.available:
+            bridge.barrier()
+        bridge.finalize()
     return 0
 
 

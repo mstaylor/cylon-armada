@@ -168,3 +168,29 @@ def _text_out():
 
 def _bool_out():
     return pa.schema([pa.field("ack", pa.bool_())])
+
+
+def test_allgather_pattern_round_trips_through_the_compiler():
+    """MemoryUpsert is an AllGather under the row-distributed layout, so the
+    pattern has to survive the C++ round trip like any other."""
+    import pyarrow as pa
+    from cylon_armada.dag_compiler import (
+        AgentOperator, CollectivePattern, WorkflowDAG, compile_workflow,
+    )
+
+    kv = pa.schema([pa.field("kv_pairs", pa.large_utf8())])
+    ack = pa.schema([pa.field("ack", pa.bool_())])
+    op = AgentOperator("MemoryUpsert", CollectivePattern.AllGather, kv, ack)
+
+    plan = compile_workflow(WorkflowDAG([op], []))
+
+    assert plan.assignments["MemoryUpsert"] == CollectivePattern.AllGather
+
+
+def test_allgather_is_distinct_from_broadcast():
+    """_from_cpat used to return Broadcast as a catch-all, which would silently
+    rewrite AllGather into Broadcast on the way back out."""
+    from cylon_armada.dag_compiler import CollectivePattern
+
+    assert CollectivePattern.AllGather != CollectivePattern.Broadcast
+    assert int(CollectivePattern.AllGather) == 5

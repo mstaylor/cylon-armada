@@ -182,3 +182,112 @@ def test_world_size_one_equals_plain_sequence_invoke():
 
     assert bridge.calls == []
     assert executor_result == invoke_result == (((5 + 1) * 2) - 3) + 100
+
+
+def test_allgather_moves_input_to_every_rank_then_computes_on_the_union():
+    """AllGather moves before computing, like Scatter. MemoryUpsert's job is to
+    store what it is given, so all-to-all visibility means every rank is given
+    every rank's rows — computing first would collectivise the operator's
+    output instead of its input."""
+    import pyarrow as pa
+    from armada.executor import ArmadaExecutor
+    from armada.operator import ArmadaOperator
+    from cylon_armada.dag_compiler import CollectivePattern
+
+    schema = pa.schema([pa.field("kv", pa.large_utf8())])
+    out_schema = pa.schema([pa.field("ack", pa.bool_())])
+    seen = []
+
+    class Bridge:
+        world_size = 2
+        available = True
+        channel_type = "spy"
+        _ctx = None
+        rank = 0
+
+        def allgather(self, table):
+            other = pa.table({"kv": ["from-1"]}, schema=schema)
+            return [table, other]
+
+    def fn(table):
+        seen.append(table.column("kv").to_pylist())
+        return pa.table({"ack": [True] * table.num_rows}, schema=out_schema)
+
+    op = ArmadaOperator("MemoryUpsert", CollectivePattern.AllGather, schema, out_schema, fn=fn)
+    local = pa.table({"kv": ["mine"]}, schema=schema)
+
+    result = ArmadaExecutor(Bridge()).run(op, input_tables=local, ctx=None)
+
+    assert seen == [["mine", "from-1"]]
+    assert result.column("ack").to_pylist() == [True, True]
+
+
+def _allgather_case(returned, local_rows):
+    """Executor wired to a bridge whose allgather returns `returned`.
+
+    Factored out because the empty-contribution cases differ only in what the
+    collective hands back. Under move-then-compute the collective carries the
+    operator's input, so `returned` supplies input-shaped tables and the case
+    reports what `fn` was handed.
+    """
+    import pyarrow as pa
+    from armada.executor import ArmadaExecutor
+    from armada.operator import ArmadaOperator
+    from cylon_armada.dag_compiler import CollectivePattern
+
+    schema = pa.schema([pa.field("kv", pa.large_utf8())])
+    seen = []
+
+    class Bridge:
+        world_size = 3
+        available = True
+        channel_type = "spy"
+        _ctx = None
+        rank = 0
+
+        def allgather(self, table):
+            return returned(schema, table)
+
+    def fn(table):
+        seen.append(table)
+        return table
+
+    op = ArmadaOperator("MemoryUpsert", CollectivePattern.AllGather, schema, schema, fn=fn)
+    local = pa.table({"kv": local_rows}, schema=schema)
+    return schema, seen, ArmadaExecutor(Bridge()).run(op, input_tables=local, ctx=None)
+
+
+def test_allgather_with_every_rank_empty_hands_fn_an_empty_table_not_none():
+    """An epoch in which no rank produced a new context is ordinary, not an
+    error. A gather that drops empty contributions silently is a real failure
+    mode this project has already hit once, so the all-empty case is pinned
+    rather than assumed."""
+    schema, seen, result = _allgather_case(
+        lambda s, t: [s.empty_table(), s.empty_table(), s.empty_table()],
+        local_rows=[],
+    )
+
+    assert len(seen) == 1
+    assert seen[0] is not None
+    assert seen[0].num_rows == 0
+    assert seen[0].schema == schema
+    assert result.num_rows == 0
+
+
+def test_allgather_keeps_populated_ranks_when_others_are_empty():
+    """Ranks with nothing to publish must not swallow the ranks that do, and
+    the surviving rows must stay in rank order."""
+    import pyarrow as pa
+
+    def returned(schema, table):
+        return [
+            schema.empty_table(),
+            pa.table({"kv": ["from-1"]}, schema=schema),
+            schema.empty_table(),
+            pa.table({"kv": ["from-3"]}, schema=schema),
+        ]
+
+    schema, seen, result = _allgather_case(returned, local_rows=[])
+
+    assert seen[0].column("kv").to_pylist() == ["from-1", "from-3"]
+    assert result.column("kv").to_pylist() == ["from-1", "from-3"]

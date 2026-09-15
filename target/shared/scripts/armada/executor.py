@@ -90,10 +90,14 @@ def required_peer_map(seq, world_size, roots=(0,)):
 class ArmadaExecutor:
     """Drives a compiled ExecutionPlan over a FMIBridge.
 
-    Scatter moves data before computing (each rank must have its own shard
-    before it can run fn on it); every other pattern computes first, then
-    moves the result (each rank computes its own contribution, then that
-    contribution is consolidated/broadcast). Getting this order right matters
+    Scatter and AllGather move data before computing; every other pattern
+    computes first, then moves the result (each rank computes its own
+    contribution, then that contribution is consolidated/broadcast). Scatter
+    moves first because a rank must hold its own shard before it can run fn on
+    it. AllGather moves first because what must reach every rank is the
+    operator's contribution, not its acknowledgement: MemoryUpsert stores what
+    it is handed and returns acks, so computing first would give every rank a
+    full set of booleans instead of one another's contexts. Getting this order right matters
     beyond correctness at world_size > 1: at world_size <= 1 there is exactly
     one participant, so every pattern collapses to the same thing — call fn,
     do nothing else — which only equals plain Runnable.invoke() chaining
@@ -146,6 +150,18 @@ class ArmadaExecutor:
             return value.to_arrow()
         return value
 
+    @staticmethod
+    def _concat_or_empty(tables, schema):
+        """Concatenate the populated contributions, or an empty table of `schema`.
+
+        Ranks that contributed nothing arrive as zero-row tables. Concatenating
+        those is harmless, but a gather where every rank was empty has nothing
+        to concatenate at all, which is why the schema is needed.
+        """
+        import pyarrow as pa
+        populated = [t for t in tables if t.num_rows]
+        return pa.concat_tables(populated) if populated else schema.empty_table()
+
     def _reduce(self, local_result, ctx, root, reduce_op):
         """Reduce a rank's contribution, numerically or structurally.
 
@@ -170,8 +186,8 @@ class ArmadaExecutor:
             self.bridge.gather(self._for_transport(local_result, ctx), root))
         if not gathered:
             return local_result.schema.empty_table()
-        populated = [t for t in gathered if t.num_rows]
-        return pa.concat_tables(populated) if populated else gathered[0]
+
+        return self._concat_or_empty(gathered, local_result.schema)
 
     def run(self, seq, input_tables, ctx, root=0, reduce_op="sum",
             placement=InputPlacement.Centralized):
@@ -211,6 +227,10 @@ class ArmadaExecutor:
                 local_result = op.fn(current)
                 current = self._from_transport(
                     self.bridge.broadcast(self._for_transport(local_result, ctx), root))
+            elif pattern == CollectivePattern.AllGather:
+                gathered = self._from_transport(
+                    self.bridge.allgather(self._for_transport(current, ctx)))
+                current = op.fn(self._concat_or_empty(gathered, current.schema))
             else:
                 raise ValueError(f"unknown collective pattern {pattern!r} for operator {op.name!r}")
 

@@ -11,7 +11,7 @@
 
 namespace cylon_armada {
 
-enum class CollectivePattern { Scatter, ScatterGather, Reduce, PointToPoint, Broadcast };
+enum class CollectivePattern { Scatter, ScatterGather, Reduce, PointToPoint, Broadcast, AllGather };
 enum class TransferMode { ZeroCopy, Convert };
 
 struct AgentOperator {

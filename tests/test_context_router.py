@@ -12,10 +12,26 @@ from context.router import ContextRouter, SIMDBackend
 from cost.bedrock_pricing import BedrockConfig, BedrockCostTracker
 
 
+def _stored_embeddings(cm, pairs):
+    """Point the mocked manager at these (context_id, embedding) pairs.
+
+    find_similar reads the store as one matrix rather than as per-row pairs, so
+    both shapes are stocked: get_embedding_matrix is what the router calls, and
+    get_all_embeddings is still the public contract other callers use.
+    """
+    ids = [cid for cid, _ in pairs]
+    matrix = (np.vstack([emb for _, emb in pairs]) if pairs
+              else np.empty((0, 0), dtype=np.float32))
+    cm.get_all_embeddings.return_value = pairs
+    cm.get_embedding_matrix.return_value = (ids, matrix)
+
+
 @pytest.fixture
 def mock_context_manager():
     cm = MagicMock()
     cm.get_all_embeddings = MagicMock(return_value=[])
+    cm.get_embedding_matrix = MagicMock(
+        return_value=([], np.empty((0, 0), dtype=np.float32)))
     cm.get_context = MagicMock(return_value=None)
     cm.store_context = MagicMock()
     cm.increment_reuse_count = MagicMock()
@@ -53,10 +69,10 @@ class TestContextRouter:
         similar /= np.linalg.norm(similar)
         dissimilar /= np.linalg.norm(dissimilar)
 
-        mock_context_manager.get_all_embeddings.return_value = [
+        _stored_embeddings(mock_context_manager, [
             ("ctx-1", similar),
             ("ctx-2", dissimilar),
-        ]
+        ])
 
         results = router.find_similar(query, workflow_id="test-wf")
 
@@ -71,7 +87,7 @@ class TestContextRouter:
         query /= np.linalg.norm(query)
         stored /= np.linalg.norm(stored)
 
-        mock_context_manager.get_all_embeddings.return_value = [("ctx-1", stored)]
+        _stored_embeddings(mock_context_manager, [("ctx-1", stored)])
 
         reuse, match = router.should_reuse(query, workflow_id="test-wf")
         assert reuse is True
@@ -82,7 +98,7 @@ class TestContextRouter:
         query = np.array([1.0, 0.0, 0.0], dtype=np.float32)
         stored = np.array([0.0, 1.0, 0.0], dtype=np.float32)
 
-        mock_context_manager.get_all_embeddings.return_value = [("ctx-1", stored)]
+        _stored_embeddings(mock_context_manager, [("ctx-1", stored)])
 
         reuse, match = router.should_reuse(query, workflow_id="test-wf")
         assert reuse is False

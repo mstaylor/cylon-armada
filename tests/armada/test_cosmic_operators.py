@@ -52,6 +52,7 @@ D = 8
 # Preprocess
 # ---------------------------------------------------------------------------
 
+
 def test_preprocess_truncates_to_max_chars():
     op = build_preprocess_operator(max_chars=5, dimensions=D)
     assert op.pattern == CollectivePattern.Scatter
@@ -78,6 +79,7 @@ def test_preprocess_noop_when_max_chars_none():
 # Embed
 # ---------------------------------------------------------------------------
 
+
 def test_embed_produces_fixed_size_list_float32():
     embedding_service = MagicMock()
     vec1 = np.arange(D, dtype=np.float32)
@@ -88,7 +90,7 @@ def test_embed_produces_fixed_size_list_float32():
     ]
 
     op = build_embed_operator(embedding_service, dimensions=D)
-    assert op.pattern == CollectivePattern.ScatterGather
+    assert op.pattern == CollectivePattern.PointToPoint
 
     table = pa.table({"chunked_text": ["a", "b"]}, schema=op.schema_in)
     result = op.fn(table)
@@ -121,15 +123,18 @@ def test_embed_forwards_raw_text_passthrough_when_present():
 # Retrieve
 # ---------------------------------------------------------------------------
 
+
 def test_retrieve_returns_best_match_per_row():
     context_router = MagicMock()
     context_router.find_similar.return_value = [
         {"context_id": "c1", "similarity": 0.9},
         {"context_id": "c2", "similarity": 0.7},
     ]
+    context_router.context_manager.get_context.side_effect = lambda cid: {
+        "context_id": cid, "response": f"the {cid} analysis"}
 
     op = build_retrieve_operator(context_router, workflow_id="wf-1", dimensions=D)
-    assert op.pattern == CollectivePattern.Reduce
+    assert op.pattern == CollectivePattern.PointToPoint
 
     list_type = op.schema_in.field(0).type
     query = pa.FixedSizeListArray.from_arrays(
@@ -143,17 +148,23 @@ def test_retrieve_returns_best_match_per_row():
     # searched with, but Bind needs it downstream).
     assert result.schema.field(0) == op.schema_out.field(0)
     row = result.column("ranked_docs").to_pylist()[0]
-    assert row == {"doc": "c1", "score": pytest.approx(0.9)}
+    assert row == {"doc": "the c1 analysis", "score": pytest.approx(0.9)}
     assert result.column("query_embedding").to_pylist()[0] == query.to_pylist()[0]
     _, kwargs = context_router.find_similar.call_args
     assert kwargs["workflow_id"] == "wf-1"
 
 
 def test_retrieve_concatenates_a_list_of_gathered_tables():
-    """After Embed's real ScatterGather, Retrieve's input is bridge.gather()'s
-    return: a list of N single-row per-rank tables, not one table."""
+    """Retrieve still accepts a gather-shaped list, not only a single table.
+
+    The row-distributed pipeline hands it a single table, since Embed is now
+    PointToPoint. This pins the list form so a gather-shaped caller — which is
+    what a corpus-distributed layout would use — keeps working.
+    """
     context_router = MagicMock()
     context_router.find_similar.return_value = [{"context_id": "c1", "similarity": 0.5}]
+    context_router.context_manager.get_context.return_value = {"context_id": "c1",
+                                                               "response": "an analysis"}
 
     op = build_retrieve_operator(context_router, workflow_id="wf-1", dimensions=D)
     list_type = op.schema_in.field(0).type
@@ -188,7 +199,15 @@ def test_retrieve_returns_empty_match_when_no_hits():
 # Reason
 # ---------------------------------------------------------------------------
 
-def test_reason_calls_chain_executor_with_top_doc_text():
+
+def test_reason_puts_its_canonical_response_column_first():
+    """Reason's declared A2 output must stay column 0, whichever branch ran.
+
+    This test previously also asserted that the LLM was called with the
+    retrieved doc text. That assertion encoded the defect the prompt-fidelity
+    gate caught: the doc was a context id, never a prompt. The branch
+    behaviours are asserted in the reuse-or-call tests below.
+    """
     chain_executor = MagicMock()
     chain_executor.execute.return_value = {"response": "the answer"}
 
@@ -196,16 +215,12 @@ def test_reason_calls_chain_executor_with_top_doc_text():
     assert op.pattern == CollectivePattern.PointToPoint
 
     struct_type = op.schema_in.field(0).type
-    ctx = pa.array([{"doc": "some retrieved context", "score": 0.9}], type=struct_type)
+    ctx = pa.array([{"doc": "", "score": 0.0}], type=struct_type)
     table = pa.table({"context": ctx}, schema=op.schema_in)
     result = op.fn(table)
 
-    # response (canonical) is column 0; cost_metadata_json is an additive
-    # passthrough (LLM token usage ChainExecutor.execute() returns, which
-    # response alone would otherwise discard).
     assert result.schema.field(0) == op.schema_out.field(0)
     assert result.column("response").to_pylist() == ["the answer"]
-    chain_executor.execute.assert_called_once_with("some retrieved context")
 
 
 def test_reason_carries_cost_metadata_forward_as_passthrough():
@@ -216,7 +231,7 @@ def test_reason_carries_cost_metadata_forward_as_passthrough():
     }
     op = build_reason_operator(chain_executor, dimensions=D)
     struct_type = op.schema_in.field(0).type
-    ctx = pa.array([{"doc": "x", "score": 0.9}], type=struct_type)
+    ctx = pa.array([{"doc": "", "score": 0.0}], type=struct_type)
     table = pa.table({"context": ctx}, schema=op.schema_in)
     result = op.fn(table)
 
@@ -244,7 +259,7 @@ def test_memory_upsert_acks_and_calls_store_context():
     embedding = np.arange(D, dtype=np.float32)
 
     op = build_memory_upsert_operator(context_manager, dimensions=D)
-    assert op.pattern == CollectivePattern.Broadcast
+    assert op.pattern == CollectivePattern.AllGather
 
     struct_type = op.schema_in.field(0).type
     kv = pa.array([_kv_envelope("ctx-1", embedding)], type=struct_type)
@@ -300,6 +315,7 @@ def test_memory_upsert_falls_back_to_placeholder_embedding_when_envelope_omits_i
 # Bind (non-canonical glue: Reason's response -> MemoryUpsert's kv_pairs)
 # ---------------------------------------------------------------------------
 
+
 def test_bind_wraps_response_into_kv_pairs_with_unique_keys():
     op = build_bind_operator(workflow_id="wf-1")
     assert op.pattern == CollectivePattern.PointToPoint
@@ -327,3 +343,387 @@ def test_bind_output_feeds_memory_upsert_end_to_end():
 
     assert result.column("ack").to_pylist() == [True]
     context_manager.store_context.assert_called_once()
+
+
+def test_cosmic_uses_row_distributed_patterns_not_the_canonical_ones():
+    """Rows are distributed and the corpus is replicated, so Embed and Retrieve
+    are local and MemoryUpsert is the one genuine collective. Table III's
+    mapping describes a corpus-distributed layout and is deliberately not used
+    here (spec 3.3)."""
+    from armada.cosmic_workflow import COSMIC_PATTERNS
+    from cylon_armada.dag_compiler import CollectivePattern
+
+    assert COSMIC_PATTERNS == {
+        "Preprocess": CollectivePattern.Scatter,
+        "Embed": CollectivePattern.PointToPoint,
+        "Retrieve": CollectivePattern.PointToPoint,
+        "Reason": CollectivePattern.PointToPoint,
+        "Bind": CollectivePattern.PointToPoint,
+        "MemoryUpsert": CollectivePattern.AllGather,
+    }
+
+
+def test_operators_still_carry_the_canonical_a2_schemas():
+    """Patterns diverge from Table III; schemas must not. The A2 contract is a
+    schema contract and this workflow stays under it."""
+    from unittest.mock import MagicMock
+
+    from armada.cosmic_workflow import build_embed_operator, build_retrieve_operator
+    from experiment.exp_a2_schema import canonical_operators
+
+    canon = {o.name: o for o in canonical_operators(8)}
+    embed = build_embed_operator(MagicMock(), dimensions=8)
+    retrieve = build_retrieve_operator(MagicMock(), workflow_id="wf", dimensions=8)
+
+    assert embed.schema_in == canon["Embed"].schema_in
+    assert embed.schema_out == canon["Embed"].schema_out
+    assert retrieve.schema_in == canon["Retrieve"].schema_in
+    assert retrieve.schema_out == canon["Retrieve"].schema_out
+
+
+def test_the_full_chain_still_compiles():
+    """compile_workflow enforces schema compatibility on every edge; changing
+    patterns must not break the chain."""
+    from unittest.mock import MagicMock
+
+    from armada.cosmic_workflow import build_cosmic_workflow
+    from armada.executor import lower
+
+    seq = build_cosmic_workflow(MagicMock(), MagicMock(), MagicMock(), MagicMock(),
+                                workflow_id="wf", dimensions=8)
+    plan = lower(seq)
+
+    assert plan.assignments["MemoryUpsert"].name == "AllGather"
+    assert plan.assignments["Embed"].name == "PointToPoint"
+
+
+def test_memory_upsert_records_a_store_failure_and_acks_false():
+    """The failure has to be counted at the store site, not read back off the
+    ack table — an AllGather'd ack table holds every rank's acks, so an
+    ack-derived failure count would mean something different per arm."""
+    from armada.cosmic_workflow import build_memory_upsert_operator
+    from armada.run_metrics import RunMetrics
+
+    context_manager = MagicMock()
+    context_manager.store_context.side_effect = [None, RuntimeError("redis down")]
+    metrics = RunMetrics()
+    op = build_memory_upsert_operator(context_manager, dimensions=D, metrics=metrics)
+
+    envelope = json.dumps({"workflow_id": "wf", "response": "r"})
+    table = pa.table({"kv_pairs": pa.array(
+        [{"k": "a", "v": envelope}, {"k": "b", "v": envelope}],
+        type=op.schema_in.field(0).type)}, schema=op.schema_in)
+
+    result = op.fn(table)
+
+    assert result.column("ack").to_pylist() == [True, False]
+    assert metrics.summary()["records_written"] == 1
+    assert metrics.summary()["records_failed"] == 1
+
+
+def test_memory_upsert_counts_only_this_ranks_contexts_as_written():
+    """A rank stores everyone's contexts but originates only its own."""
+    import json
+
+    from armada.cosmic_workflow import build_memory_upsert_operator
+    from armada.run_metrics import RunMetrics
+
+    context_manager = MagicMock()
+    metrics = RunMetrics()
+    op = build_memory_upsert_operator(context_manager, dimensions=D, metrics=metrics, rank=0)
+
+    mine = json.dumps({"workflow_id": "wf", "response": "r", "rank": 0})
+    theirs = json.dumps({"workflow_id": "wf", "response": "r", "rank": 1})
+    table = pa.table({"kv_pairs": pa.array(
+        [{"k": "a", "v": mine}, {"k": "b", "v": theirs}, {"k": "c", "v": theirs}],
+        type=op.schema_in.field(0).type)}, schema=op.schema_in)
+
+    op.fn(table)
+
+    assert context_manager.store_context.call_count == 3
+    assert metrics.summary()["records_written"] == 1
+    assert metrics.summary()["contexts_ingested"] == 2
+
+
+def test_bind_stamps_the_originating_rank_into_the_envelope():
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf", rank=3)
+    table = pa.table({"response": ["an analysis"]}, schema=op.schema_in)
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert envelope["rank"] == 3
+
+
+def test_an_untagged_envelope_counts_as_originated():
+    """Single-rank runs and every existing caller pass no rank, so the envelope
+    carries no rank key. Those must stay originated, or records_written would
+    drop to zero everywhere the tag is absent."""
+    import json
+
+    from armada.cosmic_workflow import build_memory_upsert_operator
+    from armada.run_metrics import RunMetrics
+
+    context_manager = MagicMock()
+    metrics = RunMetrics()
+    op = build_memory_upsert_operator(context_manager, dimensions=D, metrics=metrics)
+
+    envelope = json.dumps({"workflow_id": "wf", "response": "r"})
+    table = pa.table({"kv_pairs": pa.array(
+        [{"k": "a", "v": envelope}], type=op.schema_in.field(0).type)},
+        schema=op.schema_in)
+
+    op.fn(table)
+
+    assert metrics.summary()["records_written"] == 1
+    assert metrics.summary()["contexts_ingested"] == 0
+
+
+def test_retrieve_resolves_a_match_to_its_stored_response_text():
+    """ranked_docs.doc feeds Reason. A context id is not a document: Reason
+    cannot reason over a UUID, and sending one to an LLM is what the
+    prompt-fidelity gate caught."""
+    from armada.cosmic_workflow import build_retrieve_operator
+
+    context_manager = MagicMock()
+    context_manager.get_context.return_value = {"context_id": "c-1",
+                                                "response": "an earlier analysis"}
+    context_router = MagicMock()
+    context_router.context_manager = context_manager
+    context_router.find_similar.return_value = [{"context_id": "c-1", "similarity": 0.97}]
+
+    op = build_retrieve_operator(context_router, workflow_id="wf", dimensions=D)
+    table = pa.table({"query_embedding": pa.array(
+        [np.ones(D, dtype=np.float32)], type=op.schema_in.field(0).type)},
+        schema=op.schema_in)
+
+    row = op.fn(table).column("ranked_docs").to_pylist()[0]
+
+    assert row["doc"] == "an earlier analysis"
+    assert row["score"] == pytest.approx(0.97)
+
+
+def test_retrieve_on_a_miss_emits_an_empty_doc_and_zero_score():
+    """The miss shape is the hit/miss discriminator Reason reads; score 0.0
+    must mean miss unambiguously."""
+    from armada.cosmic_workflow import build_retrieve_operator
+
+    context_router = MagicMock()
+    context_router.context_manager = MagicMock()
+    context_router.find_similar.return_value = []
+
+    op = build_retrieve_operator(context_router, workflow_id="wf", dimensions=D)
+    table = pa.table({"query_embedding": pa.array(
+        [np.ones(D, dtype=np.float32)], type=op.schema_in.field(0).type)},
+        schema=op.schema_in)
+
+    row = op.fn(table).column("ranked_docs").to_pylist()[0]
+
+    assert row["doc"] == ""
+    assert row["score"] == 0.0
+    context_router.context_manager.get_context.assert_not_called()
+
+
+def test_retrieve_treats_a_vanished_context_as_a_miss():
+    """A context id that no longer resolves — evicted by TTL, or another rank's
+    id not yet ingested — must degrade to a miss rather than produce a row whose
+    doc is None and whose score claims a hit."""
+    from armada.cosmic_workflow import build_retrieve_operator
+
+    context_manager = MagicMock()
+    context_manager.get_context.return_value = None
+    context_router = MagicMock()
+    context_router.context_manager = context_manager
+    context_router.find_similar.return_value = [{"context_id": "gone", "similarity": 0.97}]
+
+    op = build_retrieve_operator(context_router, workflow_id="wf", dimensions=D)
+    table = pa.table({"query_embedding": pa.array(
+        [np.ones(D, dtype=np.float32)], type=op.schema_in.field(0).type)},
+        schema=op.schema_in)
+
+    row = op.fn(table).column("ranked_docs").to_pylist()[0]
+
+    assert row["doc"] == ""
+    assert row["score"] == 0.0
+
+
+def test_a_resolved_hit_is_what_counts_as_reuse():
+    """reuse_rate must count reuse that actually happened. A similarity match
+    whose context cannot be fetched avoids no LLM call, so counting it would
+    report a reuse rate the cost numbers cannot support."""
+    from armada.cosmic_workflow import build_retrieve_operator
+    from armada.run_metrics import RunMetrics
+
+    context_manager = MagicMock()
+    context_manager.get_context.return_value = None
+    context_router = MagicMock()
+    context_router.context_manager = context_manager
+    context_router.find_similar.return_value = [{"context_id": "gone", "similarity": 0.97}]
+
+    metrics = RunMetrics()
+    op = build_retrieve_operator(context_router, workflow_id="wf", dimensions=D,
+                                 metrics=metrics)
+    table = pa.table({"query_embedding": pa.array(
+        [np.ones(D, dtype=np.float32)], type=op.schema_in.field(0).type)},
+        schema=op.schema_in)
+
+    op.fn(table)
+
+    assert metrics.summary()["retrievals"] == 1
+    assert metrics.summary()["cache_hits"] == 0
+
+
+def _reason_table(op, docs, scores, raw):
+    ctx_type = op.schema_in.field(0).type
+    return pa.table({
+        "context": pa.array([{"doc": d, "score": s} for d, s in zip(docs, scores)],
+                            type=ctx_type),
+        "raw_text": pa.array(raw, type=pa.large_utf8()),
+    })
+
+
+def test_reason_calls_the_llm_with_raw_text_on_a_miss():
+    from armada.cosmic_workflow import build_reason_operator
+    from armada.run_metrics import RunMetrics
+
+    chain_executor = MagicMock()
+    chain_executor.execute.return_value = {"response": "fresh", "input_tokens": 1,
+                                           "output_tokens": 2, "latency_ms": 5.0,
+                                           "model_id": "m"}
+    metrics = RunMetrics()
+    op = build_reason_operator(chain_executor, dimensions=D, metrics=metrics)
+
+    out = op.fn(_reason_table(op, [""], [0.0], ["the real analysis prompt"]))
+
+    chain_executor.execute.assert_called_once_with("the real analysis prompt")
+    assert out.column("response").to_pylist() == ["fresh"]
+    assert out.column("reused").to_pylist() == [False]
+    assert metrics.summary()["llm_calls"] == 1
+
+
+def test_reason_reuses_the_retrieved_response_without_calling_the_llm():
+    from armada.cosmic_workflow import build_reason_operator
+    from armada.run_metrics import RunMetrics
+
+    chain_executor = MagicMock()
+    metrics = RunMetrics()
+    op = build_reason_operator(chain_executor, dimensions=D, metrics=metrics)
+
+    out = op.fn(_reason_table(op, ["an earlier analysis"], [0.97], ["prompt"]))
+
+    chain_executor.execute.assert_not_called()
+    assert out.column("response").to_pylist() == ["an earlier analysis"]
+    assert out.column("reused").to_pylist() == [True]
+    assert metrics.summary()["llm_calls"] == 0
+
+
+def test_reason_mixes_hits_and_misses_in_one_batch():
+    """Rows are decided independently. A batch that called once for every row
+    because one row missed would put H4's cost saving back to zero."""
+    from armada.cosmic_workflow import build_reason_operator
+    from armada.run_metrics import RunMetrics
+
+    chain_executor = MagicMock()
+    chain_executor.execute.return_value = {"response": "fresh", "input_tokens": 1,
+                                           "output_tokens": 2, "latency_ms": 5.0,
+                                           "model_id": "m"}
+    metrics = RunMetrics()
+    op = build_reason_operator(chain_executor, dimensions=D, metrics=metrics)
+
+    out = op.fn(_reason_table(op, ["reused one", "", "reused two"], [0.9, 0.0, 0.95],
+                              ["p0", "p1", "p2"]))
+
+    chain_executor.execute.assert_called_once_with("p1")
+    assert out.column("response").to_pylist() == ["reused one", "fresh", "reused two"]
+    assert out.column("reused").to_pylist() == [True, False, True]
+    assert metrics.summary()["llm_calls"] == 1
+
+
+def test_a_reused_row_reports_no_tokens():
+    """Cost accounting must not bill a call that never happened."""
+    import json as _json
+
+    from armada.cosmic_workflow import build_reason_operator
+
+    op = build_reason_operator(MagicMock(), dimensions=D)
+
+    out = op.fn(_reason_table(op, ["an earlier analysis"], [0.97], ["prompt"]))
+    cost = _json.loads(out.column("cost_metadata_json").to_pylist()[0])
+
+    assert cost["input_tokens"] == 0
+    assert cost["output_tokens"] == 0
+
+
+def test_bind_emits_no_envelope_for_a_reused_row():
+    """A hit stores nothing: duplicating the context it just reused would grow
+    the store with copies and slow every later similarity search."""
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf", rank=0)
+    table = pa.table({
+        "response": pa.array(["reused", "fresh"], type=pa.large_utf8()),
+        "reused": pa.array([True, False], type=pa.bool_()),
+    })
+
+    out = op.fn(table)
+
+    assert out.num_rows == 1
+    assert json.loads(out.column("kv_pairs").to_pylist()[0]["v"])["response"] == "fresh"
+
+
+def test_bind_without_a_reused_column_binds_every_row():
+    """A bare single-column caller (a standalone unit test, or a caller
+    predating the reuse path) must keep working unchanged."""
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({"response": ["a", "b"]}, schema=op.schema_in)
+
+    assert op.fn(table).num_rows == 2
+
+
+def test_retrieve_and_reason_agree_on_what_a_hit_is_at_similarity_zero():
+    """Both operators must key the hit on the same field.
+
+    A resolved match carrying similarity 0.0 is the case where a score-based
+    discriminator in Reason disagrees with Retrieve's response-based one: the
+    galaxy is counted in cache_hits AND in records_written, written+hits
+    exceeds the shard, and the gate fails a run that was actually fine.
+    """
+    from armada.cosmic_workflow import build_reason_operator, build_retrieve_operator
+    from armada.run_metrics import RunMetrics
+
+    context_manager = MagicMock()
+    context_manager.get_context.return_value = {"context_id": "c-1",
+                                                "response": "an earlier analysis"}
+    context_router = MagicMock()
+    context_router.context_manager = context_manager
+    context_router.find_similar.return_value = [{"context_id": "c-1", "similarity": 0.0}]
+
+    metrics = RunMetrics()
+    retrieve = build_retrieve_operator(context_router, workflow_id="wf", dimensions=D,
+                                       metrics=metrics)
+    table = pa.table({"query_embedding": pa.array(
+        [np.ones(D, dtype=np.float32)], type=retrieve.schema_in.field(0).type)},
+        schema=retrieve.schema_in)
+
+    retrieved = retrieve.fn(table)
+    assert metrics.summary()["cache_hits"] == 1
+
+    chain_executor = MagicMock()
+    chain_executor.execute.return_value = {"response": "a fresh call", "input_tokens": 1,
+                                           "output_tokens": 2, "latency_ms": 1.0,
+                                           "model_id": "m"}
+    reason = build_reason_operator(chain_executor, dimensions=D, metrics=metrics)
+    out = reason.fn(pa.table({
+        "context": retrieved.column("ranked_docs"),
+        "raw_text": pa.array(["a prompt"], type=pa.large_utf8()),
+    }))
+
+    chain_executor.execute.assert_not_called()
+    assert out.column("response").to_pylist() == ["an earlier analysis"]
+    assert out.column("reused").to_pylist() == [True]
+    assert metrics.summary()["llm_calls"] == 0

@@ -19,10 +19,11 @@ prompts by cosmic_ai.task_generator. Bedrock, Redis and DynamoDB are all mocked;
 nothing here touches AWS.
 
 Two things are proved:
-  1. every galaxy in the fixture comes out the far end as a stored analysis
-     record, and the collectives fired in the order the compiled plan assigns
-     (scatter -> gather -> gather -> broadcast; Retrieve's Reduce is structural,
-     so it is expressed as a gather plus a local combine);
+  1. every rank turns its own shard into stored analysis records, and the
+     collectives fired in the order the compiled plan assigns (scatter ->
+     allgather). Under the row-distributed layout Embed and Retrieve are local,
+     so the only cross-rank movement is MemoryUpsert's allgather, which is what
+     makes a context published on one rank visible to the others;
   2. at world_size == 1 the executor's result is identical to LangChain's own
      seq.invoke() on the same input — the swap-equivalence control for E-SP2,
      which is what lets a measured S(N) be attributed to the data plane rather
@@ -114,38 +115,30 @@ def _workflow(services):
 class SpyBridge:
     """Records each collective and returns what a real one would hand back.
 
-    scatter delivers this rank's own shard; gather returns the consolidated
-    per-rank contributions at root. Both are precomputed by the test from the
-    same operator bodies the executor runs, so the values moving through the
-    pipeline are the real ones — only the transport is simulated.
+    scatter delivers this rank's own shard; allgather returns every rank's
+    contribution, which under the row-distributed layout is how a context
+    published on one rank becomes visible to the others. The values moving
+    through the pipeline are the real ones, produced by the operator bodies the
+    executor runs — only the transport is simulated.
+
+    gather and broadcast are deliberately absent. Under this layout no operator
+    should reach for them, so a pattern that regressed to one fails loudly with
+    an AttributeError naming the collective rather than being quietly recorded.
     """
 
-    def __init__(self, world_size, my_shard, gather_result):
+    def __init__(self, world_size, my_shard):
         self.world_size = world_size
         self.available = world_size > 1
         self.calls = []
         self._my_shard = my_shard
-        self._gather_result = gather_result
 
     def scatter(self, tables, root=0):
         self.calls.append("scatter")
         return self._my_shard
 
-    def gather(self, table, root=0):
-        self.calls.append("gather")
-        # The first gather is Embed's ScatterGather, consolidating each rank's
-        # embedding. Retrieve's Reduce then gathers again — a structural
-        # reduction has no arithmetic op, so the executor expresses it as a
-        # gather plus a local combine (see ArmadaExecutor._reduce). At root that
-        # second gather returns this rank's own contribution.
-        if self._gather_result is not None:
-            consolidated, self._gather_result = self._gather_result, None
-            return consolidated
-        return [table]
-
-    def broadcast(self, table, root=0):
-        self.calls.append("broadcast")
-        return table
+    def allgather(self, table):
+        self.calls.append("allgather")
+        return [table] * self.world_size
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +147,19 @@ class SpyBridge:
 
 @pytest.mark.parametrize("world_size", [4, 8])
 def test_every_galaxy_produces_an_analysis_record_over_the_collectives(world_size):
+    """One rank's view of the pipeline: it reasons over its own shard only, and
+    stores every rank's contexts.
+
+    The per-rank LLM count is the assertion that matters. Under the previous
+    mapping Embed's gather funnelled every row to root, so one rank made every
+    LLM call while the others idled — which would have flattened S(N) in both
+    arms of Experiment E for reasons unrelated to the data plane.
+
+    Reasoning stays sharded while storage is replicated, and the two counts
+    diverging by exactly world_size is what all-to-all visibility looks like
+    from inside one rank: one LLM call for its own galaxy, world_size stores
+    because the collective handed it everyone's contexts.
+    """
     prompts = _analysis_prompts(world_size)
     assert len(prompts) == world_size
 
@@ -164,27 +170,21 @@ def test_every_galaxy_produces_an_analysis_record_over_the_collectives(world_siz
     def raw_table(texts):
         return pa.table({"raw_text": list(texts)}, schema=preprocess_op.schema_in)
 
-    # What each rank's Preprocess+Embed would have produced, computed with the
-    # real operator bodies so bridge.gather returns a faithful consolidation.
-    embedded_per_rank = [embed_op.fn(preprocess_op.fn(raw_table([p]))) for p in prompts]
-
-    bridge = SpyBridge(world_size=world_size,
-                       my_shard=raw_table([prompts[0]]),
-                       gather_result=embedded_per_rank)
+    bridge = SpyBridge(world_size=world_size, my_shard=raw_table([prompts[0]]))
     executor = ArmadaExecutor(bridge)
 
     result = executor.run(seq, input_tables=[raw_table([p]) for p in prompts],
                           ctx=None, root=0)
 
-    assert bridge.calls == ["scatter", "gather", "gather", "broadcast"]
+    assert bridge.calls == ["scatter", "allgather"]
 
     acks = result.column("ack").to_pylist()
-    assert len(acks) == len(prompts)
+    assert len(acks) == world_size
     assert all(acks)
 
     _, _, context_manager, chain_executor = services
-    assert chain_executor.execute.call_count == len(prompts)
-    assert context_manager.store_context.call_count == len(prompts)
+    assert chain_executor.execute.call_count == 1
+    assert context_manager.store_context.call_count == world_size
 
 
 def test_stored_records_carry_the_real_prompt_and_embedding():
@@ -198,14 +198,13 @@ def test_stored_records_carry_the_real_prompt_and_embedding():
     def raw_table(texts):
         return pa.table({"raw_text": list(texts)}, schema=preprocess_op.schema_in)
 
-    embedded = [embed_op.fn(preprocess_op.fn(raw_table([p]))) for p in prompts]
-    bridge = SpyBridge(4, raw_table([prompts[0]]), embedded)
+    bridge = SpyBridge(4, raw_table([prompts[0]]))
     ArmadaExecutor(bridge).run(seq, input_tables=[raw_table([p]) for p in prompts],
                                ctx=None, root=0)
 
     _, _, context_manager, _ = services
     stored = [c.kwargs for c in context_manager.store_context.call_args_list]
-    assert {s["task_description"] for s in stored} == set(prompts)
+    assert {s["task_description"] for s in stored} == {prompts[0]}
 
     for s in stored:
         assert s["workflow_id"] == WORKFLOW_ID
@@ -226,7 +225,7 @@ def test_world_size_one_matches_langchain_native_invoke():
     schema_in = executor_seq.operators[0].schema_in
     table = pa.table({"raw_text": list(prompts)}, schema=schema_in)
 
-    single_rank = SpyBridge(world_size=1, my_shard=None, gather_result=None)
+    single_rank = SpyBridge(world_size=1, my_shard=None)
     via_executor = ArmadaExecutor(single_rank).run(executor_seq, input_tables=table,
                                                    ctx=None, root=0)
 

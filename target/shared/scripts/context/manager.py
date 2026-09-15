@@ -19,6 +19,7 @@ only for the duration of the process.
 
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -29,6 +30,18 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 _VALID_BACKENDS = ("cylon", "redis")
+
+
+def context_id_at(context_ids, index):
+    """Materialize one context id from whatever get_embedding_matrix returned.
+
+    The cylon backend hands back an Arrow array so that no Python string is
+    built for rows a query never selects; the redis backend already holds
+    Python strings. Callers index through this so a search materializes ids
+    only for the handful of rows it returns.
+    """
+    value = context_ids[index]
+    return value.as_py() if hasattr(value, "as_py") else value
 
 
 def _create_cylon_backend(embedding_dim, redis_addr, redis_ttl):
@@ -62,6 +75,34 @@ def _create_redis_backend(redis_host, redis_port):
     }
 
 
+_FALSY_FLAGS = frozenset({"0", "false", "no", "off", ""})
+_TRUTHY_FLAGS = frozenset({"1", "true", "yes", "on"})
+
+
+def _env_flag(name, default):
+    """Resolve a boolean environment variable, raising on an unrecognized value.
+
+    Only known spellings are accepted, case-insensitively and stripped. The
+    alternative — treating everything that is not one blessed token as True —
+    means CONTEXT_TABLE_SNAPSHOT=FALSE, =no or =off silently does the opposite
+    of what whoever typed it intended, which surfaces as a quietly wrong
+    experiment rather than as an error.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+
+    value = raw.strip().lower()
+    if value in _FALSY_FLAGS:
+        return False
+    if value in _TRUTHY_FLAGS:
+        return True
+    raise ValueError(
+        f"{name}={raw!r} is not a boolean; expected one of "
+        f"{sorted(_TRUTHY_FLAGS)} or {sorted(_FALSY_FLAGS - {''})}"
+    )
+
+
 class ContextManager:
     """Store and retrieve contexts with embeddings.
 
@@ -77,6 +118,11 @@ class ContextManager:
     dynamo_table:
         DynamoDB table name for durable long-term storage and analytics.
         ``None`` (default) disables DynamoDB.
+    snapshot_context_table:
+        Whether a cylon-backend store also writes an Arrow IPC snapshot of the
+        whole ContextTable to Redis. ``None`` (default) resolves from
+        ``CONTEXT_TABLE_SNAPSHOT``, itself defaulting to enabled so no existing
+        caller changes. See ``_store_cylon`` for why a timed run turns it off.
     """
 
     def __init__(
@@ -90,6 +136,7 @@ class ContextManager:
         region: str = "us-east-1",
         embedding_dim: int = 1024,
         backend: str = "cylon",
+        snapshot_context_table: Optional[bool] = None,
     ):
         if backend not in _VALID_BACKENDS:
             raise ValueError(
@@ -100,6 +147,10 @@ class ContextManager:
         self._embedding_dim = embedding_dim
         self._redis_ttl = redis_ttl
         self._persist_to_redis = persist_to_redis
+        self._snapshot_context_table = (
+            _env_flag("CONTEXT_TABLE_SNAPSHOT", True)
+            if snapshot_context_table is None else snapshot_context_table
+        )
 
         # DynamoDB — optional, disabled by default
         if dynamo_table is not None:
@@ -201,6 +252,17 @@ class ContextManager:
         return context_id
 
     def _store_cylon(self, context_id, workflow_id, embedding, response, cost_metadata):
+        """Put one context into the ContextTable, then optionally snapshot it.
+
+        The snapshot serializes the ENTIRE table to Arrow IPC and writes it to
+        Redis under `context_table:{workflow_id}` — once per store, so its cost
+        grows with the number of contexts already held. Every rank writes that
+        same key, so in a multi-rank run it is last-writer-wins and is not a
+        substitute for the collective that actually shares contexts; it is
+        cold-start persistence for a single owner. Disable it with
+        CONTEXT_TABLE_SNAPSHOT=0 or snapshot_context_table=False when the store
+        sits inside a timed region.
+        """
         table = self._cylon["table"]
         table.put(
             context_id,
@@ -212,8 +274,7 @@ class ContextManager:
             output_tokens=cost_metadata.get("output_tokens", 0),
             cost_usd=float(cost_metadata.get("cost_usd", 0)),
         )
-        # Arrow IPC snapshot to Redis (only when persist_to_redis enabled)
-        if self._persist_to_redis and self._cylon["save_fn"]:
+        if self._snapshot_context_table and self._persist_to_redis and self._cylon["save_fn"]:
             try:
                 self._cylon["save_fn"](
                     table,
@@ -392,17 +453,48 @@ class ContextManager:
     # Embeddings
     # ------------------------------------------------------------------
 
+    def get_embedding_matrix(self, workflow_id: Optional[str] = None):
+        """Return (context_ids, matrix) where matrix is (n_contexts, embedding_dim).
+
+        On the cylon backend the matrix is a numpy *view* over the ContextTable's
+        Arrow buffers, not a copy: the embedding column is a
+        FixedSizeList<float32>[D] whose values buffer is already the contiguous
+        D-by-N block a SIMD kernel wants. Building it per row through
+        ``as_py()`` cost O(N*D) Python object construction on every query, and
+        since the store grows with the agent population that cost rose with N —
+        which would bend a scaling result downwards for reasons that have
+        nothing to do with the data plane.
+
+        `context_ids` is an Arrow array here and a list on the redis backend;
+        index it through ``context_id_at`` rather than assuming either.
+        """
+        if self._cylon is not None:
+            return self._get_matrix_cylon(workflow_id)
+        return self._get_matrix_redis(workflow_id)
+
     def get_all_embeddings(
         self,
         workflow_id: Optional[str] = None,
     ) -> list[tuple[str, np.ndarray]]:
-        """Return all (context_id, embedding) pairs."""
-        if self._cylon is not None:
-            return self._get_embeddings_cylon(workflow_id)
-        else:
-            return self._get_embeddings_redis(workflow_id)
+        """Return all (context_id, embedding) pairs.
 
-    def _get_embeddings_cylon(self, workflow_id):
+        Each embedding is a row view into the matrix, so this is O(n) slices
+        rather than O(n) array allocations. The rows are read-only in practice;
+        callers that need to mutate one must copy it first.
+        """
+        context_ids, matrix = self.get_embedding_matrix(workflow_id)
+        return [
+            (context_id_at(context_ids, i), matrix[i])
+            for i in range(matrix.shape[0])
+        ]
+
+    def _empty_matrix(self):
+        return [], np.empty((0, self._embedding_dim), dtype=np.float32)
+
+    def _get_matrix_cylon(self, workflow_id):
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
         batch = self._cylon["table"].to_arrow()
         # In-memory table is empty on every new invocation (Lambda/ECS cold start).
         # Attempt to restore from the Redis Arrow IPC snapshot so cross-invocation
@@ -411,17 +503,39 @@ class ContextManager:
             self.load_from_redis(workflow_id)
             batch = self._cylon["table"].to_arrow()
         if batch is None or batch.num_rows == 0:
-            return []
-        results = []
-        ctx_ids = batch.column("context_id")
+            return self._empty_matrix()
+
+        if workflow_id:
+            matches = pc.equal(batch.column("workflow_id"), workflow_id)
+            # Filtering allocates a new table, so only pay for it when the store
+            # actually holds other workflows — the common case is that it does not.
+            if not pc.all(matches).as_py():
+                batch = batch.filter(matches)
+                if batch.num_rows == 0:
+                    return self._empty_matrix()
+
         embeddings = batch.column("embedding")
-        wf_ids = batch.column("workflow_id") if workflow_id else None
-        for i in range(batch.num_rows):
-            if workflow_id and wf_ids[i].as_py() != workflow_id:
-                continue
-            emb = np.array(embeddings[i].as_py(), dtype=np.float32)
-            results.append((ctx_ids[i].as_py(), emb))
-        return results
+        if isinstance(embeddings, pa.ChunkedArray):
+            # combine_chunks() allocates a fresh buffer even when the column
+            # already has exactly one chunk, which would put a full copy of the
+            # embedding block on every query. Take the chunk directly in that
+            # case; only a genuinely chunked column needs the contiguous copy.
+            if embeddings.num_chunks == 1:
+                embeddings = embeddings.chunk(0)
+            elif embeddings.num_chunks == 0:
+                return self._empty_matrix()
+            else:
+                embeddings = embeddings.combine_chunks()
+
+        values = embeddings.flatten()
+        matrix = values.to_numpy(zero_copy_only=True).reshape(batch.num_rows, -1)
+        return batch.column("context_id"), matrix
+
+    def _get_matrix_redis(self, workflow_id):
+        pairs = self._get_embeddings_redis(workflow_id)
+        if not pairs:
+            return self._empty_matrix()
+        return [cid for cid, _ in pairs], np.vstack([emb for _, emb in pairs])
 
     def _get_embeddings_redis(self, workflow_id):
         client = self._redis["client"]

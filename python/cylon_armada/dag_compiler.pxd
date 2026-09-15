@@ -23,6 +23,7 @@ cdef extern from "cylon_armada/compiler/dag_compiler.hpp" namespace "cylon_armad
         Reduce "cylon_armada::CollectivePattern::Reduce"
         PointToPoint "cylon_armada::CollectivePattern::PointToPoint"
         Broadcast "cylon_armada::CollectivePattern::Broadcast"
+        AllGather "cylon_armada::CollectivePattern::AllGather"
 
     cdef enum _TransferMode "cylon_armada::TransferMode":
         ZeroCopy "cylon_armada::TransferMode::ZeroCopy"

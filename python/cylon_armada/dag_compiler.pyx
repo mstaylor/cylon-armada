@@ -14,7 +14,7 @@ from cylon_armada.dag_compiler cimport (
     _CollectivePattern as CPat, _TransferMode as CMode,
     CAgentOperator, CWorkflowDAG, CEdgePlan, CExecutionPlan,
     CCompileResult, CAgentDAGCompiler,
-    Scatter, ScatterGather, Reduce, PointToPoint, Broadcast,
+    Scatter, ScatterGather, Reduce, PointToPoint, Broadcast, AllGather,
     ZeroCopy, Convert,
 )
 
@@ -25,6 +25,7 @@ class CollectivePattern(IntEnum):
     Reduce = 2
     PointToPoint = 3
     Broadcast = 4
+    AllGather = 5
 
 
 class TransferMode(IntEnum):
@@ -43,6 +44,7 @@ cdef CPat _to_cpat(int p) except *:
     if p == 2: return Reduce
     if p == 3: return PointToPoint
     if p == 4: return Broadcast
+    if p == 5: return AllGather
     raise ValueError(f"unknown collective pattern {p}")
 
 
@@ -51,7 +53,8 @@ cdef int _from_cpat(CPat p):
     if p == ScatterGather: return 1
     if p == Reduce: return 2
     if p == PointToPoint: return 3
-    return 4  # Broadcast
+    if p == Broadcast: return 4
+    return 5
 
 
 class AgentOperator:

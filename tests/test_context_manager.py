@@ -238,3 +238,119 @@ class TestContextManagerValidation:
         cm = ContextManager.from_config(config)
         assert cm._backend_name == "redis"
         assert cm._embedding_dim == 512
+
+class TestContextTableSnapshot:
+    """The Arrow IPC snapshot to Redis on every cylon store.
+
+    It is cold-start persistence, not part of the data plane, and it has to be
+    switchable off: it serializes the WHOLE table on every store, so its cost
+    is O(stores^2) across a run, and it sits inside the region Experiment E
+    times on the arm whose claim is zero-copy.
+    """
+
+    @staticmethod
+    def _backend(save_fn):
+        return {"table": MagicMock(), "redis_addr": "h:1", "redis_ttl": 60,
+                "has_redis": True, "save_fn": save_fn, "load_fn": None}
+
+    @staticmethod
+    def _store(cm):
+        cm.store_context(workflow_id="wf", task_description="t",
+                         embedding=np.zeros(8, dtype=np.float32), response="r",
+                         cost_metadata={})
+
+    @patch('context.manager._create_cylon_backend')
+    def test_the_context_table_snapshot_can_be_disabled(self, mock_create_cylon):
+        from context.manager import ContextManager
+
+        save_fn = MagicMock()
+        mock_create_cylon.return_value = self._backend(save_fn)
+
+        self._store(ContextManager(backend="cylon", embedding_dim=8,
+                                   snapshot_context_table=False))
+
+        save_fn.assert_not_called()
+
+    @patch('context.manager._create_cylon_backend')
+    def test_the_snapshot_is_on_by_default(self, mock_create_cylon):
+        from context.manager import ContextManager
+
+        save_fn = MagicMock()
+        mock_create_cylon.return_value = self._backend(save_fn)
+
+        self._store(ContextManager(backend="cylon", embedding_dim=8))
+
+        save_fn.assert_called_once()
+
+    @patch('context.manager._create_cylon_backend')
+    def test_the_environment_can_turn_the_snapshot_off(self, mock_create_cylon, monkeypatch):
+        """The sweep sets CONTEXT_TABLE_SNAPSHOT rather than threading a
+        constructor argument through every worker entry point."""
+        from context.manager import ContextManager
+
+        monkeypatch.setenv("CONTEXT_TABLE_SNAPSHOT", "0")
+        save_fn = MagicMock()
+        mock_create_cylon.return_value = self._backend(save_fn)
+
+        self._store(ContextManager(backend="cylon", embedding_dim=8))
+
+        save_fn.assert_not_called()
+
+    @patch('context.manager._create_cylon_backend')
+    def test_an_explicit_argument_beats_the_environment(self, mock_create_cylon, monkeypatch):
+        """Env -> event -> config -> default: an explicit setting is the caller
+        being specific and must not be overridden by the ambient environment."""
+        from context.manager import ContextManager
+
+        monkeypatch.setenv("CONTEXT_TABLE_SNAPSHOT", "0")
+        save_fn = MagicMock()
+        mock_create_cylon.return_value = self._backend(save_fn)
+
+        self._store(ContextManager(backend="cylon", embedding_dim=8,
+                                   snapshot_context_table=True))
+
+        save_fn.assert_called_once()
+
+    @pytest.mark.parametrize("value", ["0", "false", "FALSE", "False", "no", "off", "", " 0 "])
+    @patch('context.manager._create_cylon_backend')
+    def test_every_spelling_of_off_turns_the_snapshot_off(self, mock_create_cylon,
+                                                          monkeypatch, value):
+        """An operator who types FALSE, no or off means off. Silently reading
+        those as on would leave a serialization step inside the timed region of
+        the arm whose claim is zero-copy, and nothing would report it."""
+        from context.manager import ContextManager
+
+        monkeypatch.setenv("CONTEXT_TABLE_SNAPSHOT", value)
+        save_fn = MagicMock()
+        mock_create_cylon.return_value = self._backend(save_fn)
+
+        self._store(ContextManager(backend="cylon", embedding_dim=8))
+
+        save_fn.assert_not_called()
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+    @patch('context.manager._create_cylon_backend')
+    def test_every_spelling_of_on_turns_the_snapshot_on(self, mock_create_cylon,
+                                                        monkeypatch, value):
+        from context.manager import ContextManager
+
+        monkeypatch.setenv("CONTEXT_TABLE_SNAPSHOT", value)
+        save_fn = MagicMock()
+        mock_create_cylon.return_value = self._backend(save_fn)
+
+        self._store(ContextManager(backend="cylon", embedding_dim=8))
+
+        save_fn.assert_called_once()
+
+    @patch('context.manager._create_cylon_backend')
+    def test_an_unrecognized_value_fails_fast_instead_of_guessing(self, mock_create_cylon,
+                                                                  monkeypatch):
+        """Fail fast at the boundary: a typo must not resolve to either state
+        by accident, because both are plausible and neither is reported."""
+        from context.manager import ContextManager
+
+        monkeypatch.setenv("CONTEXT_TABLE_SNAPSHOT", "maybe")
+        mock_create_cylon.return_value = self._backend(MagicMock())
+
+        with pytest.raises(ValueError, match="CONTEXT_TABLE_SNAPSHOT"):
+            ContextManager(backend="cylon", embedding_dim=8)

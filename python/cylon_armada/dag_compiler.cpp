@@ -5760,8 +5760,8 @@ typedef struct {
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_pop;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_values;
   PyObject *__pyx_codeobj_tab[6];
-  PyObject *__pyx_string_tab[86];
-  PyObject *__pyx_number_tab[5];
+  PyObject *__pyx_string_tab[87];
+  PyObject *__pyx_number_tab[6];
 /* #### Code section: module_state_contents ### */
 /* CommonTypesMetaclass.module_state_decls */
 PyTypeObject *__pyx_CommonTypesMetaclassType;
@@ -5812,87 +5812,89 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 #define __pyx_kp_u_utf_8 __pyx_string_tab[7]
 #define __pyx_n_u_AgentOperator __pyx_string_tab[8]
 #define __pyx_n_u_AgentOperator___init __pyx_string_tab[9]
-#define __pyx_n_u_Broadcast __pyx_string_tab[10]
-#define __pyx_n_u_CollectivePattern __pyx_string_tab[11]
-#define __pyx_n_u_Convert __pyx_string_tab[12]
-#define __pyx_n_u_EdgePlanView __pyx_string_tab[13]
-#define __pyx_n_u_EdgePlanView___init __pyx_string_tab[14]
-#define __pyx_n_u_ExecutionPlan __pyx_string_tab[15]
-#define __pyx_n_u_ExecutionPlan___init __pyx_string_tab[16]
-#define __pyx_n_u_IntEnum __pyx_string_tab[17]
-#define __pyx_n_u_PointToPoint __pyx_string_tab[18]
-#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[19]
-#define __pyx_n_u_Reduce __pyx_string_tab[20]
-#define __pyx_n_u_Scatter __pyx_string_tab[21]
-#define __pyx_n_u_ScatterGather __pyx_string_tab[22]
-#define __pyx_n_u_Schema __pyx_string_tab[23]
-#define __pyx_n_u_SchemaMismatchError __pyx_string_tab[24]
-#define __pyx_n_u_TransferMode __pyx_string_tab[25]
-#define __pyx_n_u_WorkflowDAG __pyx_string_tab[26]
-#define __pyx_n_u_WorkflowDAG___init __pyx_string_tab[27]
-#define __pyx_n_u_ZeroCopy __pyx_string_tab[28]
-#define __pyx_n_u_a __pyx_string_tab[29]
-#define __pyx_n_u_assignments __pyx_string_tab[30]
-#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[31]
-#define __pyx_n_u_b __pyx_string_tab[32]
-#define __pyx_n_u_cdag __pyx_string_tab[33]
-#define __pyx_n_u_check_edges __pyx_string_tab[34]
-#define __pyx_n_u_cline_in_traceback __pyx_string_tab[35]
-#define __pyx_n_u_comp __pyx_string_tab[36]
-#define __pyx_n_u_compile_workflow __pyx_string_tab[37]
-#define __pyx_n_u_consumer __pyx_string_tab[38]
-#define __pyx_n_u_cylon_armada_dag_compiler __pyx_string_tab[39]
-#define __pyx_n_u_dag __pyx_string_tab[40]
-#define __pyx_n_u_doc __pyx_string_tab[41]
-#define __pyx_n_u_edges __pyx_string_tab[42]
-#define __pyx_n_u_encode __pyx_string_tab[43]
-#define __pyx_n_u_enum __pyx_string_tab[44]
-#define __pyx_n_u_func __pyx_string_tab[45]
-#define __pyx_n_u_i __pyx_string_tab[46]
-#define __pyx_n_u_init __pyx_string_tab[47]
-#define __pyx_n_u_is_coroutine __pyx_string_tab[48]
-#define __pyx_n_u_item __pyx_string_tab[49]
-#define __pyx_n_u_items __pyx_string_tab[50]
-#define __pyx_n_u_key __pyx_string_tab[51]
-#define __pyx_n_u_main __pyx_string_tab[52]
-#define __pyx_n_u_metaclass __pyx_string_tab[53]
-#define __pyx_n_u_mode __pyx_string_tab[54]
-#define __pyx_n_u_module __pyx_string_tab[55]
-#define __pyx_n_u_mro_entries __pyx_string_tab[56]
-#define __pyx_n_u_name __pyx_string_tab[57]
-#define __pyx_n_u_name_2 __pyx_string_tab[58]
-#define __pyx_n_u_note __pyx_string_tab[59]
-#define __pyx_n_u_operators __pyx_string_tab[60]
-#define __pyx_n_u_out __pyx_string_tab[61]
-#define __pyx_n_u_pa __pyx_string_tab[62]
-#define __pyx_n_u_pattern __pyx_string_tab[63]
-#define __pyx_n_u_pop __pyx_string_tab[64]
-#define __pyx_n_u_prepare __pyx_string_tab[65]
-#define __pyx_n_u_producer __pyx_string_tab[66]
-#define __pyx_n_u_pyarrow __pyx_string_tab[67]
-#define __pyx_n_u_pyx_vtable __pyx_string_tab[68]
-#define __pyx_n_u_qualname __pyx_string_tab[69]
-#define __pyx_n_u_r __pyx_string_tab[70]
-#define __pyx_n_u_res __pyx_string_tab[71]
-#define __pyx_n_u_schema_in __pyx_string_tab[72]
-#define __pyx_n_u_schema_out __pyx_string_tab[73]
-#define __pyx_n_u_self __pyx_string_tab[74]
-#define __pyx_n_u_set_name __pyx_string_tab[75]
-#define __pyx_n_u_setdefault __pyx_string_tab[76]
-#define __pyx_n_u_test __pyx_string_tab[77]
-#define __pyx_n_u_values __pyx_string_tab[78]
-#define __pyx_kp_b_iso88591_A_4z_Rq_1_4q_4z_b_1_1D_A_HA_K_AQ __pyx_string_tab[79]
-#define __pyx_kp_b_iso88591_A_IQ_O1 __pyx_string_tab[80]
-#define __pyx_kp_b_iso88591_A_L_L_HA_HA __pyx_string_tab[81]
-#define __pyx_kp_b_iso88591_A_M_Qa_IRs_4s_4uCvQ __pyx_string_tab[82]
-#define __pyx_kp_b_iso88591_D_t1A_A_U_1E_uA_WA_U_9G1A_U_9G1 __pyx_string_tab[83]
-#define __pyx_kp_b_iso88591_U_3e1_7_q_q_7_1_q_7_1_c_F_1_q_w __pyx_string_tab[84]
-#define __pyx_kp_b_std_shared_ptr_arrow_Schema_PyOb __pyx_string_tab[85]
+#define __pyx_n_u_AllGather __pyx_string_tab[10]
+#define __pyx_n_u_Broadcast __pyx_string_tab[11]
+#define __pyx_n_u_CollectivePattern __pyx_string_tab[12]
+#define __pyx_n_u_Convert __pyx_string_tab[13]
+#define __pyx_n_u_EdgePlanView __pyx_string_tab[14]
+#define __pyx_n_u_EdgePlanView___init __pyx_string_tab[15]
+#define __pyx_n_u_ExecutionPlan __pyx_string_tab[16]
+#define __pyx_n_u_ExecutionPlan___init __pyx_string_tab[17]
+#define __pyx_n_u_IntEnum __pyx_string_tab[18]
+#define __pyx_n_u_PointToPoint __pyx_string_tab[19]
+#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[20]
+#define __pyx_n_u_Reduce __pyx_string_tab[21]
+#define __pyx_n_u_Scatter __pyx_string_tab[22]
+#define __pyx_n_u_ScatterGather __pyx_string_tab[23]
+#define __pyx_n_u_Schema __pyx_string_tab[24]
+#define __pyx_n_u_SchemaMismatchError __pyx_string_tab[25]
+#define __pyx_n_u_TransferMode __pyx_string_tab[26]
+#define __pyx_n_u_WorkflowDAG __pyx_string_tab[27]
+#define __pyx_n_u_WorkflowDAG___init __pyx_string_tab[28]
+#define __pyx_n_u_ZeroCopy __pyx_string_tab[29]
+#define __pyx_n_u_a __pyx_string_tab[30]
+#define __pyx_n_u_assignments __pyx_string_tab[31]
+#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[32]
+#define __pyx_n_u_b __pyx_string_tab[33]
+#define __pyx_n_u_cdag __pyx_string_tab[34]
+#define __pyx_n_u_check_edges __pyx_string_tab[35]
+#define __pyx_n_u_cline_in_traceback __pyx_string_tab[36]
+#define __pyx_n_u_comp __pyx_string_tab[37]
+#define __pyx_n_u_compile_workflow __pyx_string_tab[38]
+#define __pyx_n_u_consumer __pyx_string_tab[39]
+#define __pyx_n_u_cylon_armada_dag_compiler __pyx_string_tab[40]
+#define __pyx_n_u_dag __pyx_string_tab[41]
+#define __pyx_n_u_doc __pyx_string_tab[42]
+#define __pyx_n_u_edges __pyx_string_tab[43]
+#define __pyx_n_u_encode __pyx_string_tab[44]
+#define __pyx_n_u_enum __pyx_string_tab[45]
+#define __pyx_n_u_func __pyx_string_tab[46]
+#define __pyx_n_u_i __pyx_string_tab[47]
+#define __pyx_n_u_init __pyx_string_tab[48]
+#define __pyx_n_u_is_coroutine __pyx_string_tab[49]
+#define __pyx_n_u_item __pyx_string_tab[50]
+#define __pyx_n_u_items __pyx_string_tab[51]
+#define __pyx_n_u_key __pyx_string_tab[52]
+#define __pyx_n_u_main __pyx_string_tab[53]
+#define __pyx_n_u_metaclass __pyx_string_tab[54]
+#define __pyx_n_u_mode __pyx_string_tab[55]
+#define __pyx_n_u_module __pyx_string_tab[56]
+#define __pyx_n_u_mro_entries __pyx_string_tab[57]
+#define __pyx_n_u_name __pyx_string_tab[58]
+#define __pyx_n_u_name_2 __pyx_string_tab[59]
+#define __pyx_n_u_note __pyx_string_tab[60]
+#define __pyx_n_u_operators __pyx_string_tab[61]
+#define __pyx_n_u_out __pyx_string_tab[62]
+#define __pyx_n_u_pa __pyx_string_tab[63]
+#define __pyx_n_u_pattern __pyx_string_tab[64]
+#define __pyx_n_u_pop __pyx_string_tab[65]
+#define __pyx_n_u_prepare __pyx_string_tab[66]
+#define __pyx_n_u_producer __pyx_string_tab[67]
+#define __pyx_n_u_pyarrow __pyx_string_tab[68]
+#define __pyx_n_u_pyx_vtable __pyx_string_tab[69]
+#define __pyx_n_u_qualname __pyx_string_tab[70]
+#define __pyx_n_u_r __pyx_string_tab[71]
+#define __pyx_n_u_res __pyx_string_tab[72]
+#define __pyx_n_u_schema_in __pyx_string_tab[73]
+#define __pyx_n_u_schema_out __pyx_string_tab[74]
+#define __pyx_n_u_self __pyx_string_tab[75]
+#define __pyx_n_u_set_name __pyx_string_tab[76]
+#define __pyx_n_u_setdefault __pyx_string_tab[77]
+#define __pyx_n_u_test __pyx_string_tab[78]
+#define __pyx_n_u_values __pyx_string_tab[79]
+#define __pyx_kp_b_iso88591_A_4z_Rq_1_4q_4z_b_1_1D_A_HA_K_AQ __pyx_string_tab[80]
+#define __pyx_kp_b_iso88591_A_IQ_O1 __pyx_string_tab[81]
+#define __pyx_kp_b_iso88591_A_L_L_HA_HA __pyx_string_tab[82]
+#define __pyx_kp_b_iso88591_A_M_Qa_IRs_4s_4uCvQ __pyx_string_tab[83]
+#define __pyx_kp_b_iso88591_D_t1A_A_U_1E_uA_WA_U_9G1A_U_9G1 __pyx_string_tab[84]
+#define __pyx_kp_b_iso88591_U_3e1_7_q_q_7_1_q_7_1_c_F_1_q_w __pyx_string_tab[85]
+#define __pyx_kp_b_std_shared_ptr_arrow_Schema_PyOb __pyx_string_tab[86]
 #define __pyx_int_0 __pyx_number_tab[0]
 #define __pyx_int_1 __pyx_number_tab[1]
 #define __pyx_int_2 __pyx_number_tab[2]
 #define __pyx_int_3 __pyx_number_tab[3]
 #define __pyx_int_4 __pyx_number_tab[4]
+#define __pyx_int_5 __pyx_number_tab[5]
 /* #### Code section: module_state_clear ### */
 #if CYTHON_USE_MODULE_STATE
 static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
@@ -6006,8 +6008,8 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   Py_CLEAR(clear_module_state->__pyx_ptype_7pyarrow_3lib_Codec);
   Py_CLEAR(clear_module_state->__pyx_ptype_7pyarrow_3lib_StopToken);
   for (int i=0; i<6; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<86; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
-  for (int i=0; i<5; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
+  for (int i=0; i<87; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<6; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* CommonTypesMetaclass.module_state_clear */
 Py_CLEAR(clear_module_state->__pyx_CommonTypesMetaclassType);
@@ -6129,8 +6131,8 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   Py_VISIT(traverse_module_state->__pyx_ptype_7pyarrow_3lib_Codec);
   Py_VISIT(traverse_module_state->__pyx_ptype_7pyarrow_3lib_StopToken);
   for (int i=0; i<6; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<86; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
-  for (int i=0; i<5; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
+  for (int i=0; i<87; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<6; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* CommonTypesMetaclass.module_state_traverse */
 Py_VISIT(traverse_module_state->__pyx_CommonTypesMetaclassType);
@@ -8926,7 +8928,7 @@ static CYTHON_INLINE PyObject *__pyx_f_7pyarrow_8includes_6common_PyObject_to_ob
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":40
+/* "cylon_armada/dag_compiler.pyx":41
  * 
  * 
  * cdef CPat _to_cpat(int p) except *:             # <<<<<<<<<<<<<<
@@ -8948,7 +8950,7 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("_to_cpat", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":41
+  /* "cylon_armada/dag_compiler.pyx":42
  * 
  * cdef CPat _to_cpat(int p) except *:
  *     if p == 0: return Scatter             # <<<<<<<<<<<<<<
@@ -8961,7 +8963,7 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":42
+  /* "cylon_armada/dag_compiler.pyx":43
  * cdef CPat _to_cpat(int p) except *:
  *     if p == 0: return Scatter
  *     if p == 1: return ScatterGather             # <<<<<<<<<<<<<<
@@ -8974,7 +8976,7 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":43
+  /* "cylon_armada/dag_compiler.pyx":44
  *     if p == 0: return Scatter
  *     if p == 1: return ScatterGather
  *     if p == 2: return Reduce             # <<<<<<<<<<<<<<
@@ -8987,12 +8989,12 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":44
+  /* "cylon_armada/dag_compiler.pyx":45
  *     if p == 1: return ScatterGather
  *     if p == 2: return Reduce
  *     if p == 3: return PointToPoint             # <<<<<<<<<<<<<<
  *     if p == 4: return Broadcast
- *     raise ValueError(f"unknown collective pattern {p}")
+ *     if p == 5: return AllGather
 */
   __pyx_t_1 = (__pyx_v_p == 3);
   if (__pyx_t_1) {
@@ -9000,12 +9002,12 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":45
+  /* "cylon_armada/dag_compiler.pyx":46
  *     if p == 2: return Reduce
  *     if p == 3: return PointToPoint
  *     if p == 4: return Broadcast             # <<<<<<<<<<<<<<
+ *     if p == 5: return AllGather
  *     raise ValueError(f"unknown collective pattern {p}")
- * 
 */
   __pyx_t_1 = (__pyx_v_p == 4);
   if (__pyx_t_1) {
@@ -9013,17 +9015,30 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":46
+  /* "cylon_armada/dag_compiler.pyx":47
  *     if p == 3: return PointToPoint
  *     if p == 4: return Broadcast
+ *     if p == 5: return AllGather             # <<<<<<<<<<<<<<
+ *     raise ValueError(f"unknown collective pattern {p}")
+ * 
+*/
+  __pyx_t_1 = (__pyx_v_p == 5);
+  if (__pyx_t_1) {
+    __pyx_r = cylon_armada::CollectivePattern::AllGather;
+    goto __pyx_L0;
+  }
+
+  /* "cylon_armada/dag_compiler.pyx":48
+ *     if p == 4: return Broadcast
+ *     if p == 5: return AllGather
  *     raise ValueError(f"unknown collective pattern {p}")             # <<<<<<<<<<<<<<
  * 
  * 
 */
   __pyx_t_3 = NULL;
-  __pyx_t_4 = __Pyx_PyUnicode_From_int(__pyx_v_p, 0, ' ', 'd'); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 46, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyUnicode_From_int(__pyx_v_p, 0, ' ', 'd'); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 48, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_unknown_collective_pattern, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 46, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_unknown_collective_pattern, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 48, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __pyx_t_6 = 1;
@@ -9032,14 +9047,14 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
     __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_ValueError)), __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
     __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 46, __pyx_L1_error)
+    if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 48, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_2);
   }
   __Pyx_Raise(__pyx_t_2, 0, 0, 0);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  __PYX_ERR(0, 46, __pyx_L1_error)
+  __PYX_ERR(0, 48, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":40
+  /* "cylon_armada/dag_compiler.pyx":41
  * 
  * 
  * cdef CPat _to_cpat(int p) except *:             # <<<<<<<<<<<<<<
@@ -9060,7 +9075,7 @@ static enum cylon_armada::CollectivePattern __pyx_f_12cylon_armada_12dag_compile
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":49
+/* "cylon_armada/dag_compiler.pyx":51
  * 
  * 
  * cdef int _from_cpat(CPat p):             # <<<<<<<<<<<<<<
@@ -9072,7 +9087,7 @@ static int __pyx_f_12cylon_armada_12dag_compiler__from_cpat(enum cylon_armada::C
   int __pyx_r;
   int __pyx_t_1;
 
-  /* "cylon_armada/dag_compiler.pyx":50
+  /* "cylon_armada/dag_compiler.pyx":52
  * 
  * cdef int _from_cpat(CPat p):
  *     if p == Scatter: return 0             # <<<<<<<<<<<<<<
@@ -9085,7 +9100,7 @@ static int __pyx_f_12cylon_armada_12dag_compiler__from_cpat(enum cylon_armada::C
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":51
+  /* "cylon_armada/dag_compiler.pyx":53
  * cdef int _from_cpat(CPat p):
  *     if p == Scatter: return 0
  *     if p == ScatterGather: return 1             # <<<<<<<<<<<<<<
@@ -9098,12 +9113,12 @@ static int __pyx_f_12cylon_armada_12dag_compiler__from_cpat(enum cylon_armada::C
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":52
+  /* "cylon_armada/dag_compiler.pyx":54
  *     if p == Scatter: return 0
  *     if p == ScatterGather: return 1
  *     if p == Reduce: return 2             # <<<<<<<<<<<<<<
  *     if p == PointToPoint: return 3
- *     return 4  # Broadcast
+ *     if p == Broadcast: return 4
 */
   __pyx_t_1 = (__pyx_v_p == cylon_armada::CollectivePattern::Reduce);
   if (__pyx_t_1) {
@@ -9111,12 +9126,12 @@ static int __pyx_f_12cylon_armada_12dag_compiler__from_cpat(enum cylon_armada::C
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":53
+  /* "cylon_armada/dag_compiler.pyx":55
  *     if p == ScatterGather: return 1
  *     if p == Reduce: return 2
  *     if p == PointToPoint: return 3             # <<<<<<<<<<<<<<
- *     return 4  # Broadcast
- * 
+ *     if p == Broadcast: return 4
+ *     return 5
 */
   __pyx_t_1 = (__pyx_v_p == cylon_armada::CollectivePattern::PointToPoint);
   if (__pyx_t_1) {
@@ -9124,17 +9139,30 @@ static int __pyx_f_12cylon_armada_12dag_compiler__from_cpat(enum cylon_armada::C
     goto __pyx_L0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":54
+  /* "cylon_armada/dag_compiler.pyx":56
  *     if p == Reduce: return 2
  *     if p == PointToPoint: return 3
- *     return 4  # Broadcast             # <<<<<<<<<<<<<<
+ *     if p == Broadcast: return 4             # <<<<<<<<<<<<<<
+ *     return 5
+ * 
+*/
+  __pyx_t_1 = (__pyx_v_p == cylon_armada::CollectivePattern::Broadcast);
+  if (__pyx_t_1) {
+    __pyx_r = 4;
+    goto __pyx_L0;
+  }
+
+  /* "cylon_armada/dag_compiler.pyx":57
+ *     if p == PointToPoint: return 3
+ *     if p == Broadcast: return 4
+ *     return 5             # <<<<<<<<<<<<<<
  * 
  * 
 */
-  __pyx_r = 4;
+  __pyx_r = 5;
   goto __pyx_L0;
 
-  /* "cylon_armada/dag_compiler.pyx":49
+  /* "cylon_armada/dag_compiler.pyx":51
  * 
  * 
  * cdef int _from_cpat(CPat p):             # <<<<<<<<<<<<<<
@@ -9147,7 +9175,7 @@ static int __pyx_f_12cylon_armada_12dag_compiler__from_cpat(enum cylon_armada::C
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":58
+/* "cylon_armada/dag_compiler.pyx":61
  * 
  * class AgentOperator:
  *     def __init__(self, name, pattern, schema_in, schema_out):             # <<<<<<<<<<<<<<
@@ -9198,50 +9226,50 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_self,&__pyx_mstate_global->__pyx_n_u_name,&__pyx_mstate_global->__pyx_n_u_pattern,&__pyx_mstate_global->__pyx_n_u_schema_in,&__pyx_mstate_global->__pyx_n_u_schema_out,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 58, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 61, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 58, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 61, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 58, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 61, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 58, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 61, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 58, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 61, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 58, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 61, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 58, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 61, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 5; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, i); __PYX_ERR(0, 58, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, i); __PYX_ERR(0, 61, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 5)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 58, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 61, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 58, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 61, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 58, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 61, __pyx_L3_error)
       values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 58, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 61, __pyx_L3_error)
       values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 58, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 61, __pyx_L3_error)
     }
     __pyx_v_self = values[0];
     __pyx_v_name = values[1];
@@ -9251,7 +9279,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, __pyx_nargs); __PYX_ERR(0, 58, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, __pyx_nargs); __PYX_ERR(0, 61, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -9287,24 +9315,24 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":59
+  /* "cylon_armada/dag_compiler.pyx":62
  * class AgentOperator:
  *     def __init__(self, name, pattern, schema_in, schema_out):
  *         if not isinstance(schema_in, pa.Schema):             # <<<<<<<<<<<<<<
  *             raise TypeError(
  *                 f"schema_in must be a pyarrow.Schema, got {type(schema_in).__name__}"
 */
-  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_pa); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 59, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_pa); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 62, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_Schema); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 59, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_Schema); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 62, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_3 = PyObject_IsInstance(__pyx_v_schema_in, __pyx_t_2); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 59, __pyx_L1_error)
+  __pyx_t_3 = PyObject_IsInstance(__pyx_v_schema_in, __pyx_t_2); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 62, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_t_4 = (!__pyx_t_3);
   if (unlikely(__pyx_t_4)) {
 
-    /* "cylon_armada/dag_compiler.pyx":60
+    /* "cylon_armada/dag_compiler.pyx":63
  *     def __init__(self, name, pattern, schema_in, schema_out):
  *         if not isinstance(schema_in, pa.Schema):
  *             raise TypeError(             # <<<<<<<<<<<<<<
@@ -9313,19 +9341,19 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
 */
     __pyx_t_1 = NULL;
 
-    /* "cylon_armada/dag_compiler.pyx":61
+    /* "cylon_armada/dag_compiler.pyx":64
  *         if not isinstance(schema_in, pa.Schema):
  *             raise TypeError(
  *                 f"schema_in must be a pyarrow.Schema, got {type(schema_in).__name__}"             # <<<<<<<<<<<<<<
  *             )
  *         if not isinstance(schema_out, pa.Schema):
 */
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(((PyObject *)Py_TYPE(__pyx_v_schema_in)), __pyx_mstate_global->__pyx_n_u_name_2); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 61, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(((PyObject *)Py_TYPE(__pyx_v_schema_in)), __pyx_mstate_global->__pyx_n_u_name_2); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 64, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_6 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_mstate_global->__pyx_empty_unicode); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 61, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_mstate_global->__pyx_empty_unicode); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 64, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_schema_in_must_be_a_pyarrow_Sche, __pyx_t_6); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 61, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_schema_in_must_be_a_pyarrow_Sche, __pyx_t_6); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 64, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     __pyx_t_7 = 1;
@@ -9334,14 +9362,14 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
       __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_TypeError)), __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_1); __pyx_t_1 = 0;
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 60, __pyx_L1_error)
+      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 63, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
     }
     __Pyx_Raise(__pyx_t_2, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-    __PYX_ERR(0, 60, __pyx_L1_error)
+    __PYX_ERR(0, 63, __pyx_L1_error)
 
-    /* "cylon_armada/dag_compiler.pyx":59
+    /* "cylon_armada/dag_compiler.pyx":62
  * class AgentOperator:
  *     def __init__(self, name, pattern, schema_in, schema_out):
  *         if not isinstance(schema_in, pa.Schema):             # <<<<<<<<<<<<<<
@@ -9350,24 +9378,24 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
 */
   }
 
-  /* "cylon_armada/dag_compiler.pyx":63
+  /* "cylon_armada/dag_compiler.pyx":66
  *                 f"schema_in must be a pyarrow.Schema, got {type(schema_in).__name__}"
  *             )
  *         if not isinstance(schema_out, pa.Schema):             # <<<<<<<<<<<<<<
  *             raise TypeError(
  *                 f"schema_out must be a pyarrow.Schema, got {type(schema_out).__name__}"
 */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_pa); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 63, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_pa); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 66, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_Schema); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 63, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_Schema); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 66, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  __pyx_t_4 = PyObject_IsInstance(__pyx_v_schema_out, __pyx_t_5); if (unlikely(__pyx_t_4 == ((int)-1))) __PYX_ERR(0, 63, __pyx_L1_error)
+  __pyx_t_4 = PyObject_IsInstance(__pyx_v_schema_out, __pyx_t_5); if (unlikely(__pyx_t_4 == ((int)-1))) __PYX_ERR(0, 66, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __pyx_t_3 = (!__pyx_t_4);
   if (unlikely(__pyx_t_3)) {
 
-    /* "cylon_armada/dag_compiler.pyx":64
+    /* "cylon_armada/dag_compiler.pyx":67
  *             )
  *         if not isinstance(schema_out, pa.Schema):
  *             raise TypeError(             # <<<<<<<<<<<<<<
@@ -9376,19 +9404,19 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
 */
     __pyx_t_2 = NULL;
 
-    /* "cylon_armada/dag_compiler.pyx":65
+    /* "cylon_armada/dag_compiler.pyx":68
  *         if not isinstance(schema_out, pa.Schema):
  *             raise TypeError(
  *                 f"schema_out must be a pyarrow.Schema, got {type(schema_out).__name__}"             # <<<<<<<<<<<<<<
  *             )
  *         self.name = name
 */
-    __pyx_t_1 = __Pyx_PyObject_GetAttrStr(((PyObject *)Py_TYPE(__pyx_v_schema_out)), __pyx_mstate_global->__pyx_n_u_name_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 65, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_GetAttrStr(((PyObject *)Py_TYPE(__pyx_v_schema_out)), __pyx_mstate_global->__pyx_n_u_name_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 68, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_6 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_mstate_global->__pyx_empty_unicode); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 65, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_mstate_global->__pyx_empty_unicode); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 68, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_schema_out_must_be_a_pyarrow_Sch, __pyx_t_6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 65, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_schema_out_must_be_a_pyarrow_Sch, __pyx_t_6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 68, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     __pyx_t_7 = 1;
@@ -9397,14 +9425,14 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
       __pyx_t_5 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_TypeError)), __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
       __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-      if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 64, __pyx_L1_error)
+      if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 67, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
     }
     __Pyx_Raise(__pyx_t_5, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __PYX_ERR(0, 64, __pyx_L1_error)
+    __PYX_ERR(0, 67, __pyx_L1_error)
 
-    /* "cylon_armada/dag_compiler.pyx":63
+    /* "cylon_armada/dag_compiler.pyx":66
  *                 f"schema_in must be a pyarrow.Schema, got {type(schema_in).__name__}"
  *             )
  *         if not isinstance(schema_out, pa.Schema):             # <<<<<<<<<<<<<<
@@ -9413,16 +9441,16 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
 */
   }
 
-  /* "cylon_armada/dag_compiler.pyx":67
+  /* "cylon_armada/dag_compiler.pyx":70
  *                 f"schema_out must be a pyarrow.Schema, got {type(schema_out).__name__}"
  *             )
  *         self.name = name             # <<<<<<<<<<<<<<
  *         self.pattern = CollectivePattern(int(pattern))
  *         self.schema_in = schema_in    # pyarrow.Schema
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_name, __pyx_v_name) < (0)) __PYX_ERR(0, 67, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_name, __pyx_v_name) < (0)) __PYX_ERR(0, 70, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":68
+  /* "cylon_armada/dag_compiler.pyx":71
  *             )
  *         self.name = name
  *         self.pattern = CollectivePattern(int(pattern))             # <<<<<<<<<<<<<<
@@ -9430,9 +9458,9 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
  *         self.schema_out = schema_out  # pyarrow.Schema
 */
   __pyx_t_1 = NULL;
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_CollectivePattern); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 68, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_CollectivePattern); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 71, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_6 = __Pyx_PyNumber_Int(__pyx_v_pattern); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 68, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyNumber_Int(__pyx_v_pattern); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 71, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __pyx_t_7 = 1;
   #if CYTHON_UNPACK_METHODS
@@ -9452,31 +9480,31 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
     __Pyx_XDECREF(__pyx_t_1); __pyx_t_1 = 0;
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-    if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 68, __pyx_L1_error)
+    if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 71, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
   }
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_pattern, __pyx_t_5) < (0)) __PYX_ERR(0, 68, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_pattern, __pyx_t_5) < (0)) __PYX_ERR(0, 71, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":69
+  /* "cylon_armada/dag_compiler.pyx":72
  *         self.name = name
  *         self.pattern = CollectivePattern(int(pattern))
  *         self.schema_in = schema_in    # pyarrow.Schema             # <<<<<<<<<<<<<<
  *         self.schema_out = schema_out  # pyarrow.Schema
  * 
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_schema_in, __pyx_v_schema_in) < (0)) __PYX_ERR(0, 69, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_schema_in, __pyx_v_schema_in) < (0)) __PYX_ERR(0, 72, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":70
+  /* "cylon_armada/dag_compiler.pyx":73
  *         self.pattern = CollectivePattern(int(pattern))
  *         self.schema_in = schema_in    # pyarrow.Schema
  *         self.schema_out = schema_out  # pyarrow.Schema             # <<<<<<<<<<<<<<
  * 
  * 
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_schema_out, __pyx_v_schema_out) < (0)) __PYX_ERR(0, 70, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_schema_out, __pyx_v_schema_out) < (0)) __PYX_ERR(0, 73, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":58
+  /* "cylon_armada/dag_compiler.pyx":61
  * 
  * class AgentOperator:
  *     def __init__(self, name, pattern, schema_in, schema_out):             # <<<<<<<<<<<<<<
@@ -9500,7 +9528,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13AgentOperator___init__
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":74
+/* "cylon_armada/dag_compiler.pyx":77
  * 
  * class WorkflowDAG:
  *     def __init__(self, operators, edges):             # <<<<<<<<<<<<<<
@@ -9549,38 +9577,38 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_self,&__pyx_mstate_global->__pyx_n_u_operators,&__pyx_mstate_global->__pyx_n_u_edges,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 74, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 77, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 74, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 77, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 74, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 77, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 74, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 77, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 74, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 77, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 3; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, i); __PYX_ERR(0, 74, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, i); __PYX_ERR(0, 77, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 3)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 74, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 77, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 74, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 77, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 74, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 77, __pyx_L3_error)
     }
     __pyx_v_self = values[0];
     __pyx_v_operators = values[1];
@@ -9588,7 +9616,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 74, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 77, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -9628,19 +9656,19 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":75
+  /* "cylon_armada/dag_compiler.pyx":78
  * class WorkflowDAG:
  *     def __init__(self, operators, edges):
  *         self.operators = list(operators)             # <<<<<<<<<<<<<<
  *         self.edges = [(str(a), str(b)) for (a, b) in edges]
  * 
 */
-  __pyx_t_1 = PySequence_List(__pyx_v_operators); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 75, __pyx_L1_error)
+  __pyx_t_1 = PySequence_List(__pyx_v_operators); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 78, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_operators, __pyx_t_1) < (0)) __PYX_ERR(0, 75, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_operators, __pyx_t_1) < (0)) __PYX_ERR(0, 78, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":76
+  /* "cylon_armada/dag_compiler.pyx":79
  *     def __init__(self, operators, edges):
  *         self.operators = list(operators)
  *         self.edges = [(str(a), str(b)) for (a, b) in edges]             # <<<<<<<<<<<<<<
@@ -9648,16 +9676,16 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
  * 
 */
   { /* enter inner scope */
-    __pyx_t_1 = PyList_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 76, __pyx_L5_error)
+    __pyx_t_1 = PyList_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 79, __pyx_L5_error)
     __Pyx_GOTREF(__pyx_t_1);
     if (likely(PyList_CheckExact(__pyx_v_edges)) || PyTuple_CheckExact(__pyx_v_edges)) {
       __pyx_t_2 = __pyx_v_edges; __Pyx_INCREF(__pyx_t_2);
       __pyx_t_3 = 0;
       __pyx_t_4 = NULL;
     } else {
-      __pyx_t_3 = -1; __pyx_t_2 = PyObject_GetIter(__pyx_v_edges); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 76, __pyx_L5_error)
+      __pyx_t_3 = -1; __pyx_t_2 = PyObject_GetIter(__pyx_v_edges); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 79, __pyx_L5_error)
       __Pyx_GOTREF(__pyx_t_2);
-      __pyx_t_4 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 76, __pyx_L5_error)
+      __pyx_t_4 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 79, __pyx_L5_error)
     }
     for (;;) {
       if (likely(!__pyx_t_4)) {
@@ -9665,7 +9693,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
           {
             Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_2);
             #if !CYTHON_ASSUME_SAFE_SIZE
-            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 76, __pyx_L5_error)
+            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 79, __pyx_L5_error)
             #endif
             if (__pyx_t_3 >= __pyx_temp) break;
           }
@@ -9675,7 +9703,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
           {
             Py_ssize_t __pyx_temp = __Pyx_PyTuple_GET_SIZE(__pyx_t_2);
             #if !CYTHON_ASSUME_SAFE_SIZE
-            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 76, __pyx_L5_error)
+            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 79, __pyx_L5_error)
             #endif
             if (__pyx_t_3 >= __pyx_temp) break;
           }
@@ -9686,13 +9714,13 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
           #endif
           ++__pyx_t_3;
         }
-        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 76, __pyx_L5_error)
+        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 79, __pyx_L5_error)
       } else {
         __pyx_t_5 = __pyx_t_4(__pyx_t_2);
         if (unlikely(!__pyx_t_5)) {
           PyObject* exc_type = PyErr_Occurred();
           if (exc_type) {
-            if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 76, __pyx_L5_error)
+            if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 79, __pyx_L5_error)
             PyErr_Clear();
           }
           break;
@@ -9705,7 +9733,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
         if (unlikely(size != 2)) {
           if (size > 2) __Pyx_RaiseTooManyValuesError(2);
           else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-          __PYX_ERR(0, 76, __pyx_L5_error)
+          __PYX_ERR(0, 79, __pyx_L5_error)
         }
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
         if (likely(PyTuple_CheckExact(sequence))) {
@@ -9715,22 +9743,22 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
           __Pyx_INCREF(__pyx_t_7);
         } else {
           __pyx_t_6 = __Pyx_PyList_GetItemRefFast(sequence, 0, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 76, __pyx_L5_error)
+          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 79, __pyx_L5_error)
           __Pyx_XGOTREF(__pyx_t_6);
           __pyx_t_7 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 76, __pyx_L5_error)
+          if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 79, __pyx_L5_error)
           __Pyx_XGOTREF(__pyx_t_7);
         }
         #else
-        __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 76, __pyx_L5_error)
+        __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 79, __pyx_L5_error)
         __Pyx_GOTREF(__pyx_t_6);
-        __pyx_t_7 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 76, __pyx_L5_error)
+        __pyx_t_7 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 79, __pyx_L5_error)
         __Pyx_GOTREF(__pyx_t_7);
         #endif
         __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
       } else {
         Py_ssize_t index = -1;
-        __pyx_t_8 = PyObject_GetIter(__pyx_t_5); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 76, __pyx_L5_error)
+        __pyx_t_8 = PyObject_GetIter(__pyx_t_5); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 79, __pyx_L5_error)
         __Pyx_GOTREF(__pyx_t_8);
         __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
         __pyx_t_9 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_8);
@@ -9738,7 +9766,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
         __Pyx_GOTREF(__pyx_t_6);
         index = 1; __pyx_t_7 = __pyx_t_9(__pyx_t_8); if (unlikely(!__pyx_t_7)) goto __pyx_L8_unpacking_failed;
         __Pyx_GOTREF(__pyx_t_7);
-        if (__Pyx_IternextUnpackEndCheck(__pyx_t_9(__pyx_t_8), 2) < (0)) __PYX_ERR(0, 76, __pyx_L5_error)
+        if (__Pyx_IternextUnpackEndCheck(__pyx_t_9(__pyx_t_8), 2) < (0)) __PYX_ERR(0, 79, __pyx_L5_error)
         __pyx_t_9 = NULL;
         __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
         goto __pyx_L9_unpacking_done;
@@ -9746,26 +9774,26 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
         __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
         __pyx_t_9 = NULL;
         if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
-        __PYX_ERR(0, 76, __pyx_L5_error)
+        __PYX_ERR(0, 79, __pyx_L5_error)
         __pyx_L9_unpacking_done:;
       }
       __Pyx_XDECREF_SET(__pyx_7genexpr__pyx_v_a, __pyx_t_6);
       __pyx_t_6 = 0;
       __Pyx_XDECREF_SET(__pyx_7genexpr__pyx_v_b, __pyx_t_7);
       __pyx_t_7 = 0;
-      __pyx_t_5 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_a); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 76, __pyx_L5_error)
+      __pyx_t_5 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_a); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 79, __pyx_L5_error)
       __Pyx_GOTREF(__pyx_t_5);
-      __pyx_t_7 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_b); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 76, __pyx_L5_error)
+      __pyx_t_7 = __Pyx_PyObject_Unicode(__pyx_7genexpr__pyx_v_b); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 79, __pyx_L5_error)
       __Pyx_GOTREF(__pyx_t_7);
-      __pyx_t_6 = PyTuple_New(2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 76, __pyx_L5_error)
+      __pyx_t_6 = PyTuple_New(2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 79, __pyx_L5_error)
       __Pyx_GOTREF(__pyx_t_6);
       __Pyx_GIVEREF(__pyx_t_5);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, __pyx_t_5) != (0)) __PYX_ERR(0, 76, __pyx_L5_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 0, __pyx_t_5) != (0)) __PYX_ERR(0, 79, __pyx_L5_error);
       __Pyx_GIVEREF(__pyx_t_7);
-      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_t_7) != (0)) __PYX_ERR(0, 76, __pyx_L5_error);
+      if (__Pyx_PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_t_7) != (0)) __PYX_ERR(0, 79, __pyx_L5_error);
       __pyx_t_5 = 0;
       __pyx_t_7 = 0;
-      if (unlikely(__Pyx_ListComp_Append(__pyx_t_1, (PyObject*)__pyx_t_6))) __PYX_ERR(0, 76, __pyx_L5_error)
+      if (unlikely(__Pyx_ListComp_Append(__pyx_t_1, (PyObject*)__pyx_t_6))) __PYX_ERR(0, 79, __pyx_L5_error)
       __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     }
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
@@ -9778,10 +9806,10 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
     goto __pyx_L1_error;
     __pyx_L11_exit_scope:;
   } /* exit inner scope */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_edges, __pyx_t_1) < (0)) __PYX_ERR(0, 76, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_edges, __pyx_t_1) < (0)) __PYX_ERR(0, 79, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":74
+  /* "cylon_armada/dag_compiler.pyx":77
  * 
  * class WorkflowDAG:
  *     def __init__(self, operators, edges):             # <<<<<<<<<<<<<<
@@ -9809,7 +9837,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_11WorkflowDAG___init__(C
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":80
+/* "cylon_armada/dag_compiler.pyx":83
  * 
  * class EdgePlanView:
  *     def __init__(self, producer, consumer, mode, note):             # <<<<<<<<<<<<<<
@@ -9860,50 +9888,50 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_self,&__pyx_mstate_global->__pyx_n_u_producer,&__pyx_mstate_global->__pyx_n_u_consumer,&__pyx_mstate_global->__pyx_n_u_mode,&__pyx_mstate_global->__pyx_n_u_note,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 80, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 83, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 80, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 83, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 80, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 83, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 80, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 83, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 80, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 83, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 80, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 83, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 80, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 83, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 5; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, i); __PYX_ERR(0, 80, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, i); __PYX_ERR(0, 83, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 5)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 80, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 83, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 80, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 83, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 80, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 83, __pyx_L3_error)
       values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 80, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 83, __pyx_L3_error)
       values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 80, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 83, __pyx_L3_error)
     }
     __pyx_v_self = values[0];
     __pyx_v_producer = values[1];
@@ -9913,7 +9941,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, __pyx_nargs); __PYX_ERR(0, 80, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 5, 5, __pyx_nargs); __PYX_ERR(0, 83, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -9942,43 +9970,43 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_12EdgePlanView___init__(
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":81
+  /* "cylon_armada/dag_compiler.pyx":84
  * class EdgePlanView:
  *     def __init__(self, producer, consumer, mode, note):
  *         self.producer = producer             # <<<<<<<<<<<<<<
  *         self.consumer = consumer
  *         self.mode = mode
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_producer, __pyx_v_producer) < (0)) __PYX_ERR(0, 81, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_producer, __pyx_v_producer) < (0)) __PYX_ERR(0, 84, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":82
+  /* "cylon_armada/dag_compiler.pyx":85
  *     def __init__(self, producer, consumer, mode, note):
  *         self.producer = producer
  *         self.consumer = consumer             # <<<<<<<<<<<<<<
  *         self.mode = mode
  *         self.note = note
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_consumer, __pyx_v_consumer) < (0)) __PYX_ERR(0, 82, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_consumer, __pyx_v_consumer) < (0)) __PYX_ERR(0, 85, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":83
+  /* "cylon_armada/dag_compiler.pyx":86
  *         self.producer = producer
  *         self.consumer = consumer
  *         self.mode = mode             # <<<<<<<<<<<<<<
  *         self.note = note
  * 
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_mode, __pyx_v_mode) < (0)) __PYX_ERR(0, 83, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_mode, __pyx_v_mode) < (0)) __PYX_ERR(0, 86, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":84
+  /* "cylon_armada/dag_compiler.pyx":87
  *         self.consumer = consumer
  *         self.mode = mode
  *         self.note = note             # <<<<<<<<<<<<<<
  * 
  * 
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_note, __pyx_v_note) < (0)) __PYX_ERR(0, 84, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_note, __pyx_v_note) < (0)) __PYX_ERR(0, 87, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":80
+  /* "cylon_armada/dag_compiler.pyx":83
  * 
  * class EdgePlanView:
  *     def __init__(self, producer, consumer, mode, note):             # <<<<<<<<<<<<<<
@@ -9998,7 +10026,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_12EdgePlanView___init__(
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":88
+/* "cylon_armada/dag_compiler.pyx":91
  * 
  * class ExecutionPlan:
  *     def __init__(self, edges, assignments):             # <<<<<<<<<<<<<<
@@ -10047,38 +10075,38 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_self,&__pyx_mstate_global->__pyx_n_u_edges,&__pyx_mstate_global->__pyx_n_u_assignments,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 88, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 91, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 88, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 91, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 88, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 91, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 88, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 91, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 88, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "__init__", 0) < (0)) __PYX_ERR(0, 91, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 3; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, i); __PYX_ERR(0, 88, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, i); __PYX_ERR(0, 91, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 3)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 88, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 91, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 88, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 91, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 88, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 91, __pyx_L3_error)
     }
     __pyx_v_self = values[0];
     __pyx_v_edges = values[1];
@@ -10086,7 +10114,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 88, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 91, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -10115,25 +10143,25 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13ExecutionPlan___init__
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":89
+  /* "cylon_armada/dag_compiler.pyx":92
  * class ExecutionPlan:
  *     def __init__(self, edges, assignments):
  *         self.edges = edges              # list[EdgePlanView]             # <<<<<<<<<<<<<<
  *         self.assignments = assignments  # dict[str, CollectivePattern]
  * 
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_edges, __pyx_v_edges) < (0)) __PYX_ERR(0, 89, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_edges, __pyx_v_edges) < (0)) __PYX_ERR(0, 92, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":90
+  /* "cylon_armada/dag_compiler.pyx":93
  *     def __init__(self, edges, assignments):
  *         self.edges = edges              # list[EdgePlanView]
  *         self.assignments = assignments  # dict[str, CollectivePattern]             # <<<<<<<<<<<<<<
  * 
  * 
 */
-  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_assignments, __pyx_v_assignments) < (0)) __PYX_ERR(0, 90, __pyx_L1_error)
+  if (__Pyx_PyObject_SetAttrStr(__pyx_v_self, __pyx_mstate_global->__pyx_n_u_assignments, __pyx_v_assignments) < (0)) __PYX_ERR(0, 93, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":88
+  /* "cylon_armada/dag_compiler.pyx":91
  * 
  * class ExecutionPlan:
  *     def __init__(self, edges, assignments):             # <<<<<<<<<<<<<<
@@ -10153,7 +10181,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_13ExecutionPlan___init__
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":93
+/* "cylon_armada/dag_compiler.pyx":96
  * 
  * 
  * cdef CWorkflowDAG _build_cdag(object dag) except *:             # <<<<<<<<<<<<<<
@@ -10191,23 +10219,23 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("_build_cdag", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":98
+  /* "cylon_armada/dag_compiler.pyx":101
  *     cdef shared_ptr[CSchema] sin
  *     cdef shared_ptr[CSchema] sout
  *     for op in dag.operators:             # <<<<<<<<<<<<<<
  *         cop = CAgentOperator()
  *         cop.name = op.name.encode("utf-8")
 */
-  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_dag, __pyx_mstate_global->__pyx_n_u_operators); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 98, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_dag, __pyx_mstate_global->__pyx_n_u_operators); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 101, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   if (likely(PyList_CheckExact(__pyx_t_1)) || PyTuple_CheckExact(__pyx_t_1)) {
     __pyx_t_2 = __pyx_t_1; __Pyx_INCREF(__pyx_t_2);
     __pyx_t_3 = 0;
     __pyx_t_4 = NULL;
   } else {
-    __pyx_t_3 = -1; __pyx_t_2 = PyObject_GetIter(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 98, __pyx_L1_error)
+    __pyx_t_3 = -1; __pyx_t_2 = PyObject_GetIter(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 101, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_2);
-    __pyx_t_4 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 98, __pyx_L1_error)
+    __pyx_t_4 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 101, __pyx_L1_error)
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   for (;;) {
@@ -10216,7 +10244,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
         {
           Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_2);
           #if !CYTHON_ASSUME_SAFE_SIZE
-          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 98, __pyx_L1_error)
+          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 101, __pyx_L1_error)
           #endif
           if (__pyx_t_3 >= __pyx_temp) break;
         }
@@ -10226,7 +10254,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
         {
           Py_ssize_t __pyx_temp = __Pyx_PyTuple_GET_SIZE(__pyx_t_2);
           #if !CYTHON_ASSUME_SAFE_SIZE
-          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 98, __pyx_L1_error)
+          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 101, __pyx_L1_error)
           #endif
           if (__pyx_t_3 >= __pyx_temp) break;
         }
@@ -10237,13 +10265,13 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
         #endif
         ++__pyx_t_3;
       }
-      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 98, __pyx_L1_error)
+      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 101, __pyx_L1_error)
     } else {
       __pyx_t_1 = __pyx_t_4(__pyx_t_2);
       if (unlikely(!__pyx_t_1)) {
         PyObject* exc_type = PyErr_Occurred();
         if (exc_type) {
-          if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 98, __pyx_L1_error)
+          if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 101, __pyx_L1_error)
           PyErr_Clear();
         }
         break;
@@ -10253,7 +10281,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
     __Pyx_XDECREF_SET(__pyx_v_op, __pyx_t_1);
     __pyx_t_1 = 0;
 
-    /* "cylon_armada/dag_compiler.pyx":99
+    /* "cylon_armada/dag_compiler.pyx":102
  *     cdef shared_ptr[CSchema] sout
  *     for op in dag.operators:
  *         cop = CAgentOperator()             # <<<<<<<<<<<<<<
@@ -10262,14 +10290,14 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
 */
     __pyx_v_cop = cylon_armada::AgentOperator();
 
-    /* "cylon_armada/dag_compiler.pyx":100
+    /* "cylon_armada/dag_compiler.pyx":103
  *     for op in dag.operators:
  *         cop = CAgentOperator()
  *         cop.name = op.name.encode("utf-8")             # <<<<<<<<<<<<<<
  *         cop.pattern = _to_cpat(int(op.pattern))
  *         sin = pyarrow_unwrap_schema(op.schema_in)
 */
-    __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_name); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 100, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_name); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 103, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __pyx_t_5 = __pyx_t_6;
     __Pyx_INCREF(__pyx_t_5);
@@ -10279,57 +10307,57 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
       __pyx_t_1 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_encode, __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
       __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 100, __pyx_L1_error)
+      if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 103, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
     }
-    __pyx_t_8 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 100, __pyx_L1_error)
+    __pyx_t_8 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 103, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
     __pyx_v_cop.name = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_8);
 
-    /* "cylon_armada/dag_compiler.pyx":101
+    /* "cylon_armada/dag_compiler.pyx":104
  *         cop = CAgentOperator()
  *         cop.name = op.name.encode("utf-8")
  *         cop.pattern = _to_cpat(int(op.pattern))             # <<<<<<<<<<<<<<
  *         sin = pyarrow_unwrap_schema(op.schema_in)
  *         sout = pyarrow_unwrap_schema(op.schema_out)
 */
-    __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_pattern); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_pattern); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 104, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_6 = __Pyx_PyNumber_Int(__pyx_t_1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 101, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyNumber_Int(__pyx_t_1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 104, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_9 = __Pyx_PyLong_As_int(__pyx_t_6); if (unlikely((__pyx_t_9 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 101, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PyLong_As_int(__pyx_t_6); if (unlikely((__pyx_t_9 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 104, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-    __pyx_t_10 = __pyx_f_12cylon_armada_12dag_compiler__to_cpat(__pyx_t_9); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 101, __pyx_L1_error)
+    __pyx_t_10 = __pyx_f_12cylon_armada_12dag_compiler__to_cpat(__pyx_t_9); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 104, __pyx_L1_error)
     __pyx_v_cop.pattern = __pyx_t_10;
 
-    /* "cylon_armada/dag_compiler.pyx":102
+    /* "cylon_armada/dag_compiler.pyx":105
  *         cop.name = op.name.encode("utf-8")
  *         cop.pattern = _to_cpat(int(op.pattern))
  *         sin = pyarrow_unwrap_schema(op.schema_in)             # <<<<<<<<<<<<<<
  *         sout = pyarrow_unwrap_schema(op.schema_out)
  *         cop.schema_in = sin
 */
-    __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_schema_in); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 102, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_schema_in); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 105, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
-    __pyx_t_11 = __pyx_f_7pyarrow_3lib_pyarrow_unwrap_schema(__pyx_t_6); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 102, __pyx_L1_error)
+    __pyx_t_11 = __pyx_f_7pyarrow_3lib_pyarrow_unwrap_schema(__pyx_t_6); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 105, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     __pyx_v_sin = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_11);
 
-    /* "cylon_armada/dag_compiler.pyx":103
+    /* "cylon_armada/dag_compiler.pyx":106
  *         cop.pattern = _to_cpat(int(op.pattern))
  *         sin = pyarrow_unwrap_schema(op.schema_in)
  *         sout = pyarrow_unwrap_schema(op.schema_out)             # <<<<<<<<<<<<<<
  *         cop.schema_in = sin
  *         cop.schema_out = sout
 */
-    __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_schema_out); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 103, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_op, __pyx_mstate_global->__pyx_n_u_schema_out); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 106, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
-    __pyx_t_11 = __pyx_f_7pyarrow_3lib_pyarrow_unwrap_schema(__pyx_t_6); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 103, __pyx_L1_error)
+    __pyx_t_11 = __pyx_f_7pyarrow_3lib_pyarrow_unwrap_schema(__pyx_t_6); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 106, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     __pyx_v_sout = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_11);
 
-    /* "cylon_armada/dag_compiler.pyx":104
+    /* "cylon_armada/dag_compiler.pyx":107
  *         sin = pyarrow_unwrap_schema(op.schema_in)
  *         sout = pyarrow_unwrap_schema(op.schema_out)
  *         cop.schema_in = sin             # <<<<<<<<<<<<<<
@@ -10338,7 +10366,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
 */
     __pyx_v_cop.schema_in = __pyx_v_sin;
 
-    /* "cylon_armada/dag_compiler.pyx":105
+    /* "cylon_armada/dag_compiler.pyx":108
  *         sout = pyarrow_unwrap_schema(op.schema_out)
  *         cop.schema_in = sin
  *         cop.schema_out = sout             # <<<<<<<<<<<<<<
@@ -10347,7 +10375,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
 */
     __pyx_v_cop.schema_out = __pyx_v_sout;
 
-    /* "cylon_armada/dag_compiler.pyx":106
+    /* "cylon_armada/dag_compiler.pyx":109
  *         cop.schema_in = sin
  *         cop.schema_out = sout
  *         cdag.operators.push_back(cop)             # <<<<<<<<<<<<<<
@@ -10358,10 +10386,10 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
       __pyx_v_cdag.operators.push_back(__pyx_v_cop);
     } catch(...) {
       __Pyx_CppExn2PyErr();
-      __PYX_ERR(0, 106, __pyx_L1_error)
+      __PYX_ERR(0, 109, __pyx_L1_error)
     }
 
-    /* "cylon_armada/dag_compiler.pyx":98
+    /* "cylon_armada/dag_compiler.pyx":101
  *     cdef shared_ptr[CSchema] sin
  *     cdef shared_ptr[CSchema] sout
  *     for op in dag.operators:             # <<<<<<<<<<<<<<
@@ -10371,23 +10399,23 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
   }
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":107
+  /* "cylon_armada/dag_compiler.pyx":110
  *         cop.schema_out = sout
  *         cdag.operators.push_back(cop)
  *     for (a, b) in dag.edges:             # <<<<<<<<<<<<<<
  *         cdag.edges.push_back(pair[string, string](a.encode("utf-8"), b.encode("utf-8")))
  *     return cdag
 */
-  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_v_dag, __pyx_mstate_global->__pyx_n_u_edges); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 107, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_v_dag, __pyx_mstate_global->__pyx_n_u_edges); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 110, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   if (likely(PyList_CheckExact(__pyx_t_2)) || PyTuple_CheckExact(__pyx_t_2)) {
     __pyx_t_6 = __pyx_t_2; __Pyx_INCREF(__pyx_t_6);
     __pyx_t_3 = 0;
     __pyx_t_4 = NULL;
   } else {
-    __pyx_t_3 = -1; __pyx_t_6 = PyObject_GetIter(__pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 107, __pyx_L1_error)
+    __pyx_t_3 = -1; __pyx_t_6 = PyObject_GetIter(__pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 110, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
-    __pyx_t_4 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 107, __pyx_L1_error)
+    __pyx_t_4 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 110, __pyx_L1_error)
   }
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   for (;;) {
@@ -10396,7 +10424,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
         {
           Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_6);
           #if !CYTHON_ASSUME_SAFE_SIZE
-          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 107, __pyx_L1_error)
+          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 110, __pyx_L1_error)
           #endif
           if (__pyx_t_3 >= __pyx_temp) break;
         }
@@ -10406,7 +10434,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
         {
           Py_ssize_t __pyx_temp = __Pyx_PyTuple_GET_SIZE(__pyx_t_6);
           #if !CYTHON_ASSUME_SAFE_SIZE
-          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 107, __pyx_L1_error)
+          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 110, __pyx_L1_error)
           #endif
           if (__pyx_t_3 >= __pyx_temp) break;
         }
@@ -10417,13 +10445,13 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
         #endif
         ++__pyx_t_3;
       }
-      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 107, __pyx_L1_error)
+      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 110, __pyx_L1_error)
     } else {
       __pyx_t_2 = __pyx_t_4(__pyx_t_6);
       if (unlikely(!__pyx_t_2)) {
         PyObject* exc_type = PyErr_Occurred();
         if (exc_type) {
-          if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 107, __pyx_L1_error)
+          if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 110, __pyx_L1_error)
           PyErr_Clear();
         }
         break;
@@ -10436,7 +10464,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
       if (unlikely(size != 2)) {
         if (size > 2) __Pyx_RaiseTooManyValuesError(2);
         else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-        __PYX_ERR(0, 107, __pyx_L1_error)
+        __PYX_ERR(0, 110, __pyx_L1_error)
       }
       #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
       if (likely(PyTuple_CheckExact(sequence))) {
@@ -10446,22 +10474,22 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
         __Pyx_INCREF(__pyx_t_5);
       } else {
         __pyx_t_1 = __Pyx_PyList_GetItemRefFast(sequence, 0, __Pyx_ReferenceSharing_SharedReference);
-        if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 107, __pyx_L1_error)
+        if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 110, __pyx_L1_error)
         __Pyx_XGOTREF(__pyx_t_1);
         __pyx_t_5 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
-        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 107, __pyx_L1_error)
+        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 110, __pyx_L1_error)
         __Pyx_XGOTREF(__pyx_t_5);
       }
       #else
-      __pyx_t_1 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 107, __pyx_L1_error)
+      __pyx_t_1 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 110, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
-      __pyx_t_5 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 107, __pyx_L1_error)
+      __pyx_t_5 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 110, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
       #endif
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
     } else {
       Py_ssize_t index = -1;
-      __pyx_t_12 = PyObject_GetIter(__pyx_t_2); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 107, __pyx_L1_error)
+      __pyx_t_12 = PyObject_GetIter(__pyx_t_2); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 110, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_12);
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
       __pyx_t_13 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_12);
@@ -10469,7 +10497,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
       __Pyx_GOTREF(__pyx_t_1);
       index = 1; __pyx_t_5 = __pyx_t_13(__pyx_t_12); if (unlikely(!__pyx_t_5)) goto __pyx_L8_unpacking_failed;
       __Pyx_GOTREF(__pyx_t_5);
-      if (__Pyx_IternextUnpackEndCheck(__pyx_t_13(__pyx_t_12), 2) < (0)) __PYX_ERR(0, 107, __pyx_L1_error)
+      if (__Pyx_IternextUnpackEndCheck(__pyx_t_13(__pyx_t_12), 2) < (0)) __PYX_ERR(0, 110, __pyx_L1_error)
       __pyx_t_13 = NULL;
       __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
       goto __pyx_L9_unpacking_done;
@@ -10477,7 +10505,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
       __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
       __pyx_t_13 = NULL;
       if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
-      __PYX_ERR(0, 107, __pyx_L1_error)
+      __PYX_ERR(0, 110, __pyx_L1_error)
       __pyx_L9_unpacking_done:;
     }
     __Pyx_XDECREF_SET(__pyx_v_a, __pyx_t_1);
@@ -10485,7 +10513,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
     __Pyx_XDECREF_SET(__pyx_v_b, __pyx_t_5);
     __pyx_t_5 = 0;
 
-    /* "cylon_armada/dag_compiler.pyx":108
+    /* "cylon_armada/dag_compiler.pyx":111
  *         cdag.operators.push_back(cop)
  *     for (a, b) in dag.edges:
  *         cdag.edges.push_back(pair[string, string](a.encode("utf-8"), b.encode("utf-8")))             # <<<<<<<<<<<<<<
@@ -10499,10 +10527,10 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
       PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_mstate_global->__pyx_kp_u_utf_8};
       __pyx_t_2 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_encode, __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 108, __pyx_L1_error)
+      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 111, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
     }
-    __pyx_t_8 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_2); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 108, __pyx_L1_error)
+    __pyx_t_8 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_2); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 111, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
     __pyx_t_5 = __pyx_v_b;
     __Pyx_INCREF(__pyx_t_5);
@@ -10511,25 +10539,25 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
       PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_mstate_global->__pyx_kp_u_utf_8};
       __pyx_t_2 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_encode, __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 108, __pyx_L1_error)
+      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 111, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
     }
-    __pyx_t_14 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_2); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 108, __pyx_L1_error)
+    __pyx_t_14 = __pyx_convert_string_from_py_6libcpp_6string_std__in_string(__pyx_t_2); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 111, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
     try {
       __pyx_t_15 = std::pair<std::string,std::string> (__pyx_t_8, __pyx_t_14);
     } catch(...) {
       __Pyx_CppExn2PyErr();
-      __PYX_ERR(0, 108, __pyx_L1_error)
+      __PYX_ERR(0, 111, __pyx_L1_error)
     }
     try {
       __pyx_v_cdag.edges.push_back(__pyx_t_15);
     } catch(...) {
       __Pyx_CppExn2PyErr();
-      __PYX_ERR(0, 108, __pyx_L1_error)
+      __PYX_ERR(0, 111, __pyx_L1_error)
     }
 
-    /* "cylon_armada/dag_compiler.pyx":107
+    /* "cylon_armada/dag_compiler.pyx":110
  *         cop.schema_out = sout
  *         cdag.operators.push_back(cop)
  *     for (a, b) in dag.edges:             # <<<<<<<<<<<<<<
@@ -10539,7 +10567,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
   }
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":109
+  /* "cylon_armada/dag_compiler.pyx":112
  *     for (a, b) in dag.edges:
  *         cdag.edges.push_back(pair[string, string](a.encode("utf-8"), b.encode("utf-8")))
  *     return cdag             # <<<<<<<<<<<<<<
@@ -10549,7 +10577,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
   __pyx_r = __pyx_v_cdag;
   goto __pyx_L0;
 
-  /* "cylon_armada/dag_compiler.pyx":93
+  /* "cylon_armada/dag_compiler.pyx":96
  * 
  * 
  * cdef CWorkflowDAG _build_cdag(object dag) except *:             # <<<<<<<<<<<<<<
@@ -10574,7 +10602,7 @@ static cylon_armada::WorkflowDAG __pyx_f_12cylon_armada_12dag_compiler__build_cd
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":112
+/* "cylon_armada/dag_compiler.pyx":115
  * 
  * 
  * def check_edges(dag):             # <<<<<<<<<<<<<<
@@ -10621,32 +10649,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_dag,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 112, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 115, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 112, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 115, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_edges", 0) < (0)) __PYX_ERR(0, 112, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_edges", 0) < (0)) __PYX_ERR(0, 115, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_edges", 1, 1, 1, i); __PYX_ERR(0, 112, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_edges", 1, 1, 1, i); __PYX_ERR(0, 115, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 112, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 115, __pyx_L3_error)
     }
     __pyx_v_dag = values[0];
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("check_edges", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 112, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("check_edges", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 115, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -10696,17 +10724,17 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("check_edges", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":114
+  /* "cylon_armada/dag_compiler.pyx":117
  * def check_edges(dag):
  *     cdef CAgentDAGCompiler comp
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)             # <<<<<<<<<<<<<<
  *     cdef vector[CEdgePlan] res = comp.CheckEdges(cdag)
  *     out = []
 */
-  __pyx_t_1 = __pyx_f_12cylon_armada_12dag_compiler__build_cdag(__pyx_v_dag); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 114, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_12cylon_armada_12dag_compiler__build_cdag(__pyx_v_dag); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 117, __pyx_L1_error)
   __pyx_v_cdag = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_1);
 
-  /* "cylon_armada/dag_compiler.pyx":115
+  /* "cylon_armada/dag_compiler.pyx":118
  *     cdef CAgentDAGCompiler comp
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)
  *     cdef vector[CEdgePlan] res = comp.CheckEdges(cdag)             # <<<<<<<<<<<<<<
@@ -10715,19 +10743,19 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
 */
   __pyx_v_res = __pyx_v_comp.CheckEdges(__pyx_v_cdag);
 
-  /* "cylon_armada/dag_compiler.pyx":116
+  /* "cylon_armada/dag_compiler.pyx":119
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)
  *     cdef vector[CEdgePlan] res = comp.CheckEdges(cdag)
  *     out = []             # <<<<<<<<<<<<<<
  *     cdef size_t i
  *     for i in range(res.size()):
 */
-  __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 116, __pyx_L1_error)
+  __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 119, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_v_out = ((PyObject*)__pyx_t_2);
   __pyx_t_2 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":118
+  /* "cylon_armada/dag_compiler.pyx":121
  *     out = []
  *     cdef size_t i
  *     for i in range(res.size()):             # <<<<<<<<<<<<<<
@@ -10739,7 +10767,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
   for (__pyx_t_5 = 0; __pyx_t_5 < __pyx_t_4; __pyx_t_5+=1) {
     __pyx_v_i = __pyx_t_5;
 
-    /* "cylon_armada/dag_compiler.pyx":119
+    /* "cylon_armada/dag_compiler.pyx":122
  *     cdef size_t i
  *     for i in range(res.size()):
  *         out.append(EdgePlanView(             # <<<<<<<<<<<<<<
@@ -10747,30 +10775,30 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
  *             res[i].consumer.decode("utf-8"),
 */
     __pyx_t_6 = NULL;
-    __Pyx_GetModuleGlobalName(__pyx_t_7, __pyx_mstate_global->__pyx_n_u_EdgePlanView); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 119, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_7, __pyx_mstate_global->__pyx_n_u_EdgePlanView); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 122, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
 
-    /* "cylon_armada/dag_compiler.pyx":120
+    /* "cylon_armada/dag_compiler.pyx":123
  *     for i in range(res.size()):
  *         out.append(EdgePlanView(
  *             res[i].producer.decode("utf-8"),             # <<<<<<<<<<<<<<
  *             res[i].consumer.decode("utf-8"),
  *             TransferMode(0 if res[i].mode == ZeroCopy else 1),
 */
-    __pyx_t_8 = __Pyx_decode_cpp_string((__pyx_v_res[__pyx_v_i]).producer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 120, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_decode_cpp_string((__pyx_v_res[__pyx_v_i]).producer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 123, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
 
-    /* "cylon_armada/dag_compiler.pyx":121
+    /* "cylon_armada/dag_compiler.pyx":124
  *         out.append(EdgePlanView(
  *             res[i].producer.decode("utf-8"),
  *             res[i].consumer.decode("utf-8"),             # <<<<<<<<<<<<<<
  *             TransferMode(0 if res[i].mode == ZeroCopy else 1),
  *             res[i].note.decode("utf-8"),
 */
-    __pyx_t_9 = __Pyx_decode_cpp_string((__pyx_v_res[__pyx_v_i]).consumer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 121, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_decode_cpp_string((__pyx_v_res[__pyx_v_i]).consumer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 124, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
 
-    /* "cylon_armada/dag_compiler.pyx":122
+    /* "cylon_armada/dag_compiler.pyx":125
  *             res[i].producer.decode("utf-8"),
  *             res[i].consumer.decode("utf-8"),
  *             TransferMode(0 if res[i].mode == ZeroCopy else 1),             # <<<<<<<<<<<<<<
@@ -10778,7 +10806,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
  *         ))
 */
     __pyx_t_11 = NULL;
-    __Pyx_GetModuleGlobalName(__pyx_t_12, __pyx_mstate_global->__pyx_n_u_TransferMode); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 122, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_12, __pyx_mstate_global->__pyx_n_u_TransferMode); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 125, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_12);
     __pyx_t_14 = ((__pyx_v_res[__pyx_v_i]).mode == cylon_armada::TransferMode::ZeroCopy);
     if (__pyx_t_14) {
@@ -10806,18 +10834,18 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
       __Pyx_XDECREF(__pyx_t_11); __pyx_t_11 = 0;
       __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
       __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
-      if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 122, __pyx_L1_error)
+      if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 125, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
     }
 
-    /* "cylon_armada/dag_compiler.pyx":123
+    /* "cylon_armada/dag_compiler.pyx":126
  *             res[i].consumer.decode("utf-8"),
  *             TransferMode(0 if res[i].mode == ZeroCopy else 1),
  *             res[i].note.decode("utf-8"),             # <<<<<<<<<<<<<<
  *         ))
  *     return out
 */
-    __pyx_t_12 = __Pyx_decode_cpp_string((__pyx_v_res[__pyx_v_i]).note, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 123, __pyx_L1_error)
+    __pyx_t_12 = __Pyx_decode_cpp_string((__pyx_v_res[__pyx_v_i]).note, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 126, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_12);
     __pyx_t_15 = 1;
     #if CYTHON_UNPACK_METHODS
@@ -10840,22 +10868,22 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
       __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
       __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
       __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
-      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 119, __pyx_L1_error)
+      if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 122, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
     }
 
-    /* "cylon_armada/dag_compiler.pyx":119
+    /* "cylon_armada/dag_compiler.pyx":122
  *     cdef size_t i
  *     for i in range(res.size()):
  *         out.append(EdgePlanView(             # <<<<<<<<<<<<<<
  *             res[i].producer.decode("utf-8"),
  *             res[i].consumer.decode("utf-8"),
 */
-    __pyx_t_16 = __Pyx_PyList_Append(__pyx_v_out, __pyx_t_2); if (unlikely(__pyx_t_16 == ((int)-1))) __PYX_ERR(0, 119, __pyx_L1_error)
+    __pyx_t_16 = __Pyx_PyList_Append(__pyx_v_out, __pyx_t_2); if (unlikely(__pyx_t_16 == ((int)-1))) __PYX_ERR(0, 122, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":125
+  /* "cylon_armada/dag_compiler.pyx":128
  *             res[i].note.decode("utf-8"),
  *         ))
  *     return out             # <<<<<<<<<<<<<<
@@ -10867,7 +10895,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
   __pyx_r = __pyx_v_out;
   goto __pyx_L0;
 
-  /* "cylon_armada/dag_compiler.pyx":112
+  /* "cylon_armada/dag_compiler.pyx":115
  * 
  * 
  * def check_edges(dag):             # <<<<<<<<<<<<<<
@@ -10895,7 +10923,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_check_edges(CYTHON_UNUSE
   return __pyx_r;
 }
 
-/* "cylon_armada/dag_compiler.pyx":128
+/* "cylon_armada/dag_compiler.pyx":131
  * 
  * 
  * def compile_workflow(dag):             # <<<<<<<<<<<<<<
@@ -10942,32 +10970,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_dag,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 128, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 131, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 128, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 131, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "compile_workflow", 0) < (0)) __PYX_ERR(0, 128, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "compile_workflow", 0) < (0)) __PYX_ERR(0, 131, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("compile_workflow", 1, 1, 1, i); __PYX_ERR(0, 128, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("compile_workflow", 1, 1, 1, i); __PYX_ERR(0, 131, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 128, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 131, __pyx_L3_error)
     }
     __pyx_v_dag = values[0];
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("compile_workflow", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 128, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("compile_workflow", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 131, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -11023,17 +11051,17 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("compile_workflow", 0);
 
-  /* "cylon_armada/dag_compiler.pyx":130
+  /* "cylon_armada/dag_compiler.pyx":133
  * def compile_workflow(dag):
  *     cdef CAgentDAGCompiler comp
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)             # <<<<<<<<<<<<<<
  *     cdef CCompileResult r = comp.Compile(cdag)
  *     if not r.ok:
 */
-  __pyx_t_1 = __pyx_f_12cylon_armada_12dag_compiler__build_cdag(__pyx_v_dag); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 130, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_12cylon_armada_12dag_compiler__build_cdag(__pyx_v_dag); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 133, __pyx_L1_error)
   __pyx_v_cdag = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_1);
 
-  /* "cylon_armada/dag_compiler.pyx":131
+  /* "cylon_armada/dag_compiler.pyx":134
  *     cdef CAgentDAGCompiler comp
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)
  *     cdef CCompileResult r = comp.Compile(cdag)             # <<<<<<<<<<<<<<
@@ -11042,7 +11070,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
 */
   __pyx_v_r = __pyx_v_comp.Compile(__pyx_v_cdag);
 
-  /* "cylon_armada/dag_compiler.pyx":132
+  /* "cylon_armada/dag_compiler.pyx":135
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)
  *     cdef CCompileResult r = comp.Compile(cdag)
  *     if not r.ok:             # <<<<<<<<<<<<<<
@@ -11052,7 +11080,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
   __pyx_t_2 = (!(__pyx_v_r.ok != 0));
   if (unlikely(__pyx_t_2)) {
 
-    /* "cylon_armada/dag_compiler.pyx":133
+    /* "cylon_armada/dag_compiler.pyx":136
  *     cdef CCompileResult r = comp.Compile(cdag)
  *     if not r.ok:
  *         raise SchemaMismatchError(r.error_message.decode("utf-8"))             # <<<<<<<<<<<<<<
@@ -11060,9 +11088,9 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
  *     cdef size_t i
 */
     __pyx_t_4 = NULL;
-    __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 133, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 136, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_6 = __Pyx_decode_cpp_string(__pyx_v_r.error_message, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 133, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_decode_cpp_string(__pyx_v_r.error_message, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 136, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __pyx_t_7 = 1;
     #if CYTHON_UNPACK_METHODS
@@ -11082,14 +11110,14 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
       __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
       __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 133, __pyx_L1_error)
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 136, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
     }
     __Pyx_Raise(__pyx_t_3, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(0, 133, __pyx_L1_error)
+    __PYX_ERR(0, 136, __pyx_L1_error)
 
-    /* "cylon_armada/dag_compiler.pyx":132
+    /* "cylon_armada/dag_compiler.pyx":135
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)
  *     cdef CCompileResult r = comp.Compile(cdag)
  *     if not r.ok:             # <<<<<<<<<<<<<<
@@ -11098,19 +11126,19 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
 */
   }
 
-  /* "cylon_armada/dag_compiler.pyx":134
+  /* "cylon_armada/dag_compiler.pyx":137
  *     if not r.ok:
  *         raise SchemaMismatchError(r.error_message.decode("utf-8"))
  *     edges = []             # <<<<<<<<<<<<<<
  *     cdef size_t i
  *     for i in range(r.plan.edges.size()):
 */
-  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 134, __pyx_L1_error)
+  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 137, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_edges = ((PyObject*)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":136
+  /* "cylon_armada/dag_compiler.pyx":139
  *     edges = []
  *     cdef size_t i
  *     for i in range(r.plan.edges.size()):             # <<<<<<<<<<<<<<
@@ -11122,7 +11150,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
   for (__pyx_t_7 = 0; __pyx_t_7 < __pyx_t_9; __pyx_t_7+=1) {
     __pyx_v_i = __pyx_t_7;
 
-    /* "cylon_armada/dag_compiler.pyx":137
+    /* "cylon_armada/dag_compiler.pyx":140
  *     cdef size_t i
  *     for i in range(r.plan.edges.size()):
  *         edges.append(EdgePlanView(             # <<<<<<<<<<<<<<
@@ -11130,30 +11158,30 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
  *             r.plan.edges[i].consumer.decode("utf-8"),
 */
     __pyx_t_5 = NULL;
-    __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_EdgePlanView); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 137, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_EdgePlanView); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 140, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
 
-    /* "cylon_armada/dag_compiler.pyx":138
+    /* "cylon_armada/dag_compiler.pyx":141
  *     for i in range(r.plan.edges.size()):
  *         edges.append(EdgePlanView(
  *             r.plan.edges[i].producer.decode("utf-8"),             # <<<<<<<<<<<<<<
  *             r.plan.edges[i].consumer.decode("utf-8"),
  *             TransferMode(0 if r.plan.edges[i].mode == ZeroCopy else 1),
 */
-    __pyx_t_4 = __Pyx_decode_cpp_string((__pyx_v_r.plan.edges[__pyx_v_i]).producer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 138, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_decode_cpp_string((__pyx_v_r.plan.edges[__pyx_v_i]).producer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 141, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
 
-    /* "cylon_armada/dag_compiler.pyx":139
+    /* "cylon_armada/dag_compiler.pyx":142
  *         edges.append(EdgePlanView(
  *             r.plan.edges[i].producer.decode("utf-8"),
  *             r.plan.edges[i].consumer.decode("utf-8"),             # <<<<<<<<<<<<<<
  *             TransferMode(0 if r.plan.edges[i].mode == ZeroCopy else 1),
  *             r.plan.edges[i].note.decode("utf-8"),
 */
-    __pyx_t_10 = __Pyx_decode_cpp_string((__pyx_v_r.plan.edges[__pyx_v_i]).consumer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 139, __pyx_L1_error)
+    __pyx_t_10 = __Pyx_decode_cpp_string((__pyx_v_r.plan.edges[__pyx_v_i]).consumer, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 142, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_10);
 
-    /* "cylon_armada/dag_compiler.pyx":140
+    /* "cylon_armada/dag_compiler.pyx":143
  *             r.plan.edges[i].producer.decode("utf-8"),
  *             r.plan.edges[i].consumer.decode("utf-8"),
  *             TransferMode(0 if r.plan.edges[i].mode == ZeroCopy else 1),             # <<<<<<<<<<<<<<
@@ -11161,7 +11189,7 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
  *         ))
 */
     __pyx_t_12 = NULL;
-    __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_TransferMode); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 140, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_TransferMode); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 143, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_13);
     __pyx_t_2 = ((__pyx_v_r.plan.edges[__pyx_v_i]).mode == cylon_armada::TransferMode::ZeroCopy);
     if (__pyx_t_2) {
@@ -11189,18 +11217,18 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
       __Pyx_XDECREF(__pyx_t_12); __pyx_t_12 = 0;
       __Pyx_DECREF(__pyx_t_14); __pyx_t_14 = 0;
       __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
-      if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 140, __pyx_L1_error)
+      if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 143, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
     }
 
-    /* "cylon_armada/dag_compiler.pyx":141
+    /* "cylon_armada/dag_compiler.pyx":144
  *             r.plan.edges[i].consumer.decode("utf-8"),
  *             TransferMode(0 if r.plan.edges[i].mode == ZeroCopy else 1),
  *             r.plan.edges[i].note.decode("utf-8"),             # <<<<<<<<<<<<<<
  *         ))
  *     assignments = {}
 */
-    __pyx_t_13 = __Pyx_decode_cpp_string((__pyx_v_r.plan.edges[__pyx_v_i]).note, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 141, __pyx_L1_error)
+    __pyx_t_13 = __Pyx_decode_cpp_string((__pyx_v_r.plan.edges[__pyx_v_i]).note, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 144, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_13);
     __pyx_t_15 = 1;
     #if CYTHON_UNPACK_METHODS
@@ -11223,34 +11251,34 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
       __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
       __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 137, __pyx_L1_error)
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 140, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
     }
 
-    /* "cylon_armada/dag_compiler.pyx":137
+    /* "cylon_armada/dag_compiler.pyx":140
  *     cdef size_t i
  *     for i in range(r.plan.edges.size()):
  *         edges.append(EdgePlanView(             # <<<<<<<<<<<<<<
  *             r.plan.edges[i].producer.decode("utf-8"),
  *             r.plan.edges[i].consumer.decode("utf-8"),
 */
-    __pyx_t_16 = __Pyx_PyList_Append(__pyx_v_edges, __pyx_t_3); if (unlikely(__pyx_t_16 == ((int)-1))) __PYX_ERR(0, 137, __pyx_L1_error)
+    __pyx_t_16 = __Pyx_PyList_Append(__pyx_v_edges, __pyx_t_3); if (unlikely(__pyx_t_16 == ((int)-1))) __PYX_ERR(0, 140, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   }
 
-  /* "cylon_armada/dag_compiler.pyx":143
+  /* "cylon_armada/dag_compiler.pyx":146
  *             r.plan.edges[i].note.decode("utf-8"),
  *         ))
  *     assignments = {}             # <<<<<<<<<<<<<<
  *     cdef object key
  *     for item in r.plan.assignments:
 */
-  __pyx_t_3 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 143, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 146, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_assignments = ((PyObject*)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":145
+  /* "cylon_armada/dag_compiler.pyx":148
  *     assignments = {}
  *     cdef object key
  *     for item in r.plan.assignments:             # <<<<<<<<<<<<<<
@@ -11262,29 +11290,29 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
     __pyx_t_18 = *__pyx_t_17;
     __pyx_v_item = __PYX_STD_MOVE_IF_SUPPORTED(__pyx_t_18);
 
-    /* "cylon_armada/dag_compiler.pyx":146
+    /* "cylon_armada/dag_compiler.pyx":149
  *     cdef object key
  *     for item in r.plan.assignments:
  *         key = item.first.decode("utf-8")             # <<<<<<<<<<<<<<
  *         assignments[key] = CollectivePattern(_from_cpat(item.second))
  *     return ExecutionPlan(edges, assignments)
 */
-    __pyx_t_3 = __Pyx_decode_cpp_string(__pyx_v_item.first, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 146, __pyx_L1_error)
+    __pyx_t_3 = __Pyx_decode_cpp_string(__pyx_v_item.first, 0, PY_SSIZE_T_MAX, NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 149, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_3);
     __pyx_t_3 = 0;
 
-    /* "cylon_armada/dag_compiler.pyx":147
+    /* "cylon_armada/dag_compiler.pyx":150
  *     for item in r.plan.assignments:
  *         key = item.first.decode("utf-8")
  *         assignments[key] = CollectivePattern(_from_cpat(item.second))             # <<<<<<<<<<<<<<
  *     return ExecutionPlan(edges, assignments)
 */
     __pyx_t_6 = NULL;
-    __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_CollectivePattern); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 147, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_CollectivePattern); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 150, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_13);
-    __pyx_t_19 = __pyx_f_12cylon_armada_12dag_compiler__from_cpat(__pyx_v_item.second); if (unlikely(__pyx_t_19 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 147, __pyx_L1_error)
-    __pyx_t_11 = __Pyx_PyLong_From_int(__pyx_t_19); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 147, __pyx_L1_error)
+    __pyx_t_19 = __pyx_f_12cylon_armada_12dag_compiler__from_cpat(__pyx_v_item.second); if (unlikely(__pyx_t_19 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 150, __pyx_L1_error)
+    __pyx_t_11 = __Pyx_PyLong_From_int(__pyx_t_19); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 150, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_11);
     __pyx_t_7 = 1;
     #if CYTHON_UNPACK_METHODS
@@ -11304,13 +11332,13 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
       __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
       __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
-      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 147, __pyx_L1_error)
+      if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 150, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
     }
-    if (unlikely((PyDict_SetItem(__pyx_v_assignments, __pyx_v_key, __pyx_t_3) < 0))) __PYX_ERR(0, 147, __pyx_L1_error)
+    if (unlikely((PyDict_SetItem(__pyx_v_assignments, __pyx_v_key, __pyx_t_3) < 0))) __PYX_ERR(0, 150, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-    /* "cylon_armada/dag_compiler.pyx":145
+    /* "cylon_armada/dag_compiler.pyx":148
  *     assignments = {}
  *     cdef object key
  *     for item in r.plan.assignments:             # <<<<<<<<<<<<<<
@@ -11319,14 +11347,14 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
 */
   }
 
-  /* "cylon_armada/dag_compiler.pyx":148
+  /* "cylon_armada/dag_compiler.pyx":151
  *         key = item.first.decode("utf-8")
  *         assignments[key] = CollectivePattern(_from_cpat(item.second))
  *     return ExecutionPlan(edges, assignments)             # <<<<<<<<<<<<<<
 */
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_13 = NULL;
-  __Pyx_GetModuleGlobalName(__pyx_t_11, __pyx_mstate_global->__pyx_n_u_ExecutionPlan); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 148, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_11, __pyx_mstate_global->__pyx_n_u_ExecutionPlan); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 151, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_11);
   __pyx_t_7 = 1;
   #if CYTHON_UNPACK_METHODS
@@ -11345,14 +11373,14 @@ static PyObject *__pyx_pf_12cylon_armada_12dag_compiler_2compile_workflow(CYTHON
     __pyx_t_3 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_11, __pyx_callargs+__pyx_t_7, (3-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
     __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
     __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
-    if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 148, __pyx_L1_error)
+    if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 151, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
   }
   __pyx_r = __pyx_t_3;
   __pyx_t_3 = 0;
   goto __pyx_L0;
 
-  /* "cylon_armada/dag_compiler.pyx":128
+  /* "cylon_armada/dag_compiler.pyx":131
  * 
  * 
  * def compile_workflow(dag):             # <<<<<<<<<<<<<<
@@ -12838,7 +12866,7 @@ __Pyx_RefNannySetupContext("PyInit_dag_compiler", 0);
  *     Reduce = 2
  *     PointToPoint = 3             # <<<<<<<<<<<<<<
  *     Broadcast = 4
- * 
+ *     AllGather = 5
 */
   if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_PointToPoint, __pyx_mstate_global->__pyx_int_3) < (0)) __PYX_ERR(0, 26, __pyx_L1_error)
 
@@ -12846,10 +12874,19 @@ __Pyx_RefNannySetupContext("PyInit_dag_compiler", 0);
  *     Reduce = 2
  *     PointToPoint = 3
  *     Broadcast = 4             # <<<<<<<<<<<<<<
- * 
+ *     AllGather = 5
  * 
 */
   if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_Broadcast, __pyx_mstate_global->__pyx_int_4) < (0)) __PYX_ERR(0, 27, __pyx_L1_error)
+
+  /* "cylon_armada/dag_compiler.pyx":28
+ *     PointToPoint = 3
+ *     Broadcast = 4
+ *     AllGather = 5             # <<<<<<<<<<<<<<
+ * 
+ * 
+*/
+  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_AllGather, __pyx_mstate_global->__pyx_int_5) < (0)) __PYX_ERR(0, 28, __pyx_L1_error)
 
   /* "cylon_armada/dag_compiler.pyx":22
  * 
@@ -12869,287 +12906,287 @@ __Pyx_RefNannySetupContext("PyInit_dag_compiler", 0);
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":30
+  /* "cylon_armada/dag_compiler.pyx":31
  * 
  * 
  * class TransferMode(IntEnum):             # <<<<<<<<<<<<<<
  *     ZeroCopy = 0
  *     Convert = 1
 */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_IntEnum); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_IntEnum); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_5 = PyTuple_Pack(1, __pyx_t_2); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_5 = PyTuple_Pack(1, __pyx_t_2); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  __pyx_t_2 = __Pyx_PEP560_update_bases(__pyx_t_5); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PEP560_update_bases(__pyx_t_5); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_6 = __Pyx_CalculateMetaclass(NULL, __pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_CalculateMetaclass(NULL, __pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
-  __pyx_t_4 = __Pyx_Py3MetaclassPrepare(__pyx_t_6, __pyx_t_2, __pyx_mstate_global->__pyx_n_u_TransferMode, __pyx_mstate_global->__pyx_n_u_TransferMode, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_Py3MetaclassPrepare(__pyx_t_6, __pyx_t_2, __pyx_mstate_global->__pyx_n_u_TransferMode, __pyx_mstate_global->__pyx_n_u_TransferMode, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   if (__pyx_t_2 != __pyx_t_5) {
-    if (unlikely((PyDict_SetItemString(__pyx_t_4, "__orig_bases__", __pyx_t_5) < 0))) __PYX_ERR(0, 30, __pyx_L1_error)
+    if (unlikely((PyDict_SetItemString(__pyx_t_4, "__orig_bases__", __pyx_t_5) < 0))) __PYX_ERR(0, 31, __pyx_L1_error)
   }
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":31
+  /* "cylon_armada/dag_compiler.pyx":32
  * 
  * class TransferMode(IntEnum):
  *     ZeroCopy = 0             # <<<<<<<<<<<<<<
  *     Convert = 1
  * 
 */
-  if (__Pyx_SetNameInClass(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZeroCopy, __pyx_mstate_global->__pyx_int_0) < (0)) __PYX_ERR(0, 31, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZeroCopy, __pyx_mstate_global->__pyx_int_0) < (0)) __PYX_ERR(0, 32, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":32
+  /* "cylon_armada/dag_compiler.pyx":33
  * class TransferMode(IntEnum):
  *     ZeroCopy = 0
  *     Convert = 1             # <<<<<<<<<<<<<<
  * 
  * 
 */
-  if (__Pyx_SetNameInClass(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_Convert, __pyx_mstate_global->__pyx_int_1) < (0)) __PYX_ERR(0, 32, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_Convert, __pyx_mstate_global->__pyx_int_1) < (0)) __PYX_ERR(0, 33, __pyx_L1_error)
 
-  /* "cylon_armada/dag_compiler.pyx":30
+  /* "cylon_armada/dag_compiler.pyx":31
  * 
  * 
  * class TransferMode(IntEnum):             # <<<<<<<<<<<<<<
  *     ZeroCopy = 0
  *     Convert = 1
 */
-  __pyx_t_5 = __Pyx_Py3ClassCreate(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_TransferMode, __pyx_t_2, __pyx_t_4, NULL, 0, 0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_Py3ClassCreate(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_TransferMode, __pyx_t_2, __pyx_t_4, NULL, 0, 0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_5);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_TransferMode, __pyx_t_5) < (0)) __PYX_ERR(0, 30, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_TransferMode, __pyx_t_5) < (0)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":35
+  /* "cylon_armada/dag_compiler.pyx":36
  * 
  * 
  * class SchemaMismatchError(Exception):             # <<<<<<<<<<<<<<
  *     """Raised when the AgentDAGCompiler rejects an edge whose producer output
  *     is not schema-compatible with the consumer input (proposal A2 case 2)."""
 */
-  __pyx_t_2 = PyTuple_Pack(1, ((PyObject *)(((PyTypeObject*)PyExc_Exception)))); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_2 = PyTuple_Pack(1, ((PyObject *)(((PyTypeObject*)PyExc_Exception)))); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 36, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_6 = __Pyx_PEP560_update_bases(__pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PEP560_update_bases(__pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 36, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
-  __pyx_t_4 = __Pyx_CalculateMetaclass(NULL, __pyx_t_6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CalculateMetaclass(NULL, __pyx_t_6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 36, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  __pyx_t_5 = __Pyx_Py3MetaclassPrepare(__pyx_t_4, __pyx_t_6, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_kp_u_Raised_when_the_AgentDAGCompiler); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_Py3MetaclassPrepare(__pyx_t_4, __pyx_t_6, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_kp_u_Raised_when_the_AgentDAGCompiler); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 36, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   if (__pyx_t_6 != __pyx_t_2) {
-    if (unlikely((PyDict_SetItemString(__pyx_t_5, "__orig_bases__", __pyx_t_2) < 0))) __PYX_ERR(0, 35, __pyx_L1_error)
+    if (unlikely((PyDict_SetItemString(__pyx_t_5, "__orig_bases__", __pyx_t_2) < 0))) __PYX_ERR(0, 36, __pyx_L1_error)
   }
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  __pyx_t_2 = __Pyx_Py3ClassCreate(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, __pyx_t_6, __pyx_t_5, NULL, 0, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_Py3ClassCreate(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, __pyx_t_6, __pyx_t_5, NULL, 0, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 36, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, __pyx_t_2) < (0)) __PYX_ERR(0, 35, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_SchemaMismatchError, __pyx_t_2) < (0)) __PYX_ERR(0, 36, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":57
+  /* "cylon_armada/dag_compiler.pyx":60
  * 
  * 
  * class AgentOperator:             # <<<<<<<<<<<<<<
  *     def __init__(self, name, pattern, schema_in, schema_out):
  *         if not isinstance(schema_in, pa.Schema):
 */
-  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_AgentOperator, __pyx_mstate_global->__pyx_n_u_AgentOperator, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 57, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_AgentOperator, __pyx_mstate_global->__pyx_n_u_AgentOperator, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 60, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
 
-  /* "cylon_armada/dag_compiler.pyx":58
+  /* "cylon_armada/dag_compiler.pyx":61
  * 
  * class AgentOperator:
  *     def __init__(self, name, pattern, schema_in, schema_out):             # <<<<<<<<<<<<<<
  *         if not isinstance(schema_in, pa.Schema):
  *             raise TypeError(
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_13AgentOperator_1__init__, 0, __pyx_mstate_global->__pyx_n_u_AgentOperator___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[0])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 58, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_13AgentOperator_1__init__, 0, __pyx_mstate_global->__pyx_n_u_AgentOperator___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[0])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 61, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 58, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 61, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":57
+  /* "cylon_armada/dag_compiler.pyx":60
  * 
  * 
  * class AgentOperator:             # <<<<<<<<<<<<<<
  *     def __init__(self, name, pattern, schema_in, schema_out):
  *         if not isinstance(schema_in, pa.Schema):
 */
-  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_AgentOperator, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 57, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_AgentOperator, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 60, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_AgentOperator, __pyx_t_4) < (0)) __PYX_ERR(0, 57, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_AgentOperator, __pyx_t_4) < (0)) __PYX_ERR(0, 60, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":73
+  /* "cylon_armada/dag_compiler.pyx":76
  * 
  * 
  * class WorkflowDAG:             # <<<<<<<<<<<<<<
  *     def __init__(self, operators, edges):
  *         self.operators = list(operators)
 */
-  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_WorkflowDAG, __pyx_mstate_global->__pyx_n_u_WorkflowDAG, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 73, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_WorkflowDAG, __pyx_mstate_global->__pyx_n_u_WorkflowDAG, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 76, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
 
-  /* "cylon_armada/dag_compiler.pyx":74
+  /* "cylon_armada/dag_compiler.pyx":77
  * 
  * class WorkflowDAG:
  *     def __init__(self, operators, edges):             # <<<<<<<<<<<<<<
  *         self.operators = list(operators)
  *         self.edges = [(str(a), str(b)) for (a, b) in edges]
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_11WorkflowDAG_1__init__, 0, __pyx_mstate_global->__pyx_n_u_WorkflowDAG___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_11WorkflowDAG_1__init__, 0, __pyx_mstate_global->__pyx_n_u_WorkflowDAG___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 77, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 74, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 77, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":73
+  /* "cylon_armada/dag_compiler.pyx":76
  * 
  * 
  * class WorkflowDAG:             # <<<<<<<<<<<<<<
  *     def __init__(self, operators, edges):
  *         self.operators = list(operators)
 */
-  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_WorkflowDAG, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 73, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_WorkflowDAG, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 76, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_WorkflowDAG, __pyx_t_4) < (0)) __PYX_ERR(0, 73, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_WorkflowDAG, __pyx_t_4) < (0)) __PYX_ERR(0, 76, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":79
+  /* "cylon_armada/dag_compiler.pyx":82
  * 
  * 
  * class EdgePlanView:             # <<<<<<<<<<<<<<
  *     def __init__(self, producer, consumer, mode, note):
  *         self.producer = producer
 */
-  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_EdgePlanView, __pyx_mstate_global->__pyx_n_u_EdgePlanView, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 79, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_EdgePlanView, __pyx_mstate_global->__pyx_n_u_EdgePlanView, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 82, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
 
-  /* "cylon_armada/dag_compiler.pyx":80
+  /* "cylon_armada/dag_compiler.pyx":83
  * 
  * class EdgePlanView:
  *     def __init__(self, producer, consumer, mode, note):             # <<<<<<<<<<<<<<
  *         self.producer = producer
  *         self.consumer = consumer
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_12EdgePlanView_1__init__, 0, __pyx_mstate_global->__pyx_n_u_EdgePlanView___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[2])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 80, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_12EdgePlanView_1__init__, 0, __pyx_mstate_global->__pyx_n_u_EdgePlanView___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[2])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 83, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 80, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 83, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":79
+  /* "cylon_armada/dag_compiler.pyx":82
  * 
  * 
  * class EdgePlanView:             # <<<<<<<<<<<<<<
  *     def __init__(self, producer, consumer, mode, note):
  *         self.producer = producer
 */
-  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_EdgePlanView, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 79, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_EdgePlanView, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 82, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_EdgePlanView, __pyx_t_4) < (0)) __PYX_ERR(0, 79, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_EdgePlanView, __pyx_t_4) < (0)) __PYX_ERR(0, 82, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":87
+  /* "cylon_armada/dag_compiler.pyx":90
  * 
  * 
  * class ExecutionPlan:             # <<<<<<<<<<<<<<
  *     def __init__(self, edges, assignments):
  *         self.edges = edges              # list[EdgePlanView]
 */
-  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_ExecutionPlan, __pyx_mstate_global->__pyx_n_u_ExecutionPlan, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 87, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_Py3MetaclassPrepare((PyObject *) NULL, __pyx_mstate_global->__pyx_empty_tuple, __pyx_mstate_global->__pyx_n_u_ExecutionPlan, __pyx_mstate_global->__pyx_n_u_ExecutionPlan, (PyObject *) NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, (PyObject *) NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 90, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
 
-  /* "cylon_armada/dag_compiler.pyx":88
+  /* "cylon_armada/dag_compiler.pyx":91
  * 
  * class ExecutionPlan:
  *     def __init__(self, edges, assignments):             # <<<<<<<<<<<<<<
  *         self.edges = edges              # list[EdgePlanView]
  *         self.assignments = assignments  # dict[str, CollectivePattern]
 */
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_13ExecutionPlan_1__init__, 0, __pyx_mstate_global->__pyx_n_u_ExecutionPlan___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[3])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 88, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_13ExecutionPlan_1__init__, 0, __pyx_mstate_global->__pyx_n_u_ExecutionPlan___init, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[3])); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 91, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 88, __pyx_L1_error)
+  if (__Pyx_SetNameInClass(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_init, __pyx_t_4) < (0)) __PYX_ERR(0, 91, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":87
+  /* "cylon_armada/dag_compiler.pyx":90
  * 
  * 
  * class ExecutionPlan:             # <<<<<<<<<<<<<<
  *     def __init__(self, edges, assignments):
  *         self.edges = edges              # list[EdgePlanView]
 */
-  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_ExecutionPlan, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 87, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_Py3ClassCreate(((PyObject*)&PyType_Type), __pyx_mstate_global->__pyx_n_u_ExecutionPlan, __pyx_mstate_global->__pyx_empty_tuple, __pyx_t_6, NULL, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 90, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_4);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_ExecutionPlan, __pyx_t_4) < (0)) __PYX_ERR(0, 87, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_ExecutionPlan, __pyx_t_4) < (0)) __PYX_ERR(0, 90, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":112
+  /* "cylon_armada/dag_compiler.pyx":115
  * 
  * 
  * def check_edges(dag):             # <<<<<<<<<<<<<<
  *     cdef CAgentDAGCompiler comp
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)
 */
-  __pyx_t_6 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_1check_edges, 0, __pyx_mstate_global->__pyx_n_u_check_edges, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 112, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_1check_edges, 0, __pyx_mstate_global->__pyx_n_u_check_edges, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[4])); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 115, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_6);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_edges, __pyx_t_6) < (0)) __PYX_ERR(0, 112, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_edges, __pyx_t_6) < (0)) __PYX_ERR(0, 115, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-  /* "cylon_armada/dag_compiler.pyx":128
+  /* "cylon_armada/dag_compiler.pyx":131
  * 
  * 
  * def compile_workflow(dag):             # <<<<<<<<<<<<<<
  *     cdef CAgentDAGCompiler comp
  *     cdef CWorkflowDAG cdag = _build_cdag(dag)
 */
-  __pyx_t_6 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_3compile_workflow, 0, __pyx_mstate_global->__pyx_n_u_compile_workflow, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 128, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_CyFunction_New(&__pyx_mdef_12cylon_armada_12dag_compiler_3compile_workflow, 0, __pyx_mstate_global->__pyx_n_u_compile_workflow, NULL, __pyx_mstate_global->__pyx_n_u_cylon_armada_dag_compiler, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 131, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_6);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_compile_workflow, __pyx_t_6) < (0)) __PYX_ERR(0, 128, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_compile_workflow, __pyx_t_6) < (0)) __PYX_ERR(0, 131, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
   /* "cylon_armada/dag_compiler.pyx":1
@@ -13225,31 +13262,31 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 8; } index[] = {{1},{145},{1},{29},{40},{41},{27},{5},{13},{22},{9},{17},{7},{12},{21},{13},{22},{7},{12},{20},{6},{7},{13},{6},{19},{12},{11},{20},{8},{1},{11},{18},{1},{4},{11},{18},{4},{16},{8},{25},{3},{7},{5},{6},{4},{8},{1},{8},{13},{4},{5},{3},{8},{13},{4},{10},{15},{4},{8},{4},{9},{3},{2},{7},{3},{11},{8},{7},{14},{12},{1},{3},{9},{10},{4},{12},{10},{8},{6},{109},{16},{30},{40},{226},{124},{67}};
-    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (1105 bytes) */
-const char* const cstring = "BZh91AY&SY\252\244Z\247\000\000u\177\377v\337\377\316{\177\276\377\277\357\377\235\277\377\377\360@@@@@@@@@@@@@\000P\003\236wL32\242p\303E5@\320h\365<\243\312\000\032\036\220\3104\321\240\320\001\246\203OPf\241\220\320z\214\3223)\232\203SS\024\320\230\206mM2\237\252\017S\3244\006\232\03244\000\000\031\000\000h\032\006\200h4\322\0015&\364\215SM\246\243\3120\231\003i\032hh\000\320\003@\000\000\006\215\r\000\034\000\006\200\000d\000\000\001\220\321\240\000\000\000\000\000\000\002Q\010h\t\211=S\30156\221\246\201\246\200\000\320\000\000\000\000\000\r\243I\264\227\274\006z\343\325\306&\260k\344\330q\014\006B$\313\264\212\252*\250\257\331*\2168!TUA\034\220;\033e[\021a\020V\002]E\332Q\210\342A\345\026\247`\347G\020\324|\n\353j\225\031@2rK\251{\234\264\036\315r\233:\255\034\215\207\035A\262\256\203\034=\241Z\035\256\254x\300\r(\305.;`Jul\326JN`\241\205\224\244\000\210\222\001N\250{\222\374\r\222\270>\022\223v\243hV,i\272\024v\353s\363b\037\010\253\010\325\"\227\365\206\230\244\343I\364i\336C\rh\213\202\274L$\211Ox\360\270ts2o\337\206\325\307\373z\214h\335F\252\3506\351b\206V\216(\\\201\203Vy\006n\244\024\327\252.\312\347Wn\214\031\363\266\252g\204\333\326\350\226\244*%\271\033\255:\202i\332\341$\312\304\030\202\244\221\215\307\216\305\2505\237sJ5SasV\342\314NNE\036\302\340R\353\330\203\024G\253\0054T\231RI\231[\364\013`\361Q)\226\376F8\242\020g\346\255\234\264\204\334p\230\254\320\254\244\205K\361X\311\250\305$\251\000\317\322\337\304\231\327d\240\363\264\214\363\212\200\347\250[\260H.\331\"(#\020\020\2432\016xx/4\260\207\230\267\207 \214\035\354\224{\022\257\t\344\202\2646fY\356\004\"\022\r-\247\334\005pw\037;\002*\320\t\361\034\205\222\023\013\365\200\347\211\306\375\301\237h\231\271\365\"\r\240+m#n\307\301\224\240ni\253\002=\315O\314,\301Kb\3242\353\231\200\372\345gB\355\014\034\226`\003\0351!\023\274*\262J\024\004\314S%\323\273\256Et!\235ix\304%\\D\316;\016\213V\362\031\227*y\236\351\013U#\344\322\010\"\276\266V*I\005C\364\314I\033T\205\020\230\256\210\002\210KqBH#[\230V""\372\035+T\300\020\325\006\"\206\253qp\001\230&\375\264\336'1-\202\032\010\316-\236\223\243\262F\034\030.\270e\361\277\265EQ\345\203\006\341\241\355\3023!z!\321h\346\337\026\364f\034\rjP\010.\310\277:\354\223WH=@\202\324\363\3042s\234'\270~\202\350&\217\013\017\025\2147\022g\031T\002\273\214\226\240\260R\365p\2128<\0136 \220x(\035w.(\034\331a\311b\265\254\265\036\004\031\220\351FRl\203\365%HcU\023\232\n\373\344\030\314X\357\031S\013DX\324R\341|\310\3053\241\227\204\263\265\220\022V\205s\272\330\361\2410\304ad3\300\256\201\016v]\352R\256\204\264p&\226\3419K\224\240T\260\303\025D\254\346\302f**\244h\256\202\356\231\232,[\360pHA\t\331 e\007Y\263\243\217\037\275\222\2317$\300\264\354 SD\340:\332/\261o\230W\217\007(OAC@@W\314\305m\303\027\243|/E\311t\251\223b\253\301\017\211w\344f3\316f_\320\346\211<-\202\2201N\223\203\225h\247\025\275\346\034K\346\035V\223\221a(\201u\302\000\224?]\016\255QV\025\215`5B\372\020\025\303a8\367Q\202\232\225\017\373\326\356\346\267\274\351\037\020\224\265\362\256\372\257)\205\233\002\003=\016\312\177\021\201|\241\264dq\025:E\312\255--.\264KX\3045\206\265\025\237\361w$S\205\t\n\252E\252p";
-    PyObject *data = __Pyx_DecompressString(cstring, 1105, 2);
+    const struct { const unsigned int length: 8; } index[] = {{1},{145},{1},{29},{40},{41},{27},{5},{13},{22},{9},{9},{17},{7},{12},{21},{13},{22},{7},{12},{20},{6},{7},{13},{6},{19},{12},{11},{20},{8},{1},{11},{18},{1},{4},{11},{18},{4},{16},{8},{25},{3},{7},{5},{6},{4},{8},{1},{8},{13},{4},{5},{3},{8},{13},{4},{10},{15},{4},{8},{4},{9},{3},{2},{7},{3},{11},{8},{7},{14},{12},{1},{3},{9},{10},{4},{12},{10},{8},{6},{109},{16},{30},{40},{226},{124},{67}};
+    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (1106 bytes) */
+const char* const cstring = "BZh91AY&SYD\237\205\221\000\000u\177\377v\337\377\316{\177\276\377\277\357\377\235\277\377\377\360@@@@@@@@@@@@@\000P\003\236wV\023b\252\2340\321MP\323M\032=O(\362@\006\206M6\243\010h\000\001\240\323A\232\206CA\3523H\314\246 \324\324\304&\247\243S\321\224\364\312~\2504\3654\320\017P\000\000\000\000\000\000\000\000\000\324\364\"d\322\247\355*yCG\244\364\201\3524\014\206\232\0324\003@\r\000\000\000\032d4\006\207\000\001\240\000\031\000\000\000d4h\000\000\000\000\000\000\000\224\324\2312\000\024\325?h\246O\"\207\250\014\200\000\000\000\000\000\000\000\336\215)\264\232\276\003\215n\354n\033\2309\367\364<\236\006\362-\323\332d\220\222\024\273&\024Q\t\323$\303=\240\375\323T\2642\234a8\0336]\2449\236RH\266\353\034=\364D\231\245\004}\250\352\314\252\0139:\363\266}\004\240\367i\027j\3500\317\324y\316\032\250\372\225\343\336\021\203\364\221n\345\303\317\230\251M\200\t\361)\217\344\244\346\017\213\234G\320\002\033\234\n\363\300\364K\354@O\356{\245&\365f\301p\276\306\360A\335\271\360\305\021\n\242\212F\201\024\301\2423E'\032O\247O\003\215Z2J\023C\262\034\210\203M\331\256\026\254j8b\211\212\204\227\354\367\016\201E\227]\247\n5\223\207\010t\313\2463\203\211\225\265\016\345\250G>1\366V\334\270-\341\344\262l/\262sf/\212\301\214\n\263\241\367>\322\273&x\324\364\271\2070\232\232\t\267n\320\260\016ii\353P\221\320\270\226\225Yaa\032:\027Q\031\311\3149\r$\341\035\322+MMn\306]\311\220HL\327\325\257{\236[8;\371\303\263\323xW\310\025\230\235\306%\344\350\327\035\016\256\335\24554\007\177K^\326\331\233S\007\215\\\312\020\276\274>aQ2AU\251\022\301\030\200\2251\200s\265%\007\224\021Aj\346\247\021\204]\023\316\3518\023\300\312\221\001\230c\254\020l\220jOG\010*\363\303\031\326\022\324\200Q\211\244*P\371\177T\034\2218\340\327\214\233\t\233\341[\2346\000\245\256\215\267\341R\322\202O\304S\013\240\366v\370\345\305u\245q\344\276\245\023\375\343\345\2167(\301\262\342\r\r\327dU\231NT8p7n\341P\357\027\036r9\204\366+\3449\212\226\322\267\236\303\343\330\324\307\006\234$q\276\222\354\032T\335\337\204""\362\326\264@ML4\342Q\3276\2653\",\305\206W@.\234\340\214\345#M6\202\374h\323Rj\0042\003\021q\256\330\274\000\270g\014y\300NbZ\2040#xZ~\034%\314\215\234<:\236;\250M\375\246H\221\240q7V\331M\325\035\274\325\021\361\345\341\326-T\0148\352\256\264\020_\215\202w_\223&`\202\001RW\003\3072{\336'\266\206Re;\205\305\310\344,\313\006\251X\3470\235\263S\330\310\273;\343&\2018e\376E\2438\230\206<\222b\017\243#h\250\314\266G\207R\343>Q\224\232B\031\322\245Z\352\342q\002\237\031\005\\\275\214\006\342a(\344\225)\260S\326\316F\311\352\360U\223:\0058\261\215\217\310\223L\025\216g\032'\262\t\360c\315\351\357\032\364\371\313\216\265ui,/z-\023h8\243\201S\274\311\316\004\3115\014\237\014\330\030\200\336D\006\374\203\360\235\262\006Xrm\275,\210\375\363Jd\354\243\002\343\260\201N\023\300\353d\276\305\326i_:\033\243A\005\r\001\001_3\025\366\314_\215\340\275&\345\323\250M\n\316\204Z\022\360H\314D9\231\237C\232-\000\266\022@\305Jm\216E\2306\032\335\204\332_0\3532\234\253)E\013\256\020\007(\375p8\265Ua+\"\310f\216\004\020,\006\202zw\222\002\221\352\237\367\255\355\335\177y\362\276 \250\363\312\305\245]S\0179\353\336\367k\365\326\326\303\275\030\013\215\206G,\241\314/Db\305\213\354%\225\\n\014\316E\377\213\271\"\234(H\"O\302\310\200";
+    PyObject *data = __Pyx_DecompressString(cstring, 1106, 2);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (971 bytes) */
-const char* const cstring = "x\332\205T\315o\334D\024gQP\2424\r$m\tRA\032\203@\t\244\2136\r*\204R\264$!T\220\346\243\245\225Z\304hv\3746;\304\236\361\316\214\263YN9\372\350\343\034}\364q\217{\314\261\307\034\367\230?\205\347\365\326M\004\022\226<\363\336\274\367~\363{\037v\375\220\t\003>\351u@\022\333\001\322<\002i\267\232;\233*\214D\000\232h\370\013\2705\204I\002\376\021\240\2472@\"\255\374\230\243Y\3056\212\355,\301G\030\"\225%\206w d\3678\0020+Z\001\206\010\333\031\203s%M\034b\224\220\030D\226\021%R\206\005\244\271F8C\330\265\225\372\217\274\037(I\231\016\231\317\276\366\331\021\345\023*\365\250\177Z\202S!I\030\033KZ@\030\211\372Lk\325\253?\035\333V\311QE\202\"\273\377q\214\345\261T=\211\324\202\000\363\024'\230\033\263\026\264$\261m\337\373v\\\217\275\0104\263J_S\352\024i\010K\351OZ1\037\351\333\315\nc\277\204\330T\362\004\264\335\306\272\355\007L>\027\320\273*W\010\333\247\300c+\224,,\327\224\312\345\261\264\3332\016\367\225\220\366\231\032o\224\356\367O\361\335\022\334\322'pj\017\241}\010E[\236\362\361\375\223m\207a\355u\231t\271\356\n\0232\313;\333X\016\375L3i\332\240w\225\017/\224>n\007\252\207\003pE\254H\274\004\2556\025\226\221\031#\216d\210\3250\314\364%\027\252\316\225\306j\013\t\246\305\261kx\017?\246\305\304\030\036\340)\"P\253\031\207\026\343\307EG']\245\275\311=of\343j\373\353W\333_\310\324W\234\226\250 9\022\006\254\t\245\355X\342\261xC\223\nC+:\302BX\274\346\030\372\224\206\014y\340\023\202e<\3004PD\230\361\032#\233\302\244\025\305\304\264\0004J\026B\265*\013j\322|S\314=\233LJ\244\"J#\r\021\323P\010\345\2471\2316<\300.\235X\326*\341\2731\013J<\255\301T\363\374v`\r\004mJ\r\330\311\265(\371\320fq\200\231Y0\270\236\260 \006s\326\034\315\334H\326\223\277\335\202\373*;\314\272\243\271\305t\3055F\037l\014\275\341\372\260{>\373\332\273\254\\V\263V^\253\\\276\0376\206[\347\265\363\273\257\233\2273s\311/)\202\315%\277^,-\347\265\374V\336\314\017\n}\327-\024\333\023\347\235\215\355\217\323\361\361\236k\224\372o\256ve\233\200\340VZw\335mw\340X\031x\230\032\347\271ug2/[\317\342|3?\031""\034\234\325.\247>q\257\360\312\205\321\324\307n+\233)\305\3513\2334\022\004\231\277\230\367\262\005\014y4X\032\326\206h\232K\232\227S3\311{\311\357\251\2276\322m\367\241\2133\364\274\231\274H\233\351\037\331\302h\356&\332\276p5\267\350\276\313v\362F\336\374\317\243\217P\275\343\030F\377\234{\371Z\376|p\177 \317\257\371~\223Mg\335\0349.\246^q\351LZK\357\244\230\320|\342\243\313\264\353f\230\370-\244\261sqw\025\213\366r\320\035N\r\233\243\251\033\311\017\210\260\224\325\256e\350e\267\263W\203\332\000\305\331\304{\233\306\375\024\260'\330\251\007\250<t\330\310\367\223n\372.v\352\001\246\336\370\227ZR\347X\230O\221\374g\371\237\303\312\347\363\264\2079u/\221A\303X\177c\303tp(}\032Y\375\220\214\347qc\243\374\007<\"dy\277\277\327*\376\356\344\313\225w\336\214k,{\232E\264\234\307\177\000\2736]\247";
-    PyObject *data = __Pyx_DecompressString(cstring, 971, 1);
+    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (976 bytes) */
+const char* const cstring = "x\332\205T\317o\334D\024fQP\2424\r$m\tRA\032\203@\t\244\2136\r*\204Rd\222\020*H\363\243\277\244\266b4;~\2335\261g\2743\343l\226S\216>\3728G\037}\334\343\036s\3541\307=\356\237\302\363z\343&\002\tK\236y3\357\3157\337{\357\263\353\207\314\327\340\221n\033\0041m \356\021\010\263\345\356l\3120\362\003PD\301_\300\215&L\020\360\216\000#\245\006\022)\351\305\034\33526Qlf\t>\276&B\032\242y\033Bv\217#\0003~3\300#\276i\217\301\271\024:\016\361\224/\360\020YF\224Hj\026\020w\215p\206\260k+\365\237y/\220\2022\0252\217}\353\261#\312'T\352Q\357\264\004\247\276 a\254\ri\002a$\3521\245d\267\376t\354[%G\025\t\212\354\376'0\026\307Bv\005R\013\002\314\323?\301\334\2301\240\004\211M\353\336\367\343z\354E\240\230\221\352\332\242N\221\206o(u\203`\207az\352\027%\231\207y\230\315\nl\277\304\332\224\342\004\224\331\306\002\356\007L\274\360\241{\325\256\240\266O\201\307\306\227\242\360\\[T!\217\205\331\026q\270/}a\236\311\361D\351~\357\024\337-\237\033\372\004N\315!\264\016\241\350\317S>\276\1772\225,\313\354\313q\327\327!3\274\275\215uQ\317\024\023\272\005jWz\360R\252\343V \273\250\204+fE\342\025(\271)\261\236Lk\377H\204X\026\315tOp_\326\271TXv_\200nrl\037\336\303\217i!\035\315\003\334E\004j\024\343\320d\374\270h\355\244\275\264;\271\347R$WuP\277\252\203\302\246\236\344\264D\005\301\2210`M(m\305\002\267\375K\232\324\327\264\242\343\033\010\213W\037C\217\322\220!\017|B0\214\007\230\006\232\0103\036cdS\270\224\244\230\230\362\001\235\202\205P\215\322\200\234\250@\027\037\000\233H&\222\021\245\221\202\210)(\214\362\033\231\310\0167\260K'\2065K\370N\314\202\022O)\320\225\260\337)WC\320\242T\203\231\\\213\226\007-\026\007\230\231\001\215\343\t\013b\320g\356p\346F\262\236\374m\027\3547\331a\326\031\316-\246+\2661\374hc\340\014\326\007\235\363\331\267\316\250\nY\315\232y\255\n\371q\320\030l\235\327\316\357\276uG3s\311o)\202\315%\277_,-\347\265\374V\356\346\007\305z\327.\024\323\023\353\234\215\375\217\323\361\366\236m\224\353?l\355\3124\001\301\251\364\356\332\333\366\300\262\362\340a\252\255c\327""\255\316\234l=\213\363\315\374\244\177pV\033M}f_\343\225\013\303\251O\355V6S\232\323g&i$\0102\1771\357d\013x\344Q\177iP\033\240k.qGS3\311\007\311\363\324I\033\351\266\375\330\306\031F\336L^\246n\372&[\030\316\335D\337W\266f\027\355\017\331N\336\310\335\377\334\372\004\227w,\303\323\277\346N\276\226\277\350\337\357\213\363k\261\337e\323Y'G\216\213\251S\\:\223\326\322;)&4\237x\0302m;\031&~\013i\354\\\334]\305\242\275\352w\006S\003w8u#\371\t\021\226\262\332\265\014\235\354v\366\272_\353\2439\2338\357\322\270\237\002\366\004;\365\000\027\017-6\362\303\244\223\276\217\235z\200\2517\376\265,\251s,\314\347H\376\213\374\317A\025\363e\332\305\234:#d\320\320\306\333\330\320m\024\245G#\243\036\222\261\03676\312\177\300#B\226\367{{\315\3427O\276^y\357R\256\261\350*\026\321R\217\377\000\276Ra\033";
+    PyObject *data = __Pyx_DecompressString(cstring, 976, 1);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (1567 bytes) */
-const char* const bytes = ".Raised when the AgentDAGCompiler rejects an edge whose producer output\n    is not schema-compatible with the consumer input (proposal A2 case 2).?cylon_armada/dag_compiler.pyxschema_in must be a pyarrow.Schema, got schema_out must be a pyarrow.Schema, got unknown collective pattern utf-8AgentOperatorAgentOperator.__init__BroadcastCollectivePatternConvertEdgePlanViewEdgePlanView.__init__ExecutionPlanExecutionPlan.__init__IntEnumPointToPoint__Pyx_PyDict_NextRefReduceScatterScatterGatherSchemaSchemaMismatchErrorTransferModeWorkflowDAGWorkflowDAG.__init__ZeroCopyaassignmentsasyncio.coroutinesbcdagcheck_edgescline_in_tracebackcompcompile_workflowconsumercylon_armada.dag_compilerdag__doc__edgesencodeenum__func__i__init___is_coroutineitemitemskey__main____metaclass__mode__module____mro_entries__name__name__noteoperatorsoutpapatternpop__prepare__producerpyarrow__pyx_vtable____qualname__rresschema_inschema_outself__set_name__setdefault__test__values\200A\330\010\013\2104\210z\230\021\230+\240R\240q\330\014\022\220)\2301\330\020:\270!\2704\270q\300\n\310!\340\010\013\2104\210z\230\021\230,\240b\250\001\330\014\022\220)\2301\330\020;\2701\270D\300\001\300\033\310A\340\010\014\210H\220A\330\010\014\210K\320\027(\250\001\250\023\250A\250Q\330\010\014\210M\230\021\330\010\014\210N\230!\200A\330\010\014\210I\220Q\330\010\014\210O\2301\200A\330\010\014\210L\230\001\330\010\014\210L\230\001\330\010\014\210H\220A\330\010\014\210H\220A\200A\330\010\014\210M\230\024\230Q\230a\330\010\014\210I\220R\220s\230!\2304\230s\240!\2404\240u\250C\250v\260Q\200\001\340\004\035\230[\250\001\250\021\330\004\034\230D\240\010\250\001\250\021\330\004\007\200t\2101\210A\330\010\016\320\016!\240\021\240!\240>\260\027\270\001\270\021\330\004\014\210A\340\004\010\210\005\210U\220!\2201\220E\230\026\230u\240A\330\010\r\210W\220A\220\\\240\021\330\014\r\210U\220&\230\001\230\022\2309\240G\2501\250A\330\014\r\210U\220&\230\001\230\022\2309\240G\2501\250A\330\014\030\230\001\230\025\230a\230u\240F\250!\2502""\250V\2603\260n\300A\330\014\r\210U\220&\230\001\230\022\2305\240\007\240q\250\001\340\004\022\220!\340\004\010\210\010\220\001\220\025\220a\330\010\016\210d\220&\230\007\230q\240\001\330\010\023\2201\220G\320\033,\250A\250Z\260q\270\004\270A\330\004\013\210=\230\001\230\027\240\001\200\001\340\004\035\230[\250\001\250\021\330\004!\240\024\240[\260\001\260\021\330\004\n\210!\340\004\010\210\005\210U\220!\2203\220e\2301\330\010\013\2107\220!\220<\230q\330\014\017\210q\220\002\220)\2307\240!\2401\330\014\017\210q\220\002\220)\2307\240!\2401\330\014\030\230\001\230\025\230c\240\021\240\"\240F\250#\250^\2701\330\014\017\210q\220\002\220%\220w\230a\230q\340\004\013\2101std::shared_ptr< arrow::Schema>  (PyObject *)\000pyarrow_unwrap_schema";
+    #else /* compression: none (1576 bytes) */
+const char* const bytes = ".Raised when the AgentDAGCompiler rejects an edge whose producer output\n    is not schema-compatible with the consumer input (proposal A2 case 2).?cylon_armada/dag_compiler.pyxschema_in must be a pyarrow.Schema, got schema_out must be a pyarrow.Schema, got unknown collective pattern utf-8AgentOperatorAgentOperator.__init__AllGatherBroadcastCollectivePatternConvertEdgePlanViewEdgePlanView.__init__ExecutionPlanExecutionPlan.__init__IntEnumPointToPoint__Pyx_PyDict_NextRefReduceScatterScatterGatherSchemaSchemaMismatchErrorTransferModeWorkflowDAGWorkflowDAG.__init__ZeroCopyaassignmentsasyncio.coroutinesbcdagcheck_edgescline_in_tracebackcompcompile_workflowconsumercylon_armada.dag_compilerdag__doc__edgesencodeenum__func__i__init___is_coroutineitemitemskey__main____metaclass__mode__module____mro_entries__name__name__noteoperatorsoutpapatternpop__prepare__producerpyarrow__pyx_vtable____qualname__rresschema_inschema_outself__set_name__setdefault__test__values\200A\330\010\013\2104\210z\230\021\230+\240R\240q\330\014\022\220)\2301\330\020:\270!\2704\270q\300\n\310!\340\010\013\2104\210z\230\021\230,\240b\250\001\330\014\022\220)\2301\330\020;\2701\270D\300\001\300\033\310A\340\010\014\210H\220A\330\010\014\210K\320\027(\250\001\250\023\250A\250Q\330\010\014\210M\230\021\330\010\014\210N\230!\200A\330\010\014\210I\220Q\330\010\014\210O\2301\200A\330\010\014\210L\230\001\330\010\014\210L\230\001\330\010\014\210H\220A\330\010\014\210H\220A\200A\330\010\014\210M\230\024\230Q\230a\330\010\014\210I\220R\220s\230!\2304\230s\240!\2404\240u\250C\250v\260Q\200\001\340\004\035\230[\250\001\250\021\330\004\034\230D\240\010\250\001\250\021\330\004\007\200t\2101\210A\330\010\016\320\016!\240\021\240!\240>\260\027\270\001\270\021\330\004\014\210A\340\004\010\210\005\210U\220!\2201\220E\230\026\230u\240A\330\010\r\210W\220A\220\\\240\021\330\014\r\210U\220&\230\001\230\022\2309\240G\2501\250A\330\014\r\210U\220&\230\001\230\022\2309\240G\2501\250A\330\014\030\230\001\230\025\230a\230u\240F""\250!\2502\250V\2603\260n\300A\330\014\r\210U\220&\230\001\230\022\2305\240\007\240q\250\001\340\004\022\220!\340\004\010\210\010\220\001\220\025\220a\330\010\016\210d\220&\230\007\230q\240\001\330\010\023\2201\220G\320\033,\250A\250Z\260q\270\004\270A\330\004\013\210=\230\001\230\027\240\001\200\001\340\004\035\230[\250\001\250\021\330\004!\240\024\240[\260\001\260\021\330\004\n\210!\340\004\010\210\005\210U\220!\2203\220e\2301\330\010\013\2107\220!\220<\230q\330\014\017\210q\220\002\220)\2307\240!\2401\330\014\017\210q\220\002\220)\2307\240!\2401\330\014\030\230\001\230\025\230c\240\021\240\"\240F\250#\250^\2701\330\014\017\210q\220\002\220%\220w\230a\230q\340\004\013\2101std::shared_ptr< arrow::Schema>  (PyObject *)\000pyarrow_unwrap_schema";
     PyObject *data = NULL;
     CYTHON_UNUSED_VAR(__Pyx_DecompressString);
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 79; i++) {
+    for (int i = 0; i < 80; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
       if (likely(string) && i >= 8) PyUnicode_InternInPlace(&string);
@@ -13260,7 +13297,7 @@ const char* const bytes = ".Raised when the AgentDAGCompiler rejects an edge who
       stringtab[i] = string;
       pos += bytes_length;
     }
-    for (int i = 79; i < 86; i++) {
+    for (int i = 80; i < 87; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyBytes_FromStringAndSize(bytes + pos, bytes_length);
       stringtab[i] = string;
@@ -13271,14 +13308,14 @@ const char* const bytes = ".Raised when the AgentDAGCompiler rejects an edge who
       }
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 86; i++) {
+    for (Py_ssize_t i = 0; i < 87; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
     }
     #if CYTHON_IMMORTAL_CONSTANTS
     {
-      PyObject **table = stringtab + 79;
+      PyObject **table = stringtab + 80;
       for (Py_ssize_t i=0; i<7; ++i) {
         #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
         #if PY_VERSION_HEX < 0x030E0000
@@ -13298,8 +13335,8 @@ const char* const bytes = ".Raised when the AgentDAGCompiler rejects an edge who
   }
   {
     PyObject **numbertab = __pyx_mstate->__pyx_number_tab + 0;
-    int8_t const cint_constants_1[] = {0,1,2,3,4};
-    for (int i = 0; i < 5; i++) {
+    int8_t const cint_constants_1[] = {0,1,2,3,4,5};
+    for (int i = 0; i < 6; i++) {
       numbertab[i] = PyLong_FromLong(cint_constants_1[i - 0]);
       if (unlikely(!numbertab[i])) __PYX_ERR(0, 1, __pyx_L1_error)
     }
@@ -13307,7 +13344,7 @@ const char* const bytes = ".Raised when the AgentDAGCompiler rejects an edge who
   #if CYTHON_IMMORTAL_CONSTANTS
   {
     PyObject **table = __pyx_mstate->__pyx_number_tab;
-    for (Py_ssize_t i=0; i<5; ++i) {
+    for (Py_ssize_t i=0; i<6; ++i) {
       #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
       #if PY_VERSION_HEX < 0x030E0000
       if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
@@ -13351,32 +13388,32 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
   PyObject* tuple_dedup_map = PyDict_New();
   if (unlikely(!tuple_dedup_map)) return -1;
   {
-    const __Pyx_PyCode_New_function_description descr = {5, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 58};
+    const __Pyx_PyCode_New_function_description descr = {5, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 61};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_name, __pyx_mstate->__pyx_n_u_pattern, __pyx_mstate->__pyx_n_u_schema_in, __pyx_mstate->__pyx_n_u_schema_out};
     __pyx_mstate_global->__pyx_codeobj_tab[0] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_dag_compiler_pyx, __pyx_mstate->__pyx_n_u_init, __pyx_mstate->__pyx_kp_b_iso88591_A_4z_Rq_1_4q_4z_b_1_1D_A_HA_K_AQ, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[0])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 74};
+    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 77};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_operators, __pyx_mstate->__pyx_n_u_edges, __pyx_mstate->__pyx_n_u_a, __pyx_mstate->__pyx_n_u_b};
     __pyx_mstate_global->__pyx_codeobj_tab[1] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_dag_compiler_pyx, __pyx_mstate->__pyx_n_u_init, __pyx_mstate->__pyx_kp_b_iso88591_A_M_Qa_IRs_4s_4uCvQ, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[1])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {5, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 80};
+    const __Pyx_PyCode_New_function_description descr = {5, 0, 0, 5, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 83};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_producer, __pyx_mstate->__pyx_n_u_consumer, __pyx_mstate->__pyx_n_u_mode, __pyx_mstate->__pyx_n_u_note};
     __pyx_mstate_global->__pyx_codeobj_tab[2] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_dag_compiler_pyx, __pyx_mstate->__pyx_n_u_init, __pyx_mstate->__pyx_kp_b_iso88591_A_L_L_HA_HA, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[2])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 88};
+    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 91};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_self, __pyx_mstate->__pyx_n_u_edges, __pyx_mstate->__pyx_n_u_assignments};
     __pyx_mstate_global->__pyx_codeobj_tab[3] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_dag_compiler_pyx, __pyx_mstate->__pyx_n_u_init, __pyx_mstate->__pyx_kp_b_iso88591_A_IQ_O1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[3])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 112};
+    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 115};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_dag, __pyx_mstate->__pyx_n_u_comp, __pyx_mstate->__pyx_n_u_cdag, __pyx_mstate->__pyx_n_u_res, __pyx_mstate->__pyx_n_u_out, __pyx_mstate->__pyx_n_u_i};
     __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_dag_compiler_pyx, __pyx_mstate->__pyx_n_u_check_edges, __pyx_mstate->__pyx_kp_b_iso88591_U_3e1_7_q_q_7_1_q_7_1_c_F_1_q_w, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 9, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 128};
+    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 9, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 131};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_dag, __pyx_mstate->__pyx_n_u_comp, __pyx_mstate->__pyx_n_u_cdag, __pyx_mstate->__pyx_n_u_r, __pyx_mstate->__pyx_n_u_edges, __pyx_mstate->__pyx_n_u_i, __pyx_mstate->__pyx_n_u_assignments, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_item};
     __pyx_mstate_global->__pyx_codeobj_tab[5] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_cylon_armada_dag_compiler_pyx, __pyx_mstate->__pyx_n_u_compile_workflow, __pyx_mstate->__pyx_kp_b_iso88591_D_t1A_A_U_1E_uA_WA_U_9G1A_U_9G1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[5])) goto bad;
   }

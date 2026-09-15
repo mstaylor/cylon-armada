@@ -180,3 +180,18 @@ def test_required_peer_map_covers_every_rank():
     from armada.executor import required_peer_map
     rendered = required_peer_map(_seq(), 5)
     assert sorted(int(row.split(":")[0]) for row in rendered.split(";")) == [0, 1, 2, 3, 4]
+
+
+def test_allgather_peers_are_covered_by_recursive_doubling():
+    """required_peers adds recursive-doubling peers unconditionally, so an
+    AllGather plan needs no new topology. Pinned so a later refactor that makes
+    those peers conditional cannot silently strip an AllGather's connections."""
+    from armada.topology import required_peers
+    from cylon_armada.dag_compiler import CollectivePattern
+
+    for world_size in (2, 3, 4, 5, 8):
+        for rank in range(world_size):
+            allgather_only = required_peers(
+                world_size, rank, {CollectivePattern.AllGather})
+            assert allgather_only, f"no peers for rank {rank} of {world_size}"
+            assert rank not in allgather_only

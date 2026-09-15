@@ -18,7 +18,7 @@ from typing import Optional
 
 import numpy as np
 
-from context.manager import ContextManager
+from context.manager import ContextManager, context_id_at
 from chain.executor import ChainExecutor
 from cost.bedrock_pricing import BedrockConfig, BedrockCostTracker
 
@@ -186,55 +186,61 @@ class ContextRouter:
         """
         start = time.perf_counter()
 
-        stored = self.context_manager.get_all_embeddings(workflow_id)
-        if not stored:
+        # The matrix views the ContextTable's Arrow buffers on the cylon
+        # backend, so every path below shares the same contiguous block rather
+        # than rebuilding one per query.
+        context_ids, embeddings_matrix = self.context_manager.get_embedding_matrix(workflow_id)
+        searched = embeddings_matrix.shape[0]
+        if searched == 0:
             return []
-
-        context_ids = [cid for cid, _ in stored]
 
         # Path A3: gcylon GPU — cuPy batch on CUDA
         if self.backend == SIMDBackend.GCYLON and self._cupy:
-            embeddings_matrix = np.vstack([emb for _, emb in stored])
             batch_results = _gcylon_batch_search(
                 self._cupy, query_embedding, embeddings_matrix, self.threshold, self.top_k,
             )
             results = [
-                {"context_id": context_ids[idx], "similarity": float(sim)}
+                {"context_id": context_id_at(context_ids, idx), "similarity": float(sim)}
                 for idx, sim in batch_results
             ]
 
         # Path A2: Cython batch search — single boundary crossing
         elif self.backend == SIMDBackend.CYTHON_BATCH and self._cython_batch:
-            embeddings_matrix = np.vstack([emb for _, emb in stored])
             batch_results = self._cython_batch(
                 query_embedding, embeddings_matrix, self.threshold, self.top_k,
             )
             results = [
-                {"context_id": context_ids[idx], "similarity": float(sim)}
+                {"context_id": context_id_at(context_ids, idx), "similarity": float(sim)}
                 for idx, sim in batch_results
             ]
 
-        # Path A1 / Fallback: per-embedding comparison
+        # Path A1 / Fallback: per-embedding comparison. One crossing per row is
+        # the point of A1 — it is what Experiment A2 measures A2 against — so
+        # this stays a loop. Only the per-row data preparation is gone:
+        # embeddings_matrix[i] is a view, not a freshly built array.
         else:
-            similarities = []
-            for cid, emb in stored:
-                sim = self._cosine_similarity(query_embedding, emb)
+            ranked = []
+            for i in range(searched):
+                sim = self._cosine_similarity(query_embedding, embeddings_matrix[i])
                 if sim >= self.threshold:
-                    similarities.append({"context_id": cid, "similarity": sim})
+                    ranked.append((i, sim))
 
-            similarities.sort(key=lambda x: x["similarity"], reverse=True)
-            results = similarities[: self.top_k]
+            ranked.sort(key=lambda pair: pair[1], reverse=True)
+            results = [
+                {"context_id": context_id_at(context_ids, i), "similarity": sim}
+                for i, sim in ranked[: self.top_k]
+            ]
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         logger.debug(
             "Similarity search: %d embeddings, %d above threshold %.2f (%.1fms, backend=%s)",
-            len(stored), len(results), self.threshold, elapsed_ms, self.backend.value,
+            searched, len(results), self.threshold, elapsed_ms, self.backend.value,
         )
 
         for r in results:
             r["search_latency_ms"] = round(elapsed_ms, 2)
             r["backend"] = self.backend.value
-            r["embeddings_searched"] = len(stored)
+            r["embeddings_searched"] = searched
 
         return results
 
