@@ -165,6 +165,8 @@ def generate_tasks_from_results(
     templates=None,
     survey_types=None,
     config_path=None,
+    outlier_threshold=None,
+    index_offset=0,
 ):
     """Generate LLM analysis tasks from inference results.
 
@@ -177,6 +179,20 @@ def generate_tasks_from_results(
         max_tasks: Maximum number of tasks to generate. If None, generates
             one task per sample plus batch-level tasks.
         seed: Random seed for reproducible task selection.
+        outlier_threshold: Residual above which a galaxy gets the outlier
+            template. ``None`` (default) derives it from THIS call's residuals,
+            which makes the prompt for a given galaxy depend on which other
+            galaxies were passed alongside it — so a sharded run gives the same
+            galaxy different prompts at different world sizes. Pass a fixed
+            value to make prompts a property of the galaxy alone, which any
+            experiment that varies the shard count must do or its workload
+            moves with the independent variable.
+        index_offset: Position of this array's first row in the whole
+            population. Template choice alternates on index parity, and that
+            index is otherwise local, so galaxy 19 is odd when it starts at 0
+            and even when it starts a shard — the same corpus-size dependence
+            as the threshold, by a different route. Pass the shard's global
+            start whenever the population is sharded.
         templates: Optional dict of custom templates (overrides config file).
         survey_types: Optional list of survey type strings (overrides config file).
         config_path: Optional path to JSON config file.
@@ -216,7 +232,8 @@ def generate_tasks_from_results(
     else:
         selected = indices
 
-    outlier_threshold = np.percentile(residuals, 90)
+    if outlier_threshold is None:
+        outlier_threshold = np.percentile(residuals, 90)
 
     for idx in selected:
         mags = magnitudes[idx]
@@ -232,7 +249,7 @@ def generate_tasks_from_results(
                 z_pred=z_pred, z_true=z_true, residual=residual,
                 band_str=band_str,
             ))
-        elif idx % 2 == 0:
+        elif (index_offset + idx) % 2 == 0:
             template = resolved_templates.get("redshift_analysis", "")
             tasks.append(template.format(
                 z_pred=z_pred, z_true=z_true, band_str=band_str,
@@ -289,6 +306,7 @@ def generate_tasks_from_data(
     templates=None,
     survey_types=None,
     config_path=None,
+    outlier_threshold=None,
 ):
     """End-to-end: load data, run inference, generate tasks.
 
@@ -301,6 +319,14 @@ def generate_tasks_from_data(
         device: 'cpu' or 'cuda'.
         max_tasks: Maximum tasks to generate.
         seed: Random seed.
+        outlier_threshold: Residual above which a galaxy gets the outlier
+            template. ``None`` (default) derives it from THIS call's residuals,
+            which makes the prompt for a given galaxy depend on which other
+            galaxies were passed alongside it — so a sharded run gives the same
+            galaxy different prompts at different world sizes. Pass a fixed
+            value to make prompts a property of the galaxy alone, which any
+            experiment that varies the shard count must do or its workload
+            moves with the independent variable.
         templates: Optional dict of custom templates (overrides config file).
         survey_types: Optional list of survey type strings (overrides config file).
         config_path: Optional path to JSON config file.
@@ -324,6 +350,7 @@ def generate_tasks_from_data(
         templates=templates,
         survey_types=survey_types,
         config_path=config_path,
+        outlier_threshold=outlier_threshold,
     )
 
     return tasks, results

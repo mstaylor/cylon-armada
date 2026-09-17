@@ -112,25 +112,35 @@ def _check_arm(arm, records, failures):
     return world_size, total
 
 
-def check_run(armada_records, langchain_records):
-    """Gate one paired run.
+def check_run(armada_records, langchain_records, isolated=None):
+    """Gate one grouped run.
 
-    Both arms must pass on their own and agree on both the population covered
-    and the agent count: a run is paired only if both arms ran at the same N.
+    Every arm present must pass on its own and agree with the others on both
+    the population covered and the agent count: a run is comparable only if its
+    arms ran the same work at the same N. `isolated` is optional so a two-arm
+    run still gates, but when the no-sharing control is present it is held to
+    the same agreement as the rest — an uncompared control is not a control.
     """
     failures = []
-    armada = _check_arm("armada", armada_records, failures)
-    langchain = _check_arm("langchain", langchain_records, failures)
-    if armada is not None and langchain is not None:
-        (armada_n, armada_total), (langchain_n, langchain_total) = armada, langchain
-        if armada_n != langchain_n:
+    arms = [("armada", armada_records), ("langchain", langchain_records)]
+    if isolated is not None:
+        arms.append(("isolated", isolated))
+
+    checked = [(name, _check_arm(name, records, failures)) for name, records in arms]
+    present = [(name, result) for name, result in checked if result is not None]
+    if len(present) < 2:
+        return GateResult(passed=not failures, failures=failures)
+
+    reference_name, (reference_n, reference_total) = present[0]
+    for name, (world_size, total) in present[1:]:
+        if world_size != reference_n:
             failures.append(
-                f"world_size differs between arms: armada ran {armada_n} ranks, "
-                f"langchain ran {langchain_n} — not a paired run"
+                f"world_size differs between arms: {reference_name} ran {reference_n} ranks, "
+                f"{name} ran {world_size} — not a comparable run"
             )
-        if armada_total != langchain_total:
+        if total != reference_total:
             failures.append(
-                f"coverage differs between arms: armada covered {armada_total} galaxies, "
-                f"langchain covered {langchain_total}"
+                f"coverage differs between arms: {reference_name} covered {reference_total} "
+                f"galaxies, {name} covered {total}"
             )
     return GateResult(passed=not failures, failures=failures)

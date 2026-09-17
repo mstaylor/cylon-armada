@@ -727,3 +727,239 @@ def test_retrieve_and_reason_agree_on_what_a_hit_is_at_similarity_zero():
     assert out.column("response").to_pylist() == ["an earlier analysis"]
     assert out.column("reused").to_pylist() == [True]
     assert metrics.summary()["llm_calls"] == 0
+
+
+def test_bind_stamps_a_reuse_key_per_row():
+    """The key is per galaxy, not per batch — a batch-level key would make every
+    row in an epoch mutually reusable regardless of its own value."""
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({"response": pa.array(["a", "b"], type=pa.large_utf8()),
+                      "reuse_key": pa.array([0.12, 0.44], type=pa.float64())})
+
+    envelopes = [json.loads(kv["v"]) for kv in op.fn(table).column("kv_pairs").to_pylist()]
+
+    assert [e["reuse_key"] for e in envelopes] == [0.12, 0.44]
+
+
+def test_bind_without_reuse_keys_omits_the_field():
+    """Every existing caller passes none; the envelope must be unchanged for them."""
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({"response": ["a"]}, schema=op.schema_in)
+
+    assert "reuse_key" not in json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+
+def test_bind_indexes_reuse_keys_by_input_row_even_when_some_are_reused():
+    """A reused row contributes no envelope, so the key for a bound row must
+    still be its OWN key — indexing by output position would shift every key
+    after the first reuse onto the wrong galaxy."""
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({
+        "response": pa.array(["skip", "keep", "keep2"], type=pa.large_utf8()),
+        "reused": pa.array([True, False, False], type=pa.bool_()),
+        "reuse_key": pa.array([0.10, 0.20, 0.30], type=pa.float64()),
+    })
+
+    envelopes = [json.loads(kv["v"]) for kv in op.fn(table).column("kv_pairs").to_pylist()]
+
+    assert [e["reuse_key"] for e in envelopes] == [0.20, 0.30]
+
+
+def test_memory_upsert_persists_the_reuse_key():
+    import json
+
+    from armada.cosmic_workflow import build_memory_upsert_operator
+
+    context_manager = MagicMock()
+    op = build_memory_upsert_operator(context_manager, dimensions=D)
+    envelope = json.dumps({"workflow_id": "wf", "response": "r", "reuse_key": 0.31})
+    table = pa.table({"kv_pairs": pa.array(
+        [{"k": "a", "v": envelope}], type=op.schema_in.field(0).type)}, schema=op.schema_in)
+
+    op.fn(table)
+
+    assert context_manager.store_context.call_args.kwargs["reuse_key"] == 0.31
+
+
+def _gated_router(candidates):
+    """Router whose find_similar returns `candidates` and whose manager resolves
+    each to a stored context carrying its reuse_key."""
+    store = {cid: {"context_id": cid, "response": resp, "reuse_key": key}
+             for cid, _, resp, key in candidates}
+    context_manager = MagicMock()
+    context_manager.get_context.side_effect = lambda cid: store.get(cid)
+    router = MagicMock()
+    router.context_manager = context_manager
+    router.find_similar.return_value = [
+        {"context_id": cid, "similarity": sim} for cid, sim, _, _ in candidates]
+    return router
+
+
+def _query_table(op, reuse_key=None):
+    cols = {"query_embedding": pa.array([np.ones(D, dtype=np.float32)],
+                                        type=op.schema_in.field(0).type)}
+    if reuse_key is not None:
+        cols["reuse_key"] = pa.array([reuse_key], type=pa.float64())
+    return pa.table(cols)
+
+
+def test_retrieve_rejects_a_candidate_the_validator_refuses():
+    """The defect the gate exists for: a near-identical embedding whose domain
+    value is far away. Cosine accepts it; the validator must not."""
+    from armada.run_metrics import RunMetrics
+
+    router = _gated_router([("c-1", 0.99, "an earlier analysis", 0.94)])
+    metrics = RunMetrics()
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D, metrics=metrics,
+                                 reuse_validator=lambda q, c: abs(q - c) <= 0.01)
+
+    row = op.fn(_query_table(op, 0.15)).column("ranked_docs").to_pylist()[0]
+
+    assert row["doc"] == ""
+    assert metrics.summary()["gate_rejections"] == 1
+    assert metrics.summary()["cache_hits"] == 0
+
+
+def test_retrieve_accepts_a_lower_ranked_candidate_the_validator_allows():
+    """The validator filters the candidate list, not only the best match: a
+    slightly worse cosine match that is valid must still be reused."""
+    router = _gated_router([("c-far", 0.99, "wrong", 0.94),
+                            ("c-near", 0.97, "right", 0.151)])
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D,
+                                 reuse_validator=lambda q, c: abs(q - c) <= 0.01)
+
+    assert op.fn(_query_table(op, 0.15)).column("ranked_docs").to_pylist()[0]["doc"] == "right"
+
+
+def test_no_validator_reproduces_todays_behaviour():
+    """The gate is opt-in. Without a validator the operator must behave exactly
+    as before, or every measurement taken so far becomes incomparable."""
+    router = _gated_router([("c-1", 0.99, "reused", 0.94)])
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D)
+
+    assert op.fn(_query_table(op)).column("ranked_docs").to_pylist()[0]["doc"] == "reused"
+
+
+def test_ungated_retrieval_never_looks_past_the_best_match():
+    """The regression the single-candidate gate above cannot see.
+
+    Ungated, only matches[0] was ever consulted, so a best match that failed to
+    resolve was a miss. A candidate walk that runs unconditionally would quietly
+    find a later match instead — improving the BASELINE and destroying
+    comparability with every measurement taken before the gate existed.
+    """
+    router = _gated_router([("c-empty", 0.99, "", None),
+                            ("c-real", 0.97, "a later analysis", None)])
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D)
+
+    assert op.fn(_query_table(op)).column("ranked_docs").to_pylist()[0]["doc"] == ""
+
+
+def test_a_gated_run_does_look_past_an_unresolvable_best_match():
+    """The converse, so the restriction above is scoped to the ungated path and
+    does not quietly disable the candidate walk the gate depends on."""
+    router = _gated_router([("c-empty", 0.99, "", 0.15),
+                            ("c-real", 0.97, "a later analysis", 0.15)])
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D,
+                                 reuse_validator=lambda q, c: abs(q - c) <= 0.01)
+
+    row = op.fn(_query_table(op, 0.15)).column("ranked_docs").to_pylist()[0]
+    assert row["doc"] == "a later analysis"
+
+
+def test_a_missing_query_key_is_a_miss_not_an_unchecked_hit():
+    """Fail closed. A row with no key cannot be validated, and treating it as a
+    hit would bypass the gate for exactly the rows that lack metadata."""
+    router = _gated_router([("c-1", 0.99, "x", 0.15)])
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D,
+                                 reuse_validator=lambda q, c: abs(q - c) <= 0.01)
+
+    assert op.fn(_query_table(op)).column("ranked_docs").to_pylist()[0]["doc"] == ""
+
+
+def test_a_candidate_with_no_stored_key_is_refused_when_gating():
+    """A context stored before the key existed must not be reused under a policy
+    it was never checked against."""
+    router = _gated_router([("c-1", 0.99, "x", None)])
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D,
+                                 reuse_validator=lambda q, c: True)
+
+    assert op.fn(_query_table(op, 0.15)).column("ranked_docs").to_pylist()[0]["doc"] == ""
+
+
+def test_a_row_with_no_candidates_is_a_miss_not_a_gate_rejection():
+    """gate_rejections must mean 'the policy refused an eligible match', not
+    'nothing matched'. Conflating them would inflate the rejection rate with
+    ordinary cold-start misses and make the reported denominator meaningless."""
+    from armada.run_metrics import RunMetrics
+
+    router = _gated_router([])
+    metrics = RunMetrics()
+    op = build_retrieve_operator(router, workflow_id="wf", dimensions=D, metrics=metrics,
+                                 reuse_validator=lambda q, c: True)
+
+    op.fn(_query_table(op, 0.15))
+
+    assert metrics.summary()["gate_rejections"] == 0
+    assert metrics.summary()["retrievals"] == 1
+
+
+def test_bind_keys_follow_the_rows_across_epochs():
+    """The bug the live/offline reconciliation caught.
+
+    This fn is invoked once per EPOCH. A positional key list would restamp the
+    first epoch's keys onto every later epoch, so all but the first few contexts
+    would be stored under another galaxy's redshift and the gate would compare
+    correct query keys against wrong candidate keys. Keys ride with the rows
+    precisely so a later epoch cannot inherit an earlier one's.
+    """
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+
+    def epoch(responses, keys):
+        table = pa.table({"response": pa.array(responses, type=pa.large_utf8()),
+                          "reuse_key": pa.array(keys, type=pa.float64())})
+        return [json.loads(kv["v"])["reuse_key"]
+                for kv in op.fn(table).column("kv_pairs").to_pylist()]
+
+    assert epoch(["g0", "g1"], [0.10, 0.11]) == [0.10, 0.11]
+    assert epoch(["g2", "g3"], [0.80, 0.81]) == [0.80, 0.81]
+
+
+def test_the_reuse_key_survives_retrieve_and_reason():
+    """The key has to reach Bind from the input table, four operators away."""
+    from unittest.mock import MagicMock
+
+    from armada.cosmic_workflow import build_reason_operator
+
+    router = _gated_router([])
+    retrieve = build_retrieve_operator(router, workflow_id="wf", dimensions=D)
+    table = pa.table({"query_embedding": pa.array(
+        [np.ones(D, dtype=np.float32)], type=retrieve.schema_in.field(0).type),
+        "raw_text": pa.array(["a galaxy"], type=pa.large_utf8()),
+        "reuse_key": pa.array([0.42], type=pa.float64())})
+
+    after_retrieve = retrieve.fn(table)
+    assert after_retrieve.column("reuse_key").to_pylist() == [0.42]
+
+    chain = MagicMock()
+    chain.execute.return_value = {"response": "r", "input_tokens": 1, "output_tokens": 1,
+                                  "latency_ms": 1.0, "model_id": "m"}
+    after_reason = build_reason_operator(chain, dimensions=D).fn(after_retrieve)
+
+    assert after_reason.column("reuse_key").to_pylist() == [0.42]

@@ -151,10 +151,13 @@ def build_preprocess_operator(max_chars: Optional[int] = None, dimensions: int =
     def fn(table: pa.Table) -> pa.Table:
         texts = table.column(0).to_pylist()
         chunked = texts if max_chars is None else [t[:max_chars] for t in texts]
-        return pa.table({
+        out = {
             "chunked_text": pa.array(chunked, type=chunked_type),
             "raw_text": pa.array(texts, type=pa.large_utf8()),
-        })
+        }
+        if "reuse_key" in table.column_names:
+            out["reuse_key"] = table.column("reuse_key")
+        return pa.table(out)
 
     return ArmadaOperator("Preprocess", COSMIC_PATTERNS["Preprocess"],
                           canon.schema_in, canon.schema_out, fn=fn)
@@ -179,6 +182,8 @@ def build_embed_operator(embedding_service, dimensions: int = 1024, metrics=None
         out = {"embedding": arr}
         if "raw_text" in table.column_names:
             out["raw_text"] = table.column("raw_text")
+        if "reuse_key" in table.column_names:
+            out["reuse_key"] = table.column("reuse_key")
         return pa.table(out)
 
     return ArmadaOperator("Embed", COSMIC_PATTERNS["Embed"],
@@ -186,7 +191,7 @@ def build_embed_operator(embedding_service, dimensions: int = 1024, metrics=None
 
 
 def build_retrieve_operator(context_router, workflow_id: str, dimensions: int = 1024,
-                            metrics=None) -> ArmadaOperator:
+                            metrics=None, reuse_validator=None) -> ArmadaOperator:
     """PointToPoint: query_embedding -> ranked_docs (the single best match per row), via ContextRouter.find_similar().
 
     Local under the row-distributed layout: the lookup runs against the shared
@@ -208,6 +213,25 @@ def build_retrieve_operator(context_router, workflow_id: str, dimensions: int = 
     The manager is reached through the router because it is the same instance
     ContextRouter.route() already uses, so there is no second source of truth
     for what a context id resolves to.
+
+    `reuse_validator(query_key, candidate_key) -> bool` is an optional
+    application-supplied validity policy. Cosine similarity says two prompts
+    read alike; it does not say the cached answer is correct for this query.
+    The runtime never interprets the key — the policy belongs to the workload,
+    which is what keeps the five canonical operators domain-agnostic.
+
+    When a policy is supplied, candidates are walked in cosine order and the
+    first it admits is reused, so a slightly worse match that is valid beats a
+    better one that is not. The policy fails closed: an unverifiable row — no
+    query key, or a candidate stored before the policy existed — is a miss,
+    never an unchecked hit. A row whose eligible candidates were all refused is
+    counted as a gate rejection, distinct from a row that simply matched nothing.
+
+    Without a policy only the single best match is considered, which is the
+    ungated behaviour exactly. Walking further would be a silent improvement to
+    the baseline — a first match that fails to resolve became a miss before and
+    must still, or an ungated control run stops being comparable with every
+    measurement taken before the gate existed.
 
     Under the row-distributed layout Embed is PointToPoint, so the pipeline
     hands this a single table: the rank's own rows. The list form is still
@@ -232,22 +256,41 @@ def build_retrieve_operator(context_router, workflow_id: str, dimensions: int = 
         else:
             table = table_or_tables
         embeddings = table.column(0)
+        query_keys = (table.column("reuse_key").to_pylist()
+                      if "reuse_key" in table.column_names else [None] * len(embeddings))
         rows = []
         for i in range(len(embeddings)):
             vec = np.asarray(embeddings[i].values.to_numpy(zero_copy_only=False), dtype=np.float32)
             matches = context_router.find_similar(vec, workflow_id=workflow_id)
-            best = matches[0] if matches else None
-            stored = (context_router.context_manager.get_context(best["context_id"])
-                      if best else None)
-            response = stored.get("response") if stored else None
+            candidates = matches if reuse_validator is not None else matches[:1]
+            accepted, refused = None, False
+            for match in candidates:
+                stored = context_router.context_manager.get_context(match["context_id"])
+                response = stored.get("response") if stored else None
+                if not response:
+                    continue
+                if reuse_validator is not None:
+                    candidate_key = stored.get("reuse_key")
+                    if query_keys[i] is None or candidate_key is None:
+                        refused = True
+                        continue
+                    if not reuse_validator(query_keys[i], candidate_key):
+                        refused = True
+                        continue
+                accepted = {"doc": response, "score": float(match["similarity"])}
+                break
+
             if metrics is not None:
-                metrics.record_retrieval(bool(response))
-            rows.append({"doc": response, "score": float(best["similarity"])} if response
-                        else {"doc": "", "score": 0.0})
+                metrics.record_retrieval(accepted is not None)
+                if accepted is None and refused:
+                    metrics.record_gate_rejection()
+            rows.append(accepted if accepted else {"doc": "", "score": 0.0})
         arr = pa.array(rows, type=struct_type)
         out = {"ranked_docs": arr}
         if "raw_text" in table.column_names:
             out["raw_text"] = table.column("raw_text")
+        if "reuse_key" in table.column_names:
+            out["reuse_key"] = table.column("reuse_key")
         # Retrieve's own canonical output (ranked_docs) doesn't carry the
         # embedding forward — self-forward it under a fixed name so Bind can
         # still recover it, regardless of what the producer (Embed) named it.
@@ -307,6 +350,8 @@ def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None) 
             out["raw_text"] = table.column("raw_text")
         if "query_embedding" in table.column_names:
             out["query_embedding"] = table.column("query_embedding")
+        if "reuse_key" in table.column_names:
+            out["reuse_key"] = table.column("reuse_key")
         # Reason's own canonical output (response) doesn't carry LLM token
         # usage forward — ChainExecutor.execute() returns it, so capture it
         # here (as JSON text, Arrow has no generic dict type) or it's lost.
@@ -365,6 +410,7 @@ def build_memory_upsert_operator(context_manager, dimensions: int = 1024,
                     response=envelope["response"],
                     cost_metadata=envelope.get("cost_metadata", {}),
                     context_id=kv["k"] or None,
+                    reuse_key=envelope.get("reuse_key"),
                 )
                 if metrics is not None:
                     origin = envelope.get("rank")
@@ -408,6 +454,13 @@ def build_bind_operator(workflow_id: str, rank=None) -> ArmadaOperator:
     `reused` column binds every row, which keeps callers predating the reuse
     path working.
 
+    The application's per-row validity key rides in as a `reuse_key` passthrough
+    column and is written into each envelope. It travels with the rows rather
+    than arriving as a positional list because this fn is invoked once per
+    EPOCH: a list indexed by position would restamp the first epoch's keys onto
+    every later epoch, storing all but the first few contexts under the wrong
+    key. Absent the column the field is omitted and reuse stays ungated.
+
     `rank` stamps the originating rank into the envelope so MemoryUpsert can
     tell, after the collective has replicated every rank's contexts to every
     rank, which ones this rank actually created. Left None the key is omitted
@@ -440,6 +493,8 @@ def build_bind_operator(workflow_id: str, rank=None) -> ArmadaOperator:
 
         reused = (table.column("reused").to_pylist()
                   if "reused" in table.column_names else [False] * n)
+        row_keys = (table.column("reuse_key").to_pylist()
+                    if "reuse_key" in table.column_names else [None] * n)
 
         rows = []
         for i in range(n):
@@ -448,6 +503,8 @@ def build_bind_operator(workflow_id: str, rank=None) -> ArmadaOperator:
             envelope = {"workflow_id": workflow_id, "response": responses[i]}
             if rank is not None:
                 envelope["rank"] = rank
+            if row_keys[i] is not None:
+                envelope["reuse_key"] = row_keys[i]
             if task_descriptions is not None:
                 envelope["task_description"] = task_descriptions[i]
             if embeddings_b64 is not None:
@@ -472,6 +529,7 @@ def build_cosmic_workflow(
     max_chars: Optional[int] = None,
     metrics=None,
     rank=None,
+    reuse_validator=None,
 ) -> ArmadaSequence:
     """Preprocess | Embed | Retrieve | Reason | Bind | MemoryUpsert, wired to the injected services.
 
@@ -488,7 +546,7 @@ def build_cosmic_workflow(
         build_preprocess_operator(max_chars=max_chars, dimensions=dimensions)
         | build_embed_operator(embedding_service, dimensions=dimensions, metrics=metrics)
         | build_retrieve_operator(context_router, workflow_id=workflow_id, dimensions=dimensions,
-                                  metrics=metrics)
+                                  metrics=metrics, reuse_validator=reuse_validator)
         | build_reason_operator(chain_executor, dimensions=dimensions, metrics=metrics)
         | build_bind_operator(workflow_id, rank=rank)
         | build_memory_upsert_operator(context_manager, dimensions=dimensions, metrics=metrics,

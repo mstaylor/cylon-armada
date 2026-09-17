@@ -354,3 +354,117 @@ class TestContextTableSnapshot:
 
         with pytest.raises(ValueError, match="CONTEXT_TABLE_SNAPSHOT"):
             ContextManager(backend="cylon", embedding_dim=8)
+
+
+class TestReuseKey:
+    """The value a reuse-validity predicate compares.
+
+    The manager does not interpret it; it persists it and gives it back. The
+    Arrow ContextTable has no column for it, so the cylon path depends on the
+    process-local map — which is the case the Armada arm actually runs.
+    """
+
+    @patch('context.manager._create_redis_backend')
+    def test_a_stored_reuse_key_reaches_the_redis_metadata(self, mock_create_redis):
+        from context.manager import ContextManager
+
+        mock_redis = MagicMock()
+        mock_create_redis.return_value = {"client": mock_redis}
+        cm = ContextManager(backend="redis", embedding_dim=8)
+
+        cm.store_context(workflow_id="wf", task_description="t",
+                         embedding=np.zeros(8, dtype=np.float32), response="r",
+                         cost_metadata={}, context_id="c-1", reuse_key=0.42)
+
+        stored = json.loads(mock_redis.setex.call_args_list[-1][0][2])
+        assert stored["reuse_key"] == 0.42
+
+    @patch('context.manager._create_redis_backend')
+    def test_no_reuse_key_leaves_the_record_unchanged(self, mock_create_redis):
+        """Every existing caller passes none; the stored record must not gain a
+        field for them, or prior contexts stop comparing equal."""
+        from context.manager import ContextManager
+
+        mock_redis = MagicMock()
+        mock_create_redis.return_value = {"client": mock_redis}
+        cm = ContextManager(backend="redis", embedding_dim=8)
+
+        cm.store_context(workflow_id="wf", task_description="t",
+                         embedding=np.zeros(8, dtype=np.float32), response="r",
+                         cost_metadata={}, context_id="c-1")
+
+        assert "reuse_key" not in json.loads(mock_redis.setex.call_args_list[-1][0][2])
+
+    @patch('context.manager._create_cylon_backend')
+    def test_the_cylon_path_returns_the_key_the_arrow_table_cannot_hold(self, mock_create_cylon):
+        """The ContextTable schema is fixed C++-side, so get_context's cylon
+        branch would otherwise return a record with no key and silently disable
+        gating on exactly the arm whose gate matters."""
+        from context.manager import ContextManager
+
+        row = MagicMock()
+        row.column.return_value.__getitem__.return_value.as_py.return_value = "x"
+        table = MagicMock()
+        table.get.return_value = row
+        mock_create_cylon.return_value = {
+            "table": table, "redis_addr": "h:1", "redis_ttl": 60,
+            "has_redis": False, "save_fn": None, "load_fn": None}
+
+        cm = ContextManager(backend="cylon", embedding_dim=8, persist_to_redis=False)
+        cm.store_context(workflow_id="wf", task_description="t",
+                         embedding=np.zeros(8, dtype=np.float32), response="r",
+                         cost_metadata={}, context_id="c-1", reuse_key=0.31)
+
+        assert cm.get_context("c-1")["reuse_key"] == 0.31
+
+    @patch('context.manager._create_cylon_backend')
+    def test_a_context_stored_without_a_key_reports_none(self, mock_create_cylon):
+        """None means unverifiable, and a predicate must refuse it rather than
+        treat the absence as permission."""
+        from context.manager import ContextManager
+
+        row = MagicMock()
+        row.column.return_value.__getitem__.return_value.as_py.return_value = "x"
+        table = MagicMock()
+        table.get.return_value = row
+        mock_create_cylon.return_value = {
+            "table": table, "redis_addr": "h:1", "redis_ttl": 60,
+            "has_redis": False, "save_fn": None, "load_fn": None}
+
+        cm = ContextManager(backend="cylon", embedding_dim=8, persist_to_redis=False)
+        cm.store_context(workflow_id="wf", task_description="t",
+                         embedding=np.zeros(8, dtype=np.float32), response="r",
+                         cost_metadata={}, context_id="c-2")
+
+        assert cm.get_context("c-2")["reuse_key"] is None
+
+    @patch('context.manager._create_redis_backend')
+    def test_the_in_memory_fallback_returns_the_key(self, mock_create_redis):
+        """Reachable config: redis search backend with persistence off. The key
+        is in the process map but the in-memory branch dropped it, so gating
+        silently degraded to ungated for every row."""
+        from context.manager import ContextManager
+
+        mock_create_redis.return_value = {"client": MagicMock()}
+        cm = ContextManager(backend="redis", embedding_dim=8, persist_to_redis=False)
+        cm.store_context(workflow_id="wf", task_description="t",
+                         embedding=np.zeros(8, dtype=np.float32), response="r",
+                         cost_metadata={}, context_id="c-1", reuse_key=0.27)
+
+        assert cm.get_context("c-1")["reuse_key"] == 0.27
+
+    @patch('context.manager._create_redis_backend')
+    def test_clearing_a_workflow_prunes_its_reuse_keys(self, mock_create_redis):
+        """The map is keyed by context id with no workflow, so nothing else
+        would ever remove an entry and it would grow for the life of the run."""
+        from context.manager import ContextManager
+
+        mock_create_redis.return_value = {"client": MagicMock()}
+        cm = ContextManager(backend="redis", embedding_dim=8, persist_to_redis=False)
+        cm.store_context(workflow_id="wf", task_description="t",
+                         embedding=np.zeros(8, dtype=np.float32), response="r",
+                         cost_metadata={}, context_id="c-1", reuse_key=0.27)
+
+        cm.clear_workflow("wf")
+
+        assert "c-1" not in cm._reuse_keys

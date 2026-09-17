@@ -28,7 +28,8 @@ def _driver():
 
 def _args(**overrides):
     base = dict(listen_port=10000, timeout_ms=120000, device="cpu", batch_size=32,
-                epoch_batch_size=4, live=True, galaxies=152)
+                epoch_batch_size=4, live=True, galaxies=152,
+                reuse_tolerance=0.0091, outlier_threshold=0.027677)
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -52,20 +53,52 @@ def test_strong_scaling_holds_the_total_constant():
         assert m.galaxies_for("strong", world_size, per_rank=19, total=1253) == 1253
 
 
-def test_arm_order_alternates_between_runs():
+def test_arm_order_cycles_through_every_permutation():
+    """Every arm must lead equally often, and — the part rotation misses —
+    every arm must FOLLOW every other equally often."""
     m = _driver()
-    assert m.arm_order(0) == ("armada", "langchain")
-    assert m.arm_order(1) == ("langchain", "armada")
-    assert m.arm_order(2) == ("armada", "langchain")
+    orders = [m.arm_order(i) for i in range(6)]
+
+    assert len(set(orders)) == 6
+    assert m.arm_order(6) == m.arm_order(0)
 
 
-def test_paired_launches_alternate_and_never_split_a_run():
+def test_no_arm_systematically_follows_the_same_arm():
+    """Rotation alone leaves a fixed cyclic sequence: isolated would always
+    follow langchain and never armada. Both touch Redis and ContextTable state,
+    and isolated supplies the headline number, so leftover-state bias would land
+    on it in one constant undetected direction."""
     m = _driver()
-    assert m.plan_launches("both", 3) == [
-        (0, "armada"), (0, "langchain"),
-        (1, "langchain"), (1, "armada"),
-        (2, "armada"), (2, "langchain"),
-    ]
+    predecessors = {arm: set() for arm in m.ARMS}
+    for i in range(6):
+        order = m.arm_order(i)
+        for earlier, later in zip(order, order[1:]):
+            predecessors[later].add(earlier)
+
+    for arm, preds in predecessors.items():
+        assert preds == set(m.ARMS) - {arm}, f"{arm} never follows {set(m.ARMS) - {arm} - preds}"
+
+
+def test_grouped_launches_never_split_a_run():
+    m = _driver()
+    launches = m.plan_launches("all", 3)
+
+    assert len(launches) == 9
+    for run_index in range(3):
+        in_run = [arm for idx, arm in launches if idx == run_index]
+        assert tuple(in_run) == m.arm_order(run_index)
+    assert [idx for idx, _ in launches] == sorted(idx for idx, _ in launches)
+
+
+def test_both_still_means_the_two_sharing_arms():
+    """It meant exactly {armada, langchain} before the control existed. Folding
+    it into "all" would silently add a third arm — 50% more Fargate and Bedrock
+    — to every caller already passing it."""
+    m = _driver()
+    arms = {arm for _, arm in m.plan_launches("both", 6)}
+
+    assert arms == {"armada", "langchain"}
+    assert len(m.plan_launches("both", 3)) == 6
 
 
 def test_a_single_arm_keeps_one_launch_per_run():
@@ -115,8 +148,8 @@ def test_default_world_sizes_include_one_and_two():
 def test_defaults_match_the_spec():
     m = _driver()
     args = m.build_parser().parse_args([])
-    assert args.scaling == "weak"
-    assert args.backend == "both"
+    assert args.scaling == "strong"
+    assert args.backend == "all"
     assert args.runs == 5
     assert args.per_rank == 19
     assert args.epoch_batch_size == 4
@@ -133,10 +166,10 @@ def test_dry_run_launches_nothing_and_touches_no_client():
     args = m.build_parser().parse_args(["--dry-run", "--runs", "2"])
     assert m.launch_world_size(ExplodingEcs(), 4, args) == []
 
-def test_both_arms_disable_the_context_table_snapshot():
+def test_every_arm_disables_the_context_table_snapshot():
     """The snapshot serializes the whole ContextTable to Redis on every store.
-    It has to be off, and off on BOTH arms — giving one arm a serialization
-    step the other does not pay is exactly the asymmetry this experiment
+    It has to be off, and off on EVERY arm — giving one arm a serialization
+    step the others do not pay is exactly the asymmetry this experiment
     exists to rule out."""
     m = _driver()
     env_for = lambda arm: {
@@ -145,5 +178,60 @@ def test_both_arms_disable_the_context_table_snapshot():
                                    backend=arm)["containerOverrides"][0]["environment"]
     }
 
-    assert env_for("armada")["CONTEXT_TABLE_SNAPSHOT"] == "0"
-    assert env_for("langchain")["CONTEXT_TABLE_SNAPSHOT"] == "0"
+    for arm in ("armada", "langchain", "isolated"):
+        assert env_for(arm)["CONTEXT_TABLE_SNAPSHOT"] == "0"
+
+
+def test_all_three_arms_launch_per_run():
+    m = _driver()
+    arms = {arm for _, arm in m.plan_launches("all", 1)}
+    assert arms == {"armada", "langchain", "isolated"}
+
+
+def test_no_arm_is_systematically_first():
+    """Arm order varies across runs so session drift cannot be mistaken for an
+    effect. The cycle is one full set of permutations, so each arm leads
+    exactly the same number of times over it."""
+    from collections import Counter
+
+    m = _driver()
+    leaders = Counter(m.arm_order(i)[0] for i in range(6))
+
+    assert set(leaders) == {"armada", "langchain", "isolated"}
+    assert len(set(leaders.values())) == 1
+
+
+def test_every_arm_receives_the_same_reuse_tolerance_and_outlier_threshold():
+    """Both have to be identical across arms or they become the difference
+    being measured, exactly like the snapshot flag."""
+    m = _driver()
+    seen = set()
+    for arm in ("armada", "langchain", "isolated"):
+        env = {e["name"]: e["value"] for e in m.build_overrides(
+            0, 4, "c", "p/", _args(), backend=arm)["containerOverrides"][0]["environment"]}
+        seen.add((env["REUSE_KEY_TOLERANCE"], env["OUTLIER_RESIDUAL_THRESHOLD"]))
+    assert len(seen) == 1
+
+
+def test_the_outlier_threshold_is_pinned_by_default():
+    """Unpinned, the prompt generator derives it per shard and the same galaxy
+    gets a different prompt at a different N — so the scaling curve would mix
+    the isolation effect with a moving workload."""
+    m = _driver()
+    env = {e["name"]: e["value"] for e in m.build_overrides(
+        0, 4, "c", "p/", _args(), backend="armada")["containerOverrides"][0]["environment"]}
+    assert float(env["OUTLIER_RESIDUAL_THRESHOLD"]) > 0
+
+
+def test_the_isolated_arm_runs_on_the_cylon_store():
+    m = _driver()
+    env = {e["name"]: e["value"] for e in m.build_overrides(
+        0, 4, "c", "p/", _args(), backend="isolated")["containerOverrides"][0]["environment"]}
+    assert env["CONTEXT_BACKEND"] == "cylon"
+    assert env["EXECUTION_BACKEND"] == "isolated"
+
+
+def test_strong_scaling_is_the_default():
+    """Weak scaling holds per-rank load constant, so it structurally cannot show
+    the isolation penalty — the sweep's headline needs a shrinking shard."""
+    assert _driver().build_parser().parse_args([]).scaling == "strong"

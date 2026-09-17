@@ -140,3 +140,29 @@ def test_a_rank_that_lost_records_still_fails_even_with_hits_counted():
 
     assert not result.passed
     assert any("19 galaxies" in f for f in result.failures)
+
+
+def test_the_gate_accepts_a_third_arm():
+    """Three arms now run per point; a gate that only knew two would silently
+    ignore the control."""
+    assert check_run(_records(19), _records(19), isolated=_records(19)).passed
+
+
+def test_a_mismatched_control_fails_the_run():
+    """An uncompared control is not a control: if the isolated arm covered a
+    different population, the isolation penalty computed from it is meaningless."""
+    result = check_run(_records(19), _records(19), isolated=_records(18))
+
+    assert not result.passed
+    assert any("coverage differs" in f for f in result.failures)
+
+
+def test_a_control_at_a_different_world_size_fails():
+    result = check_run(_records(19), _records(19), isolated=_records(19, ranks=2))
+
+    assert not result.passed
+    assert any("world_size differs" in f for f in result.failures)
+
+
+def test_two_arms_still_gate_without_a_control():
+    assert check_run(_records(19), _records(19)).passed

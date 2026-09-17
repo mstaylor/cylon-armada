@@ -26,6 +26,7 @@ Prerequisites:
 """
 
 import argparse
+import itertools
 import json
 import logging
 import time
@@ -101,29 +102,57 @@ def galaxies_for(scaling, world_size, per_rank, total):
     return min(per_rank * world_size, total)
 
 
+ARMS = ("armada", "langchain", "isolated")
+_ORDERS = tuple(itertools.permutations(ARMS))
+
+
 def arm_order(run_index):
-    """Which arm runs first. Alternates so session drift cannot masquerade as
-    an effect."""
-    return (("armada", "langchain") if run_index % 2 == 0
-            else ("langchain", "armada"))
+    """The arms in the order they run, cycling through every permutation.
+
+    Rotation alone is not enough with three arms: it produces one fixed cyclic
+    sequence, so `isolated` would always immediately follow `langchain` and
+    never `armada`. Both of those touch Redis and ContextTable state, and
+    `isolated` supplies the headline isolation-penalty number, so any warm-up or
+    leftover-state bias from the preceding arm would land on it in one constant
+    undetected direction. Permuting varies which arm precedes which, not only
+    which leads.
+    """
+    return _ORDERS[run_index % len(_ORDERS)]
+
+
+_ARM_SELECTIONS = {
+    "all": ARMS,
+    "both": ("armada", "langchain"),
+}
+
+
+def _selected_arms(backend):
+    """Which arms a --backend value launches.
+
+    "both" keeps meaning exactly the two sharing arms, as it always has.
+    Folding it into "all" would silently add a third arm — 50% more Fargate and
+    Bedrock than the name implies — to every caller and script that already
+    passes it.
+    """
+    return _ARM_SELECTIONS.get(backend, (backend,))
 
 
 def plan_launches(backend, runs):
     """The ordered (run_index, backend) sequence for one world size.
 
-    Pure, so pairing and alternation are testable without AWS. "both" yields
-    each run's two arms in arm_order; a single backend yields one launch per
-    run in the same slot it would have had.
+    Pure, so ordering and grouping are testable without AWS. "all" yields every
+    arm per run in arm_order; "both" the two sharing arms; a single backend
+    yields one launch per run in the same slot it would have had.
     """
     launches = []
     for run_index in range(runs):
         for arm in arm_order(run_index):
-            if backend == "both" or backend == arm:
+            if arm in _selected_arms(backend):
                 launches.append((run_index, arm))
     return launches
 
 
-_CONTEXT_STORE = {"armada": "cylon", "langchain": "redis"}
+_CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon"}
 
 
 def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
@@ -142,6 +171,8 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
         {"name": "EXECUTION_BACKEND", "value": backend},
         {"name": "CONTEXT_BACKEND", "value": _CONTEXT_STORE[backend]},
         {"name": "CONTEXT_TABLE_SNAPSHOT", "value": "0"},
+        {"name": "REUSE_KEY_TOLERANCE", "value": str(args.reuse_tolerance)},
+        {"name": "OUTLIER_RESIDUAL_THRESHOLD", "value": str(args.outlier_threshold)},
         {"name": "EPOCH_BATCH_SIZE", "value": str(args.epoch_batch_size)},
         {"name": "INFERENCE_DEVICE", "value": args.device},
         {"name": "INFERENCE_BATCH_SIZE", "value": str(args.batch_size)},
@@ -230,9 +261,17 @@ def build_parser():
     parser.add_argument("--world-sizes", type=int, nargs="+",
                         default=[1, 2, 4, 8, 16, 32, 64],
                         help="must include 1 and 2 as baselines")
-    parser.add_argument("--scaling", choices=["weak", "strong"], default="weak",
+    parser.add_argument("--scaling", choices=["weak", "strong"], default="strong",
                         help="weak (fixed per-rank load, primary) or strong (fixed total)")
-    parser.add_argument("--backend", choices=["armada", "langchain", "both"], default="both",
+    parser.add_argument("--reuse-tolerance", type=float, default=0.0091,
+                        help="redshift tolerance for the reuse validity gate; identical on "
+                             "every arm or the policy becomes the difference being measured")
+    parser.add_argument("--outlier-threshold", type=float, default=0.027677,
+                        help="residual above which a galaxy gets the outlier prompt, pinned "
+                             "from the whole population (p90 over 1253 SDSS galaxies). Unpinned, "
+                             "the generator derives it per shard and the workload moves with N")
+    parser.add_argument("--backend", choices=["armada", "langchain", "isolated", "all", "both"],
+                        default="all",
                         help="which arm(s); the experiment is a paired run, so both by default")
     parser.add_argument("--runs", type=int, default=5,
                         help="paired runs per world size; arm order alternates between runs")

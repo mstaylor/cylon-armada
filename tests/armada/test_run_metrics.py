@@ -149,3 +149,17 @@ def test_ingested_contexts_are_counted_apart_from_originated_ones():
 
     assert summary["records_written"] == 1
     assert summary["contexts_ingested"] == 2
+
+
+def test_gate_rejections_are_counted_apart_from_misses():
+    """Acceptance is not correctness. The rejection count is the denominator a
+    write-up needs to say what the policy refused, rather than implying the
+    accepted reuses were verified."""
+    m = RunMetrics()
+    m.record_retrieval(False)
+    m.record_gate_rejection()
+
+    summary = m.summary()
+
+    assert summary["gate_rejections"] == 1
+    assert summary["cache_hits"] == 0

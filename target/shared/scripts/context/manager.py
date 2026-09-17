@@ -166,6 +166,7 @@ class ContextManager:
 
         # In-memory metadata store (fallback when both persistence layers disabled)
         self._memory: dict[str, dict] = {}
+        self._reuse_keys: dict[str, float] = {}
 
         # Backend-specific initialization
         if backend == "cylon":
@@ -207,10 +208,25 @@ class ContextManager:
         response: str,
         cost_metadata: dict,
         context_id: Optional[str] = None,
+        reuse_key: Optional[float] = None,
     ) -> str:
-        """Store context. Returns context_id."""
+        """Store context. Returns context_id.
+
+        `reuse_key` is an application value this manager persists and returns
+        without interpreting — it is what a reuse-validity predicate compares.
+        It is held in a process-local map as well as written to the Redis
+        metadata, because the cylon backend serves get_context from the Arrow
+        ContextTable, whose schema is fixed C++-side and has no column for it.
+        Both paths are needed: the map covers contexts this process stored
+        (including every context ingested through the collective), and the
+        Redis metadata covers contexts another rank wrote directly to a shared
+        store.
+        """
         if context_id is None:
             context_id = str(uuid.uuid4())
+
+        if reuse_key is not None:
+            self._reuse_keys[context_id] = reuse_key
 
         embedding = np.ascontiguousarray(embedding, dtype=np.float32)
         now = datetime.now(timezone.utc).isoformat()
@@ -225,7 +241,7 @@ class ContextManager:
         if self._persist_to_redis and self._redis is not None:
             self._persist_redis_metadata(
                 context_id, workflow_id, task_description,
-                response, cost_metadata, now,
+                response, cost_metadata, now, reuse_key,
             )
 
         # DynamoDB persistence (optional durable store)
@@ -296,22 +312,21 @@ class ContextManager:
 
     def _persist_redis_metadata(
         self, context_id, workflow_id, task_description,
-        response, cost_metadata, now,
+        response, cost_metadata, now, reuse_key=None,
     ):
         """Write full context metadata JSON to Redis."""
         client = self._redis["client"]
-        client.setex(
-            f"context:{context_id}",
-            self._redis_ttl,
-            json.dumps({
-                "response": response,
-                "task_description": task_description,
-                "workflow_id": workflow_id,
-                "created_at": now,
-                "reuse_count": 0,
-                "metadata": cost_metadata,
-            }),
-        )
+        record = {
+            "response": response,
+            "task_description": task_description,
+            "workflow_id": workflow_id,
+            "created_at": now,
+            "reuse_count": 0,
+            "metadata": cost_metadata,
+        }
+        if reuse_key is not None:
+            record["reuse_key"] = reuse_key
+        client.setex(f"context:{context_id}", self._redis_ttl, json.dumps(record))
 
     def _persist_dynamo(
         self, context_id, workflow_id, task_description,
@@ -348,6 +363,17 @@ class ContextManager:
           2. Redis metadata JSON (if persist_to_redis enabled)
           3. DynamoDB (if configured)
           4. In-memory store (fallback)
+
+        Every branch returns `reuse_key`, but not from the same place. Only
+        the Redis metadata carries it durably, so a record another process
+        wrote and this one reads back keeps its key. The Arrow ContextTable,
+        DynamoDB item and in-memory record have no field for it, so those
+        branches read the process-local map `store_context` populates — which
+        covers anything this process stored, including every context ingested
+        through the collective, and yields None for anything it did not.
+
+        None means unverifiable, never permission: a validity predicate must
+        refuse it rather than treat the absence as consent.
         """
         # Cylon: metadata lives in the Arrow table
         if self._cylon is not None:
@@ -360,6 +386,7 @@ class ContextManager:
                     "input_tokens": row.column("input_tokens")[0].as_py(),
                     "output_tokens": row.column("output_tokens")[0].as_py(),
                     "cost_usd": row.column("cost_usd")[0].as_py(),
+                    "reuse_key": self._reuse_keys.get(context_id),
                     "source": "context_table",
                 }
 
@@ -370,6 +397,7 @@ class ContextManager:
                 data = json.loads(cached)
                 data["context_id"] = context_id
                 data["source"] = "redis"
+                data.setdefault("reuse_key", self._reuse_keys.get(context_id))
                 return data
 
         # DynamoDB fallback
@@ -384,13 +412,16 @@ class ContextManager:
                 if items:
                     item = items[0]
                     item["source"] = "dynamodb"
+                    item.setdefault("reuse_key", self._reuse_keys.get(context_id))
                     return item
             except Exception as e:
                 logger.error("Failed to get context %s from DynamoDB: %s", context_id, e)
 
         # In-memory fallback
         if context_id in self._memory:
-            return dict(self._memory[context_id], source="memory")
+            record = dict(self._memory[context_id], source="memory")
+            record.setdefault("reuse_key", self._reuse_keys.get(context_id))
+            return record
 
         return None
 
@@ -722,8 +753,16 @@ class ContextManager:
         ]
 
     def clear_workflow(self, workflow_id: str) -> int:
-        """Delete all contexts for a workflow. Returns count deleted."""
+        """Delete all contexts for a workflow. Returns count deleted.
+
+        Every backend branch records the ids it removed so the process-local
+        reuse-key map can be pruned with them. The map is keyed by context id
+        alone and carries no workflow, so it cannot be filtered the way the
+        in-memory metadata can, and an unpruned map would grow for the life of
+        the process.
+        """
         count = 0
+        removed = set()
 
         # DynamoDB cleanup
         if self._table is not None:
@@ -734,6 +773,7 @@ class ContextManager:
                     self._table.delete_item(
                         Key={"context_id": ctx_id, "workflow_id": workflow_id},
                     )
+                    removed.add(ctx_id)
                     count += 1
             except Exception as e:
                 logger.error("Failed to clear workflow %s from DynamoDB: %s", workflow_id, e)
@@ -745,8 +785,9 @@ class ContextManager:
                 for i in range(batch.num_rows):
                     if batch.column("workflow_id")[i].as_py() == workflow_id:
                         try:
-                            self._cylon["table"].remove(
-                                batch.column("context_id")[i].as_py())
+                            cylon_id = batch.column("context_id")[i].as_py()
+                            self._cylon["table"].remove(cylon_id)
+                            removed.add(cylon_id)
                             count += 1
                         except KeyError:
                             pass
@@ -761,6 +802,7 @@ class ContextManager:
                     pipe.delete(f"embedding:{cid_str}")
                     if self._persist_to_redis:
                         pipe.delete(f"context:{cid_str}")
+                    removed.add(cid_str)
                     count += 1
                 pipe.delete(f"workflow:{workflow_id}")
                 pipe.execute()
@@ -772,5 +814,9 @@ class ContextManager:
         ]
         for k in to_delete:
             del self._memory[k]
+        removed.update(to_delete)
+
+        for context_id in removed:
+            self._reuse_keys.pop(context_id, None)
 
         return count

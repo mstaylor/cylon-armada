@@ -60,6 +60,7 @@ class RunMetrics:
         self.records_written = 0
         self.records_failed = 0
         self.contexts_ingested = 0
+        self.gate_rejections = 0
         self.throttle_events = 0
 
     def record_retrieval(self, hit):
@@ -92,6 +93,18 @@ class RunMetrics:
         """
         self.contexts_ingested += 1
 
+    def record_gate_rejection(self):
+        """Count a row whose cosine-eligible candidates the validity policy all refused.
+
+        Kept apart from an ordinary miss: a miss means nothing matched, a
+        rejection means something matched and the policy said no. Conflating
+        them would inflate the rejection rate with cold-start misses and make
+        the reported denominator meaningless. Acceptance is not correctness, so
+        this count is what lets results say what the policy refused rather than
+        imply the accepted reuses were verified.
+        """
+        self.gate_rejections += 1
+
     def record_store_failure(self):
         self.records_failed += 1
 
@@ -112,5 +125,6 @@ class RunMetrics:
             "records_written": self.records_written,
             "records_failed": self.records_failed,
             "contexts_ingested": self.contexts_ingested,
+            "gate_rejections": self.gate_rejections,
             "throttle_events": self.throttle_events,
         }

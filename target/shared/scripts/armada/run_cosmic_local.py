@@ -50,8 +50,9 @@ import numpy as np
 import pyarrow as pa
 
 from armada.cosmic_workflow import build_cosmic_workflow
-from armada.epochs import plan_epochs
+from armada.epochs import epoch_count, plan_epochs
 from armada.executor import ArmadaExecutor, InputPlacement, required_peer_map
+from armada.reuse_policy import redshift_validator
 from armada.run_metrics import RunMetrics
 from communicator.fmi_bridge import FMIBridge
 from cosmic_ai.task_generator import generate_tasks_from_results
@@ -74,6 +75,113 @@ def astromae_fixture(n_galaxies, seed=42):
     base = rng.uniform(17.0, 20.5, n_galaxies)
     magnitudes = np.round(base[:, None] - np.array([0.0, 0.7, 1.2, 1.5, 1.7]), 2)
     return predictions, true_redshifts, magnitudes
+
+
+def outlier_threshold_for():
+    """Fixed residual above which a galaxy gets the outlier prompt, or None.
+
+    Left unset, the generator derives the threshold from whichever galaxies are
+    passed to it — which in a sharded run is this rank's slice, so the same
+    galaxy gets a different prompt at different world sizes and the workload
+    moves with the independent variable. Any sweep that varies N must pin this
+    to a value derived once from the whole population, so a prompt is a
+    property of its galaxy alone.
+    """
+    from armada.reuse_policy import _validated
+
+    raw = os.environ.get("OUTLIER_RESIDUAL_THRESHOLD")
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"OUTLIER_RESIDUAL_THRESHOLD={raw!r} is not a number; it is a "
+            f"redshift residual such as 0.0295"
+        ) from None
+    return _validated("OUTLIER_RESIDUAL_THRESHOLD", raw, value)
+
+
+def collective_epochs(n_items, world_size, batch_size):
+    """How many epochs EVERY rank must run, not just this one.
+
+    Each epoch fires one AllGather, which every rank has to reach. Shards are
+    not all the same size — at 1253 galaxies and N=8, five ranks hold 157 and
+    three hold 156, so with batch 4 some ranks plan 40 epochs and others 39.
+    A rank that finishes early simply stops calling the collective while its
+    peers are still waiting in it, and the run hangs until the FMI timeout.
+
+    So the epoch count is a property of the largest shard, and ranks with less
+    work contribute empty tables in their trailing epochs. The executor already
+    handles zero-row contributions; what it cannot handle is a participant that
+    never arrives.
+    """
+    largest = max(stop - start for start, stop in
+                  (shard_bounds(n_items, world_size, rank) for rank in range(world_size)))
+    return epoch_count(largest, batch_size)
+
+
+def corpus_hash(start, prompts, reuse_keys):
+    """Identity of the workload this rank actually ran.
+
+    A scaling curve is only interpretable if a galaxy's prompt and key are the
+    same at every world size, and the generator has two routes to making them
+    otherwise — a residual percentile and an index parity, both computed over
+    whichever rows were handed in. Recording the hash makes that a fact the
+    results carry rather than a property the runner is trusted to have
+    preserved.
+
+    This is a per-shard digest and it is NOT partition-independent: shard
+    boundaries move with N, so concatenating per-rank hashes gives a different
+    string at a different world size even over an identical corpus. It proves
+    corresponding shards match at a FIXED N. Proving the corpus is frozen
+    ACROSS N needs a digest over the whole population in global index order,
+    which is what the readiness check computes.
+    """
+    import hashlib
+
+    digest = hashlib.sha256()
+    for offset, (prompt, key) in enumerate(zip(prompts, reuse_keys)):
+        digest.update(f"{start + offset}\x1f{prompt}\x1f{key!r}\x1e".encode())
+    return digest.hexdigest()[:16]
+
+
+def enforce_isolation(backend):
+    """Make the isolated arm's isolation a property of the arm, not of a flag.
+
+    A cylon-backed store still snapshots its whole ContextTable to the shared
+    Redis key `context_table:{workflow_id}` on every store unless the snapshot
+    is off — so an isolated rank would write into a store other ranks also
+    write to, and the control would not be a control. Until now that was
+    prevented only by the Fargate driver setting CONTEXT_TABLE_SNAPSHOT=0, and
+    a local `--backend isolated --live` run had no such protection.
+
+    An environment that explicitly asks for the snapshot on this arm is refused
+    rather than overridden, the same way a conflicting CONTEXT_BACKEND is.
+    """
+    if backend is not ExecutionBackend.Isolated:
+        return
+
+    configured = os.environ.get("CONTEXT_TABLE_SNAPSHOT")
+    if configured is not None and configured.strip().lower() in ("1", "true", "yes", "on"):
+        raise ValueError(
+            f"CONTEXT_TABLE_SNAPSHOT={configured!r} conflicts with the isolated arm: "
+            f"the snapshot writes this rank's whole table to a Redis key every rank "
+            f"shares, so the no-sharing control would share"
+        )
+    os.environ["CONTEXT_TABLE_SNAPSHOT"] = "0"
+
+
+def reuse_policy_for():
+    """The reuse validity policy for this run, or None to leave reuse ungated.
+
+    Gating is opt-in at the run level so an ungated control stays possible and
+    directly comparable with every measurement taken before the gate existed.
+    Set REUSE_KEY_TOLERANCE to enable it.
+    """
+    if os.environ.get("REUSE_KEY_TOLERANCE") is None:
+        return None
+    return redshift_validator()
 
 
 def shard_bounds(n_items, world_size, rank):
@@ -168,15 +276,24 @@ class ExecutionBackend(Enum):
     the same chain through Runnable.invoke() and shares context through the
     store instead of through a collective, which is what a LangChain
     deployment does and needs no bridge at all.
+
+    Isolated shares nothing: a rank sees only the contexts it created itself.
+    It is the controlled analogue of the shipped Cosmic AI design, which runs
+    as a Step Functions Distributed Map at 3000-way concurrency with no
+    inter-worker communication of any kind. It exists to measure what that
+    isolation costs once workers could have reused each other's work, so its
+    ranks must never reach a collective or a store another rank writes to.
     """
 
     Armada = "armada"
     LangChain = "langchain"
+    Isolated = "isolated"
 
 
 _CONTEXT_STORE = {
     ExecutionBackend.Armada: "cylon",
     ExecutionBackend.LangChain: "redis",
+    ExecutionBackend.Isolated: "cylon",
 }
 
 
@@ -205,7 +322,7 @@ def run_epochs(seq, shards, backend, bridge, ctx, root=0):
     """
     results = []
     for shard in shards:
-        if backend is ExecutionBackend.LangChain:
+        if backend in (ExecutionBackend.LangChain, ExecutionBackend.Isolated):
             results.append(seq.invoke(shard))
         elif backend is ExecutionBackend.Armada:
             results.append(ArmadaExecutor(bridge).run(
@@ -277,6 +394,7 @@ def main(argv=None):
 
     backend = ExecutionBackend(args.backend)
     os.environ["CONTEXT_BACKEND"] = context_store_for(backend)
+    enforce_isolation(backend)
 
     services = live_services(args.dimensions) if args.live else mock_services(args.dimensions)
     metrics = RunMetrics()
@@ -290,10 +408,16 @@ def main(argv=None):
         so the two can differ, and an envelope stamped with the requested rank
         would misattribute which rank originated a context. The peer map does
         not depend on rank identity, only on the patterns the plan compiles to.
+
+        The reuse key is not passed here: it rides with the rows as a
+        passthrough column, because this workflow's operators are invoked once
+        per epoch and a positional list would restamp the first epoch's keys
+        onto every later one.
         """
         return build_cosmic_workflow(*services, workflow_id=workflow_id,
                                      dimensions=args.dimensions, max_chars=args.max_chars,
-                                     metrics=metrics, rank=rank_id)
+                                     metrics=metrics, rank=rank_id,
+                                     reuse_validator=reuse_policy_for())
 
     establish_s = 0.0
     bridge = None
@@ -319,8 +443,6 @@ def main(argv=None):
     else:
         true_rank = rank
         channel = "none"
-
-    seq = build_for(true_rank)
 
     root = 0
     logger.info("rank %d/%d ready in %.2fs (backend=%s, channel=%s, store=%s)",
@@ -351,15 +473,25 @@ def main(argv=None):
 
     n_local = len(predictions)
     prompts = generate_tasks_from_results(predictions, true_redshifts, magnitudes,
-                                          max_tasks=n_local, seed=42)[:n_local]
+                                          max_tasks=n_local, seed=42,
+                                          outlier_threshold=outlier_threshold_for(),
+                                          index_offset=start)[:n_local]
+    reuse_keys = [float(p) for p in predictions[:n_local]]
 
-    schema_in = seq.operators[0].schema_in
+    seq = build_for(true_rank)
+    gated = reuse_policy_for() is not None
 
-    def raw_table(texts):
-        return pa.table({"raw_text": list(texts)}, schema=schema_in)
+    def raw_table(texts, keys):
+        columns = {"raw_text": pa.array(list(texts), type=pa.large_utf8())}
+        if gated:
+            columns["reuse_key"] = pa.array(list(keys), type=pa.float64())
+        return pa.table(columns)
 
-    shards = [raw_table(prompts[start:stop])
-              for start, stop in plan_epochs(n_local, args.epoch_batch_size)]
+    shards = [raw_table(prompts[lo:hi], reuse_keys[lo:hi])
+              for lo, hi in plan_epochs(n_local, args.epoch_batch_size)]
+    shards += [raw_table([], [])
+               for _ in range(collective_epochs(n_galaxies, world_size,
+                                                args.epoch_batch_size) - len(shards))]
 
     record = {"rank": true_rank, "world_size": world_size, "backend": backend.value,
               "context_backend": os.environ["CONTEXT_BACKEND"],
@@ -367,7 +499,8 @@ def main(argv=None):
               "inference_s": round(inference_s, 4), "galaxies": n_local,
               "shard": [start, stop],
               "epochs": len(shards), "epoch_batch_size": args.epoch_batch_size,
-              "placement": placement.value, "live": args.live}
+              "placement": placement.value, "live": args.live,
+              "corpus_hash": corpus_hash(start, prompts, reuse_keys)}
     if args.real_inference:
         record["device"] = args.device
 
