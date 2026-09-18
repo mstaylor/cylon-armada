@@ -172,6 +172,19 @@ def enforce_isolation(backend):
     os.environ["CONTEXT_TABLE_SNAPSHOT"] = "0"
 
 
+def pricing_for():
+    """Bedrock pricing used to turn token counts into dollars.
+
+    Resolution is the module's own chain: config file, then the AWS Pricing
+    API, then static defaults. A run records which source it got, because a
+    cost figure is only comparable across runs if the price table was the
+    same, and the static fallback is not the live price.
+    """
+    from cost.bedrock_pricing import BedrockPricing
+
+    return BedrockPricing.resolve(region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+
+
 def reuse_policy_for():
     """The reuse validity policy for this run, or None to leave reuse ungated.
 
@@ -398,6 +411,7 @@ def main(argv=None):
 
     services = live_services(args.dimensions) if args.live else mock_services(args.dimensions)
     metrics = RunMetrics()
+    pricing = pricing_for()
 
     def build_for(rank_id):
         """The workflow wired for one rank identity.
@@ -417,7 +431,8 @@ def main(argv=None):
         return build_cosmic_workflow(*services, workflow_id=workflow_id,
                                      dimensions=args.dimensions, max_chars=args.max_chars,
                                      metrics=metrics, rank=rank_id,
-                                     reuse_validator=reuse_policy_for())
+                                     reuse_validator=reuse_policy_for(),
+                                     pricing=pricing)
 
     establish_s = 0.0
     bridge = None
@@ -503,6 +518,8 @@ def main(argv=None):
               "corpus_hash": corpus_hash(start, prompts, reuse_keys)}
     if args.real_inference:
         record["device"] = args.device
+
+    record["pricing_source"] = pricing.source
 
     results = []
     t1 = time.perf_counter()

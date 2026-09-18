@@ -34,6 +34,9 @@ DEFAULT_LLM_PRICING = {
     "anthropic.claude-3-opus": {"input_per_1k": 0.015, "output_per_1k": 0.075},
     "meta.llama3-8b-instruct": {"input_per_1k": 0.0003, "output_per_1k": 0.0006},
     "meta.llama3-70b-instruct": {"input_per_1k": 0.00195, "output_per_1k": 0.00256},
+    "amazon.nova-micro": {"input_per_1k": 0.000035, "output_per_1k": 0.00014},
+    "amazon.nova-lite": {"input_per_1k": 0.00006, "output_per_1k": 0.00024},
+    "amazon.nova-pro": {"input_per_1k": 0.0008, "output_per_1k": 0.0032},
 }
 
 DEFAULT_EMBEDDING_PRICING = {
@@ -185,6 +188,16 @@ class BedrockPricing:
                 best_match = pricing
                 best_len = len(prefix)
         return best_match
+
+    def has_llm_pricing(self, model_id: str) -> bool:
+        """Whether this model has a real price, rather than the fallback.
+
+        get_llm_cost falls back to the most expensive entry when a model is
+        unregistered, which produces a plausible number that can be orders of
+        magnitude wrong. A caller reporting cost as a result needs to know that
+        happened, because an inflated figure looks exactly like a real one.
+        """
+        return self._match_prefix(model_id, self.llm_pricing) is not None
 
     def get_llm_cost(self, model_id: str, input_tokens: int, output_tokens: int) -> float:
         """Calculate LLM cost for a given model and token counts."""

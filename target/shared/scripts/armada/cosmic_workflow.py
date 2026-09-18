@@ -301,7 +301,8 @@ def build_retrieve_operator(context_router, workflow_id: str, dimensions: int = 
                           canon.schema_in, canon.schema_out, fn=fn)
 
 
-def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None) -> ArmadaOperator:
+def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None,
+                          pricing=None) -> ArmadaOperator:
     """PointToPoint: context (best retrieved doc) -> response, via the shared ChainExecutor/Bedrock Runnable.
 
     Reuse-or-call, per row. A non-empty `doc` means Retrieve resolved a
@@ -336,12 +337,23 @@ def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None) 
         for ctx, prompt in zip(contexts, prompts):
             if ctx and ctx.get("doc"):
                 results.append({"response": ctx["doc"], "input_tokens": 0, "output_tokens": 0,
-                                "latency_ms": 0.0, "model_id": ""})
+                                "latency_ms": 0.0, "model_id": "", "cost_usd": 0.0})
                 reused.append(True)
                 continue
             result = _bedrock_call(lambda: chain_executor.execute(prompt), metrics)
+            model_id = result.get("model_id", "")
+            if pricing is None:
+                result["cost_usd"] = 0.0
+            else:
+                result["cost_usd"] = pricing.get_llm_cost(
+                    model_id, result.get("input_tokens", 0), result.get("output_tokens", 0))
+                if metrics is not None and not pricing.has_llm_pricing(model_id):
+                    metrics.record_unpriced_call()
             if metrics is not None:
-                metrics.record_llm_call(result.get("latency_ms"))
+                metrics.record_llm_call(result.get("latency_ms"),
+                                        input_tokens=result.get("input_tokens", 0),
+                                        output_tokens=result.get("output_tokens", 0),
+                                        cost_usd=result["cost_usd"])
             results.append(result)
             reused.append(False)
         out = {"response": pa.array([r["response"] for r in results], type=response_type)}
@@ -361,6 +373,7 @@ def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None) 
                 "output_tokens": r.get("output_tokens", 0),
                 "latency_ms": r.get("latency_ms", 0.0),
                 "model_id": r.get("model_id", ""),
+                "cost_usd": r.get("cost_usd", 0.0),
             }) for r in results
         ], type=pa.large_utf8())
         return pa.table(out)
@@ -530,6 +543,7 @@ def build_cosmic_workflow(
     metrics=None,
     rank=None,
     reuse_validator=None,
+    pricing=None,
 ) -> ArmadaSequence:
     """Preprocess | Embed | Retrieve | Reason | Bind | MemoryUpsert, wired to the injected services.
 
@@ -547,7 +561,8 @@ def build_cosmic_workflow(
         | build_embed_operator(embedding_service, dimensions=dimensions, metrics=metrics)
         | build_retrieve_operator(context_router, workflow_id=workflow_id, dimensions=dimensions,
                                   metrics=metrics, reuse_validator=reuse_validator)
-        | build_reason_operator(chain_executor, dimensions=dimensions, metrics=metrics)
+        | build_reason_operator(chain_executor, dimensions=dimensions, metrics=metrics,
+                               pricing=pricing)
         | build_bind_operator(workflow_id, rank=rank)
         | build_memory_upsert_operator(context_manager, dimensions=dimensions, metrics=metrics,
                                        rank=rank)

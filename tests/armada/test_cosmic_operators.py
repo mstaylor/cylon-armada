@@ -236,7 +236,45 @@ def test_reason_carries_cost_metadata_forward_as_passthrough():
     result = op.fn(table)
 
     cost = json.loads(result.column("cost_metadata_json").to_pylist()[0])
-    assert cost == {"input_tokens": 12, "output_tokens": 34, "latency_ms": 5.5, "model_id": "mock-model"}
+    assert cost == {"input_tokens": 12, "output_tokens": 34, "latency_ms": 5.5,
+                    "model_id": "mock-model", "cost_usd": 0.0}
+
+
+def test_reason_prices_a_real_call_when_pricing_is_injected():
+    """Without this the envelope carries a zero into a column named cost_usd,
+    which reads as a free call rather than an unpriced one."""
+    chain_executor = MagicMock()
+    chain_executor.execute.return_value = {
+        "response": "the answer", "input_tokens": 1000, "output_tokens": 500,
+        "latency_ms": 5.5, "model_id": "mock-model",
+    }
+    pricing = MagicMock()
+    pricing.get_llm_cost.return_value = 0.00123
+
+    op = build_reason_operator(chain_executor, dimensions=D, pricing=pricing)
+    struct_type = op.schema_in.field(0).type
+    table = pa.table({"context": pa.array([{"doc": "", "score": 0.0}], type=struct_type)},
+                     schema=op.schema_in)
+    cost = json.loads(op.fn(table).column("cost_metadata_json").to_pylist()[0])
+
+    pricing.get_llm_cost.assert_called_once_with("mock-model", 1000, 500)
+    assert cost["cost_usd"] == 0.00123
+
+
+def test_reason_prices_a_reused_row_at_zero():
+    """A reuse made no call, so zero is the true cost rather than a missing one."""
+    chain_executor = MagicMock()
+    pricing = MagicMock()
+
+    op = build_reason_operator(chain_executor, dimensions=D, pricing=pricing)
+    struct_type = op.schema_in.field(0).type
+    table = pa.table({"context": pa.array([{"doc": "cached", "score": 0.9}], type=struct_type)},
+                     schema=op.schema_in)
+    cost = json.loads(op.fn(table).column("cost_metadata_json").to_pylist()[0])
+
+    chain_executor.execute.assert_not_called()
+    pricing.get_llm_cost.assert_not_called()
+    assert cost["cost_usd"] == 0.0
 
 
 # ---------------------------------------------------------------------------

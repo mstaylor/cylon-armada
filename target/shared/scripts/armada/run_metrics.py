@@ -62,24 +62,39 @@ class RunMetrics:
         self.contexts_ingested = 0
         self.gate_rejections = 0
         self.throttle_events = 0
+        self.input_tokens_total = 0
+        self.output_tokens_total = 0
+        self.cost_usd_total = 0.0
+        self.unpriced_calls = 0
 
     def record_retrieval(self, hit):
         self.retrievals += 1
         if hit:
             self.cache_hits += 1
 
-    def record_llm_call(self, latency_ms):
+    def record_llm_call(self, latency_ms, input_tokens=0, output_tokens=0, cost_usd=0.0):
         """Count a call; fold its latency into the mean only if one was reported.
 
         A call that reports no latency is counted separately rather than as
         zero, because a zero would silently deflate llm_latency_ms_mean — the
         constant-inference check reads that number.
+
+        Tokens and cost are accumulated only for calls that actually happened.
+        A reused row never reaches here, so cost_usd_total is what the run
+        spent rather than what it would have spent without reuse. The avoided
+        amount is deliberately not accumulated: it is an estimate, and the
+        estimator belongs in the analysis where it can be stated, not buried
+        in instrumentation. cost_usd_mean plus cache_hits is enough to compute
+        it downstream under whatever assumption is being defended.
         """
         self.llm_calls += 1
         if latency_ms is None:
             self.llm_calls_without_latency += 1
         else:
             self.llm_latency_ms_total += float(latency_ms)
+        self.input_tokens_total += int(input_tokens or 0)
+        self.output_tokens_total += int(output_tokens or 0)
+        self.cost_usd_total += float(cost_usd or 0.0)
 
     def record_store(self):
         """Count a context this rank originated."""
@@ -108,6 +123,14 @@ class RunMetrics:
     def record_store_failure(self):
         self.records_failed += 1
 
+    def record_unpriced_call(self):
+        """Count a call whose model had no price entry.
+
+        Its cost came from the most expensive registered model, so any run with
+        a non-zero count here is reporting an upper bound rather than a cost.
+        """
+        self.unpriced_calls += 1
+
     def record_throttle(self):
         self.throttle_events += 1
 
@@ -127,4 +150,10 @@ class RunMetrics:
             "contexts_ingested": self.contexts_ingested,
             "gate_rejections": self.gate_rejections,
             "throttle_events": self.throttle_events,
+            "input_tokens_total": self.input_tokens_total,
+            "output_tokens_total": self.output_tokens_total,
+            "cost_usd_total": round(self.cost_usd_total, 8),
+            "cost_usd_mean": (round(self.cost_usd_total / self.llm_calls, 8)
+                              if self.llm_calls else 0.0),
+            "unpriced_calls": self.unpriced_calls,
         }
