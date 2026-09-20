@@ -235,3 +235,57 @@ def test_strong_scaling_is_the_default():
     """Weak scaling holds per-rank load constant, so it structurally cannot show
     the isolation penalty — the sweep's headline needs a shrinking shard."""
     assert _driver().build_parser().parse_args([]).scaling == "strong"
+
+
+# ---------------------------------------------------------------------------
+# Task startup timing
+# ---------------------------------------------------------------------------
+
+def _task(created, pull_start, pull_stop, started, stopping, stopped):
+    """An ECS describe_tasks entry with the lifecycle timestamps we read."""
+    from datetime import datetime, timedelta, timezone
+    base = datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
+    def at(offset):
+        return None if offset is None else base + timedelta(seconds=offset)
+    out = {"taskArn": "arn:aws:ecs:us-east-1:1:task/c/abc", "createdAt": at(created)}
+    for key, off in (("pullStartedAt", pull_start), ("pullStoppedAt", pull_stop),
+                     ("startedAt", started), ("stoppingAt", stopping),
+                     ("stoppedAt", stopped)):
+        if off is not None:
+            out[key] = at(off)
+    return out
+
+
+def test_timing_decomposes_a_task_lifecycle():
+    """The point of the measurement: separate image pull from everything else."""
+    sweep = _driver()
+    t = sweep.task_timing(_task(created=0, pull_start=10, pull_stop=80,
+                                started=85, stopping=200, stopped=205))
+    assert t["provision_s"] == 10.0
+    assert t["pull_s"] == 70.0
+    assert t["run_s"] == 115.0
+    assert t["teardown_s"] == 5.0
+    assert t["total_s"] == 205.0
+
+
+def test_timing_tolerates_a_task_that_never_pulled():
+    """ECS omits pullStartedAt when provisioning fails. A failed run must not
+    crash the driver on the way out, or the results it did produce are lost."""
+    sweep = _driver()
+    t = sweep.task_timing(_task(created=0, pull_start=None, pull_stop=None,
+                                started=None, stopping=None, stopped=30))
+    assert t["pull_s"] is None
+    assert t["provision_s"] is None
+    assert t["total_s"] == 30.0
+
+
+def test_timing_summary_reports_the_slowest_task_not_the_mean():
+    """An arm finishes when its slowest rank finishes, so the arm's startup cost
+    is the max across ranks. A mean would understate what the sweep actually
+    waits for."""
+    sweep = _driver()
+    tasks = [_task(0, 5, 40, 45, 100, 105), _task(0, 5, 70, 75, 100, 110)]
+    s = sweep.summarize_timings([sweep.task_timing(t) for t in tasks])
+    assert s["ranks"] == 2
+    assert s["pull_s_max"] == 65.0
+    assert s["total_s_max"] == 110.0

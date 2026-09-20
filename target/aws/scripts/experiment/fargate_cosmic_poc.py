@@ -53,6 +53,8 @@ SUBNETS = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
 REDIS_ADDR = "dev-cylon-redis1.aws-cylondata.com:6379"
 RESULTS_BUCKET = "staylor.dev2"
 RESULTS_PREFIX = "cylon-armada/results/exp_e_cosmic"
+# What the driver pays to notice an arm finished. See _wait_for_tasks.
+WAITER_DELAY_S = 5
 # ARTIFACT_BUCKET / ASTROMAE_* keys and paths, INFERENCE_DEVICE and
 # INFERENCE_BATCH_SIZE all come from the task definition terraform deploys
 # (local.ecs_env); only device and batch size are overridden here, and only
@@ -220,11 +222,81 @@ def _wait_for_tasks(ecs, arns, timeout_s):
     The paired arm must not start until this one is finished: two arms running
     concurrently would share Redis and Bedrock quota and throttle each other,
     which is exactly the confound the throttle gate exists to catch.
+
+    The poll delay is what the driver pays to notice an arm has ended. At 15s it
+    cost about 7s per arm-run on average, which is real time across a sweep of
+    105 arm-runs and is also quantization noise on the startup measurement
+    task_timing takes. MaxAttempts is derived from it, so the wall-clock timeout
+    is unchanged.
     """
     waiter = ecs.get_waiter("tasks_stopped")
-    delay = 15
+    delay = WAITER_DELAY_S
     waiter.wait(cluster=CLUSTER, tasks=arns,
                 WaiterConfig={"Delay": delay, "MaxAttempts": max(1, timeout_s // delay)})
+
+
+def task_timing(task):
+    """Decompose one ECS task's lifecycle into the phases a sweep pays for.
+
+    Fargate gives each task a fresh microVM with no shared layer cache, so the
+    image is pulled per task. Separating pull from the rest is the whole point:
+    it is the term that infrastructure changes can move, and the one that
+    guessing gets wrong.
+
+    Any timestamp may be absent. ECS omits pullStartedAt when a task never got
+    far enough to pull, and a failed arm must still return its numbers rather
+    than raise on the way out.
+    """
+    def span(a, b):
+        first, second = task.get(a), task.get(b)
+        if first is None or second is None:
+            return None
+        return round((second - first).total_seconds(), 3)
+
+    return {
+        "provision_s": span("createdAt", "pullStartedAt"),
+        "pull_s": span("pullStartedAt", "pullStoppedAt"),
+        "run_s": span("startedAt", "stoppingAt"),
+        "teardown_s": span("stoppingAt", "stoppedAt"),
+        "total_s": span("createdAt", "stoppedAt"),
+    }
+
+
+def summarize_timings(timings):
+    """Reduce per-rank timings to what the arm actually waited for.
+
+    An arm ends when its slowest rank ends, so the max is the quantity that
+    sets sweep wall clock. A mean would understate it, and understating startup
+    is how a sweep gets planned at a quarter of its real duration.
+    """
+    out = {"ranks": len(timings)}
+    for phase in ("provision_s", "pull_s", "run_s", "teardown_s", "total_s"):
+        values = [t[phase] for t in timings if t.get(phase) is not None]
+        out[f"{phase}_max"] = max(values) if values else None
+    return out
+
+
+def collect_arm_timing(ecs, arns):
+    """Per-rank lifecycle timings for one arm, or None if ECS has aged them out.
+
+    Stopped tasks are retained for about an hour, so this has to run right after
+    the waiter returns. It never raises: a timing record is diagnostic, and
+    losing it must not cost the run's results.
+    """
+    try:
+        described = []
+        for i in range(0, len(arns), 100):
+            resp = ecs.describe_tasks(cluster=CLUSTER, tasks=arns[i:i + 100])
+            described.extend(resp.get("tasks", []))
+        if not described:
+            return None
+        timings = [task_timing(task) for task in described]
+        summary = summarize_timings(timings)
+        summary["per_rank"] = timings
+        return summary
+    except Exception as exc:
+        logger.warning("could not collect task timings: %s", exc)
+        return None
 
 
 def launch_world_size(ecs, world_size, args):
@@ -251,8 +323,30 @@ def launch_world_size(ecs, world_size, args):
             rank, world_size, comm_name, s3_prefix, point_args, arm))
         logger.info("  launched %d tasks; waiting for the arm to finish", len(arns))
         _wait_for_tasks(ecs, arns, args.arm_timeout_s)
+        _record_arm_timing(ecs, arns, s3_prefix)
         all_arns.extend(arns)
     return all_arns
+
+
+def _record_arm_timing(ecs, arns, s3_prefix):
+    """Write this arm's startup breakdown beside its results.
+
+    Runs immediately after the waiter because ECS retains stopped tasks for
+    about an hour. Never raises: this is diagnostic, and losing it must not
+    cost the results the arm just produced.
+    """
+    summary = collect_arm_timing(ecs, arns)
+    if summary is None:
+        return
+    logger.info("  startup: pull %ss, provision %ss, teardown %ss, total %ss (slowest rank)",
+                summary.get("pull_s_max"), summary.get("provision_s_max"),
+                summary.get("teardown_s_max"), summary.get("total_s_max"))
+    try:
+        boto3.client("s3", region_name=REGION).put_object(
+            Bucket=RESULTS_BUCKET, Key=s3_prefix + "_timing.json",
+            Body=json.dumps(summary, indent=1).encode())
+    except Exception as exc:
+        logger.warning("could not write timing record: %s", exc)
 
 
 def build_parser():
