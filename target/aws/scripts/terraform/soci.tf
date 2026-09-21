@@ -73,7 +73,7 @@ resource "aws_lambda_function" "soci_index_generator" {
   architectures    = ["x86_64"]
   filename         = data.archive_file.soci_index_generator[0].output_path
   source_code_hash = data.archive_file.soci_index_generator[0].output_base64sha256
-  memory_size      = 1024
+  memory_size      = var.soci_lambda_memory_mb
   timeout          = 900
 
   ephemeral_storage {

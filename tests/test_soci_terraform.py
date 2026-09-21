@@ -47,6 +47,19 @@ def test_required_deployment_values_have_defaults():
         ), "%s must default to %s" % (name, value)
 
 
+def test_generator_memory_clears_the_measured_peak():
+    """A real run against the 1.87 GB cosmic image peaked at 1017 MB with a
+    1024 MB limit, 7 MB of headroom. An OOM here is silent in the way that
+    matters: the index is simply absent and the pull time is unchanged, which
+    reads as "SOCI did not help" rather than as a failure."""
+    body = _read("variables.tf")
+    block = re.search(r'variable "soci_lambda_memory_mb".*?\n}', body, re.S)
+    assert block, "soci_lambda_memory_mb variable is missing"
+    default = re.search(r"^\s*default\s*=\s*(\d+)\s*$", block.group(0), re.M)
+    assert default, "soci_lambda_memory_mb has no default"
+    assert int(default.group(1)) >= 2048, "must clear the 1017 MB measured peak"
+
+
 def test_only_the_cosmic_tag_is_indexed_by_default():
     """The FMI base image is pulled by Lambda, not Fargate, so indexing it
     spends Lambda time for no gain."""
@@ -70,7 +83,9 @@ def test_generator_lambda_matches_the_spec_settings():
     assert block, "soci_index_generator lambda is missing"
     text = block.group(0)
     assert re.search(r'runtime\s*=\s*"provided\.al2023"', text)
-    assert re.search(r"memory_size\s*=\s*1024\b", text), "memory must be 1024 MB"
+    assert re.search(
+        r"memory_size\s*=\s*var\.soci_lambda_memory_mb\b", text
+    ), "memory must come from the variable, not a literal"
     assert re.search(r"timeout\s*=\s*900\b", text), "timeout must be 900 seconds"
     assert re.search(r"size\s*=\s*10240\b", text), "ephemeral storage must be 10240 MB"
 

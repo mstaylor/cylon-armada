@@ -460,6 +460,12 @@ variable "enable_soci_indexing" {
   default     = true
 }
 
+variable "soci_lambda_memory_mb" {
+  description = "Memory for the SOCI index generator. Indexing the 1.87 GB cosmic image succeeded at 1024 MB but peaked at 1017 MB, leaving no margin. Headroom is cheap here because the Lambda runs once per image push."
+  type        = number
+  default     = 2048
+}
+
 variable "soci_indexed_tag" {
   description = "The single ECR image tag that gets a SOCI index. Only images pulled by Fargate tasks benefit; Lambda-pulled images do not."
   type        = string
