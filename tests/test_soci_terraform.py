@@ -47,6 +47,22 @@ def test_required_deployment_values_have_defaults():
         ), "%s must default to %s" % (name, value)
 
 
+def test_cosmic_tasks_select_the_soci_image_through_one_local():
+    """A V2 index is published as a separately tagged image rather than attached
+    to the base image, so pulling the base tag gets no lazy loading at all. The
+    task definition must resolve its image through the toggle, and it must do so
+    in exactly one place, or an arm can silently run the unindexed image."""
+    body = _read("main.tf")
+    assert re.search(
+        r"cosmic_image_tag_effective\s*=", body
+    ), "the effective-tag local is missing"
+    assert re.search(
+        r"var\.cosmic_use_soci_image", body
+    ), "the local must branch on the toggle"
+    direct = re.findall(r":\$\{var\.cosmic_image_tag\}", body)
+    assert not direct, "image references must go through the local, not var.cosmic_image_tag"
+
+
 def test_generator_requests_a_v2_index():
     """Measured 2026-09-21: a V1 index produced no pull-time improvement at all,
     58.5 s against a 58.3 s baseline, because Fargate ignores V1 for accounts new

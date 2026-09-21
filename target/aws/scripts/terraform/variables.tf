@@ -257,6 +257,18 @@ variable "cosmic_image_tag" {
   default     = "cylon-armada-cosmic-python"
 }
 
+variable "cosmic_use_soci_image" {
+  description = "Run Cosmic AI tasks from the SOCI-indexed image so Fargate lazy loads it. The index generator publishes that image under the base tag plus the suffix below, and its content is identical to the base image, so this selects the pull mechanism rather than the workload. Requires the generator to have run for the current base image."
+  type        = bool
+  default     = true
+}
+
+variable "soci_image_tag_suffix" {
+  description = "Suffix the SOCI index generator appends when it tags a V2 image index. Fixed by upstream cfn-ecr-aws-soci-index-builder, not freely chosen"
+  type        = string
+  default     = "-soci"
+}
+
 variable "cosmic_ai_model_source" {
   description = "Local path to the AstroMAE weights .pt; skipped when the file is absent"
   type        = string

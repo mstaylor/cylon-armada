@@ -20,6 +20,12 @@ locals {
     ManagedBy   = "terraform"
   }
 
+  cosmic_image_tag_effective = (
+    var.cosmic_use_soci_image
+    ? "${var.cosmic_image_tag}${var.soci_image_tag_suffix}"
+    : var.cosmic_image_tag
+  )
+
   redis_endpoint = (
     var.create_ecs_redis ? var.redis_hostname :
     var.create_elasticache ? aws_elasticache_cluster.redis[0].cache_nodes[0].address :
@@ -492,7 +498,7 @@ resource "aws_ecs_task_definition" "cosmic_armada" {
 
   container_definitions = jsonencode([{
     name      = var.ecs_container_name
-    image     = "${data.aws_ecr_repository.main.repository_url}:${var.cosmic_image_tag}"
+    image     = "${data.aws_ecr_repository.main.repository_url}:${local.cosmic_image_tag_effective}"
     essential = true
 
     entryPoint = ["/opt/conda/bin/conda", "run", "--no-capture-output", "-n", "cylon_dev"]

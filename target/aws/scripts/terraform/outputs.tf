@@ -207,6 +207,11 @@ output "redis_dns_updater_arn" {
 # SOCI index builder
 # ---------------------------------------------------------------------------
 
+output "cosmic_image_tag_effective" {
+  description = "Image tag the Cosmic AI tasks actually pull, which carries the SOCI suffix when lazy loading is on"
+  value       = local.cosmic_image_tag_effective
+}
+
 output "soci_index_generator_function_name" {
   description = "Name of the SOCI index generator Lambda, null when indexing is disabled"
   value       = local.deploy_soci ? aws_lambda_function.soci_index_generator[0].function_name : null
