@@ -13,6 +13,7 @@ variable "project_name" {
 variable "account_id" {
   description = "AWS account ID"
   type        = string
+  default     = "448324707516"
 }
 
 # ---------------------------------------------------------------------------
@@ -22,6 +23,7 @@ variable "account_id" {
 variable "ecr_repository_name" {
   description = "Name of the existing ECR repository for cylon-armada images"
   type        = string
+  default     = "cylon-armada"
 }
 
 # ---------------------------------------------------------------------------
@@ -235,6 +237,7 @@ variable "fmi_max_timeout" {
 variable "results_bucket_name" {
   description = "Existing S3 bucket for experiment results"
   type        = string
+  default     = "staylor.dev2"
 }
 
 # ---------------------------------------------------------------------------
@@ -454,7 +457,7 @@ variable "redis_dns_ttl" {
 variable "enable_soci_indexing" {
   description = "Generate a SOCI index when the indexed image tag is pushed to ECR"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "soci_indexed_tag" {

@@ -19,13 +19,32 @@ def _read(name):
         return handle.read()
 
 
-def test_soci_is_off_by_default():
-    """A new resource that costs money must not appear on an existing apply
-    without the operator asking for it."""
+def test_soci_is_on_by_default():
+    """Indexing is deliberately on by default so a plain `terraform apply`
+    deploys it on any checkout. An off default is worse than it looks here:
+    terraform.tfvars is gitignored, so the opt-in does not travel between
+    machines, and the gate then creates nothing while reporting success."""
     body = _read("variables.tf")
     block = re.search(r'variable "enable_soci_indexing".*?\n}', body, re.S)
     assert block, "enable_soci_indexing variable is missing"
-    assert re.search(r"^\s*default\s*=\s*false\s*$", block.group(0), re.M)
+    assert re.search(r"^\s*default\s*=\s*true\s*$", block.group(0), re.M)
+
+
+def test_required_deployment_values_have_defaults():
+    """These three had no default, so `terraform apply` prompted for them and
+    could not run unattended. They are fixed facts about this deployment."""
+    body = _read("variables.tf")
+    expected = {
+        "account_id": '"448324707516"',
+        "ecr_repository_name": '"cylon-armada"',
+        "results_bucket_name": '"staylor.dev2"',
+    }
+    for name, value in expected.items():
+        block = re.search(r'variable "%s".*?\n}' % name, body, re.S)
+        assert block, "%s variable is missing" % name
+        assert re.search(
+            r"^\s*default\s*=\s*%s\s*$" % re.escape(value), block.group(0), re.M
+        ), "%s must default to %s" % (name, value)
 
 
 def test_only_the_cosmic_tag_is_indexed_by_default():
