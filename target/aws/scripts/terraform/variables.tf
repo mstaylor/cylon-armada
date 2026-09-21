@@ -446,3 +446,19 @@ variable "redis_dns_ttl" {
   type        = number
   default     = 30
 }
+
+# ---------------------------------------------------------------------------
+# SOCI lazy-loading
+# ---------------------------------------------------------------------------
+
+variable "enable_soci_indexing" {
+  description = "Generate a SOCI index when the indexed image tag is pushed to ECR"
+  type        = bool
+  default     = false
+}
+
+variable "soci_indexed_tag" {
+  description = "The single ECR image tag that gets a SOCI index. Only images pulled by Fargate tasks benefit; Lambda-pulled images do not."
+  type        = string
+  default     = "cylon-armada-cosmic-python"
+}

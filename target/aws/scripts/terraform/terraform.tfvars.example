@@ -101,3 +101,12 @@ rendezvous_port = 10000
 # EC2 GPU arm (terraform-gpu) is where cuda belongs.
 # inference_device     = "cpu"
 # inference_batch_size = 32
+
+# SOCI lazy loading. Off by default, so leaving these alone changes nothing.
+# Enabling creates an EventBridge rule and a Lambda that builds a SOCI index
+# when soci_indexed_tag is pushed to ECR, letting Fargate lazily load the image
+# instead of pulling it whole. Only Fargate-pulled images benefit; images pulled
+# by Lambda do not. The index appears on a push, so enabling this does nothing
+# until the tag is pushed again.
+# enable_soci_indexing = true
+# soci_indexed_tag     = "cylon-armada-cosmic-python"

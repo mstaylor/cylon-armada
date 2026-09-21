@@ -64,3 +64,14 @@ override.tf.json
 .claude-flow/logs/
 .claude-flow/sessions/
 .worktrees/
+
+# superpowers SDD scratch, not part of the project
+.superpowers/
+
+# Lambda deployment packages built by terraform's archive_file at plan time.
+# The bootstrap binary itself is tracked; the zip is regenerated and is 14 MB.
+target/aws/scripts/lambda/**/*.zip
+
+# Local operator variable files. The .example stays tracked as the reference.
+terraform.tfvars
+*.auto.tfvars

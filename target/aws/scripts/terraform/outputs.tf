@@ -202,3 +202,12 @@ output "redis_dns_updater_arn" {
   description = "ARN of the Lambda that updates Route 53 when Redis restarts"
   value       = local.deploy_redis_dns ? aws_lambda_function.redis_dns_updater[0].arn : null
 }
+
+# ---------------------------------------------------------------------------
+# SOCI index builder
+# ---------------------------------------------------------------------------
+
+output "soci_index_generator_function_name" {
+  description = "Name of the SOCI index generator Lambda, null when indexing is disabled"
+  value       = local.deploy_soci ? aws_lambda_function.soci_index_generator[0].function_name : null
+}

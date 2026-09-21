@@ -1,0 +1,21 @@
+FROM --platform=linux/amd64 golang:1.26-alpine AS builder
+
+RUN apk add --no-cache git make gcc musl-dev zlib-dev zlib-static
+
+ARG SOCI_COMMIT=770e9a5e0afb7809315870eddc5610be63649cf7
+
+RUN git clone https://github.com/awslabs/cfn-ecr-aws-soci-index-builder /src && \
+    cd /src && git checkout ${SOCI_COMMIT}
+
+WORKDIR /src/functions/source/soci-index-generator-lambda
+
+ENV CGO_ENABLED=1
+
+RUN GOOS=linux GOARCH=amd64 go build -mod=vendor \
+    -tags "osusergo netgo static_build lambda.norpc" \
+    -ldflags '-extldflags "-static"' \
+    -o bootstrap
+
+FROM scratch AS export
+
+COPY --from=builder /src/functions/source/soci-index-generator-lambda/bootstrap /bootstrap
