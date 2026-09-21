@@ -460,6 +460,17 @@ variable "enable_soci_indexing" {
   default     = true
 }
 
+variable "soci_index_version" {
+  description = "SOCI index manifest version, read by the generator as the soci_index_version env var. Accounts new to SOCI must use V2: Fargate ignores a V1 index and silently falls back to a full image pull, which is indistinguishable from SOCI not helping."
+  type        = string
+  default     = "V2"
+
+  validation {
+    condition     = contains(["V1", "V2"], var.soci_index_version)
+    error_message = "soci_index_version must be V1 or V2."
+  }
+}
+
 variable "soci_lambda_memory_mb" {
   description = "Memory for the SOCI index generator. Indexing the 1.87 GB cosmic image succeeded at 1024 MB but peaked at 1017 MB, leaving no margin. Headroom is cheap here because the Lambda runs once per image push."
   type        = number

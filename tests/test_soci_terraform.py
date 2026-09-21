@@ -47,6 +47,24 @@ def test_required_deployment_values_have_defaults():
         ), "%s must default to %s" % (name, value)
 
 
+def test_generator_requests_a_v2_index():
+    """Measured 2026-09-21: a V1 index produced no pull-time improvement at all,
+    58.5 s against a 58.3 s baseline, because Fargate ignores V1 for accounts new
+    to SOCI and silently falls back to a full pull. The generator selects the
+    version from this env var, and an unset var means V1."""
+    body = _read("soci.tf")
+    block = re.search(r'resource "aws_lambda_function" "soci_index_generator".*?\n}', body, re.S)
+    assert block, "soci_index_generator lambda is missing"
+    assert re.search(
+        r"soci_index_version\s*=\s*var\.soci_index_version\b", block.group(0)
+    ), "the lambda must pass soci_index_version through to the runtime"
+
+    variables = _read("variables.tf")
+    var_block = re.search(r'variable "soci_index_version".*?\n}\n', variables, re.S)
+    assert var_block, "soci_index_version variable is missing"
+    assert re.search(r'^\s*default\s*=\s*"V2"\s*$', var_block.group(0), re.M)
+
+
 def test_generator_memory_clears_the_measured_peak():
     """A real run against the 1.87 GB cosmic image peaked at 1017 MB with a
     1024 MB limit, 7 MB of headroom. An OOM here is silent in the way that

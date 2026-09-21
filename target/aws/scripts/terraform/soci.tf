@@ -80,6 +80,12 @@ resource "aws_lambda_function" "soci_index_generator" {
     size = 10240
   }
 
+  environment {
+    variables = {
+      soci_index_version = var.soci_index_version
+    }
+  }
+
   tags = local.common_tags
 }
 
