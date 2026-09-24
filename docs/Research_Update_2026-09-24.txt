@@ -1,0 +1,241 @@
+Research Update
+24 September 2026
+
+
+WHAT WE SET OUT TO TEST
+
+The thesis holds that data orchestration rather than model inference is the limiting factor in
+distributed agentic pipelines, and that expressing pipeline stages as collective operations over a
+shared columnar format removes that limit. Two formal statements carry it. One bounds the bytes
+that must cross operator boundaries. The other predicts that end to end speedup does not decline as
+workers are added. This period was spent testing whether our astronomy workload can evaluate
+either one.
+
+
+FIRST, WHAT THE RETRIEVE OPERATOR ACTUALLY DOES
+
+One definition is needed before the result makes sense, because the mechanism is easy to picture
+wrongly.
+
+Cosmic AI contains no search component. There is no index and no vector database. What the Retrieve
+operator does is decide whether a galaxy's question has already been answered closely enough by a
+previous one. It does that by taking the new galaxy's prompt embedding and comparing it against
+every embedding already stored, one by one, keeping any whose cosine similarity exceeds a
+threshold. This is an exhaustive comparison rather than a lookup. Every stored entry is touched on
+every galaxy.
+
+Two quantities follow, and the rest of this section depends on telling them apart. The cost of one
+reuse decision is the number of stored embeddings multiplied by the cost of one comparison, which
+we measured at 11.1 microseconds. The number of stored embeddings is a separate thing entirely, and
+it is not the number of galaxies.
+
+
+A CLAIM WE HELD DID NOT SURVIVE
+
+We expected stored context to accumulate until one worker could no longer compare against all of it
+on every galaxy. The remedy would have been to divide the stored embeddings across workers so each
+compares against only its share, with a collective merging the partial results. That expectation is
+now withdrawn.
+
+The cost of dividing the work is proportional to how much there is to divide, so everything turns
+on how large the stored set becomes. It does not become large. Stored embeddings are not galaxies,
+because a galaxy whose prompt finds an acceptable match reuses that answer and stores nothing, on
+the reasoning that a duplicate adds no information. Only the ones that find no match are stored.
+
+That makes growth self limiting. A larger stored set satisfies more galaxies, which produces fewer
+new entries, which slows growth further. Across the full 1,253 galaxy population the reuse rate
+climbs from 58 percent in the first windows to about 93 percent in the last, and the stored set
+reaches 146 entries rather than 1,253.
+
+Fitting that trajectory, a square root law describes it better than a linear one. The exponent is
+an empirical least squares fit of the logarithm of stored entries against the logarithm of galaxies
+seen, which comes out at 0.498, and it explains 97.8 percent of the variance against 92.3 percent
+for the linear fit. A sublinear exponent is not surprising for a process of this kind. Discovering
+distinct items gets harder as coverage improves, which is the same shape as vocabulary growth in
+text, where new words appear at a decreasing rate as more is read.
+
+The two laws agree closely over the range we measured and diverge sharply outside it. Extrapolated
+across the entire SDSS survey of roughly 2.6 million galaxies, the linear law predicts about
+222,000 stored entries while the square root law predicts about 6,800. At 222,000 entries a reuse
+decision costs 2.5 seconds against a model call of 3.3, and dividing the work across workers would
+be essential. At 6,800 entries it costs 76 milliseconds, which is about two percent of a model
+call, and dividing the work would save nothing worth a collective operation on every galaxy.
+
+We fitted both laws, adopted the one that disfavours our position because it described the data
+better, and changed the plan rather than the interpretation.
+
+There is an irony in this worth stating, since it is the most interesting part. Reuse and
+partitioned retrieval were both intended contributions, and the first destroys the case for the
+second. The better reuse works, the less context accumulates, and the less there is to divide.
+
+
+THE STRUCTURAL REASON, WHICH GENERALISES
+
+Cosmic AI divides its input, not its state. Each worker takes a contiguous block of galaxies and
+carries each one from beginning to end, so almost nothing crosses an operator boundary. The entire
+cross worker data plane is one collective carrying about 281 KB per worker per run. A workload of
+that shape cannot discriminate between communication designs, because there is no communication to
+speak of.
+
+This is the more useful finding, and following it led somewhere better than a workaround.
+
+
+THE PER OBJECT FRAMING DOES NOT SURVIVE SCALE
+
+Cosmic AI issues one model call per galaxy, to comment on that galaxy's redshift prediction. Two
+measurements say this is the wrong shape for analysis at catalogue scale, and neither is a
+criticism of the implementation.
+
+The science is a small part of the work. Inference costs 0.134 seconds per galaxy against a model
+call of 3.31 seconds, so on a measured run the redshift prediction was under 8 percent of runtime
+and commentary about it was 92 percent.
+
+The commentary carries little information about the individual galaxy. That is what the reuse
+numbers have been telling us. Without the validity criterion, 99.6 percent of galaxies accept one
+of five stored answers. With it, 88 percent accept one of 146. A task in which eight of nine
+objects take an interchangeable answer produces an output that is nearly constant across its input.
+The reuse rate is measuring redundancy in the task design rather than an optimisation we achieved.
+
+The questions an astronomer asks at survey scale are not per object anyway. How residuals are
+distributed, which subpopulations carry systematic bias, which outliers are physically interesting
+rather than instrumental. Those are aggregations across the catalogue, and no worker can answer them
+from its own block alone.
+
+
+A WORKLOAD THAT FITS BOTH THE SCIENCE AND THE CLAIM
+
+Population scale anomaly detection over the same data, comparing each galaxy against the
+distribution of its own subpopulation rather than analysing it in isolation. This is the analysis
+the source project was organised around.
+
+It maps onto the operator abstraction without forcing. Scatter the catalogue, run inference
+locally, redistribute by subpopulation and reduce the partial statistics, then characterise the
+summaries. The reduce is intrinsic, because a population statistic cannot be computed by one worker
+from its own block. Every previous attempt to exercise that mapping felt contrived because it meant
+moving state a worker had produced itself and could have used alone. Here nothing is moved that its
+owner could have used alone.
+
+One design decision determines whether the experiment has a signal, and it is worth stating
+plainly. The redistribution must carry feature vectors rather than summary scalars. Scalars move
+about 166 MB across the whole catalogue, which is only nine times what the current workload moves
+and would produce a weak result, because aggregation compresses. Comparing a galaxy against its
+subpopulation requires the features that define the comparison, which at 1024 dimensions is roughly
+10.6 GB across the catalogue, four orders of magnitude above where we are now.
+
+The stateless comparison is the design the serverless literature criticises, where every worker
+writes its intermediate features to object storage and reads back the fragments for the
+subpopulations it owns. Both arms compute identically and differ only in how the redistribution
+happens.
+
+The application gains as well. Across the full survey the population framing needs about 100 model
+calls rather than 304,200, which is 5.5 minutes of model time rather than 4.4 hours at 64 workers,
+and about two cents rather than fifty eight dollars. Inference then accounts for roughly 94 percent
+of runtime, which is the honest shape for an astronomy pipeline.
+
+
+A DEPENDENCY WE HAD NOT EXAMINED
+
+Every reuse number we have reported rests on a validity criterion whose correctness we have never
+tested. Removing the criterion and accepting any sufficiently similar stored context raises reuse
+to 99.6 percent and collapses the store to five entries, because the prompts are template generated
+and two in five pairs already exceed the similarity threshold. With the criterion, reuse is 88.4
+percent and the store reaches 146.
+
+So the criterion, not the embedding, determines the result. Its tolerance is presently the model's
+own median prediction error, which our own documentation describes as exploratory rather than a
+validated statement of equivalence. We have not compared an accepted reuse against fresh inference
+on the same input. Until we do, reuse should be reported as acceptance under a stated policy and
+never as demonstrated correctness. This is now the highest value measurement outstanding.
+
+
+CHOOSING A COMPARATOR THAT ANSWERS THE FEEDBACK
+
+The feedback we received was that end to end speedup had been measured against a weak comparator,
+and that the resulting figure therefore proves little. We accept that. Our current headline number
+is measured against an HTTP and LangChain arm, which is a reasonable diagnostic for locating where
+time is spent but is not a serious opponent for a claim about moving data efficiently.
+
+Identifying a serious opponent required separating two layers that are easily confused, since both
+are described in the literature as orchestration.
+
+The first layer is agent orchestration, meaning which agent acts, in what role, and in what order.
+LangChain, LangGraph, CrewAI, AutoGen and Haystack occupy it. We surveyed these and concluded that
+none of them is a candidate here, because none has a distributed data plane at all. They delegate
+execution and pass state through ordinary objects or an external store. Comparing against them
+again would answer the same diagnostic question we have already answered.
+
+The second layer is distributed execution and the movement of data between stages. This is the
+layer our contribution occupies, and Ray is the state of the art in it. That is the reason we chose
+Ray rather than any of the agent frameworks, and it is a direct response to the feedback.
+
+Ray is also the hardest honest opponent available rather than a convenient one, for a reason worth
+making explicit. Its shared object store, Plasma, originated inside Apache Arrow and provides zero
+copy reads of Arrow formatted data in shared memory. We are therefore not comparing Arrow against
+something slower than Arrow. We are comparing two ways of moving Arrow data, against a system that
+already possesses the property our thesis claims as its contribution. A favourable result against
+that opponent means something. An unfavourable one would be informative rather than merely
+disappointing.
+
+
+A METHODOLOGICAL REVISION, AND WHY CYLONFLOW MATTERS
+
+Adding Ray is necessary but not sufficient. A favourable result against any single system remains
+ambiguous between two explanations, a better data plane and a lighter scheduler, and the thesis
+claims the former.
+
+We have therefore arranged three configurations as a factorial rather than a list of baselines. The
+first is Ray with its own object store. The third is our runtime. The second holds the scheduler
+constant, using Ray to place and manage workers while our collectives move the data, so that the
+comparison between the second and third isolates the scheduler and the comparison between the first
+and second isolates the data plane. The first and third give the headline figure. The second is
+what licenses the attribution, and attribution is the actual claim.
+
+The second configuration is possible because the work already exists in part. CylonFlow, developed
+within the Cylon project, is an actor framework with executors for Ray, Dask and Parsl, and its Ray
+executor already places Cylon workers inside Ray actors. We are adopting its structure rather than
+inventing one, which also means the middle arm has lineage within the project rather than being an
+artefact we constructed to make a point.
+
+One adaptation is required and is important to state. CylonFlow builds its Cylon environment over
+Gloo, while our runtime uses a different transport. Taking it unchanged would vary transport and
+scheduler at the same time, which would destroy the isolation that justifies the arm. We are
+therefore configuring it with our own transport so that exactly one factor changes between the
+second and third configurations. CylonFlow has been dormant since 2022, so this is a port and a
+modernisation rather than a dependency.
+
+We expect to report a null result on this workload, since model calls dominate its runtime, and we
+would rather predict that in advance than explain it afterwards.
+
+
+POSITION RELATIVE TO ADJACENT WORK IN THE GROUP
+
+Two recent papers from this group, AAFLOW and its stateful extension, also model agentic workflows
+as operators and also build on Arrow and Cylon. The distinction is the object being optimised.
+Those systems accelerate inference, the first by removing serialisation between preprocessing,
+embedding and retrieval, the second by treating attention state as a distributed object so agents
+need not recompute shared context. This work holds inference constant by design and addresses the
+communication schedule between stages instead. One of our hypotheses states that generation
+throughput is unchanged, and that hypothesis is the boundary marker between the two lines of work.
+It should be reported as such rather than left implicit, since the surface similarity is high and a
+reader comparing speedup figures across the papers would otherwise be comparing different
+quantities.
+
+
+REVISED POSITION
+
+The bound on data movement is currently unsupported by any experiment on a workload capable of
+demonstrating it. That gap is now identified, and a suitable workload is specified.
+
+The scaling prediction remains testable on the present workload.
+
+The reuse results stand as acceptance rates under a policy we have not yet validated.
+
+
+WHAT I WOULD VALUE FEEDBACK ON
+
+Whether the three way design is the right instrument for separating a data plane effect from a
+scheduling effect, and whether the validity criterion should be settled before or alongside the
+communication work.
+
+I am also interested in whether the negative result reads as a loss or as a narrowing, since I
+consider it the latter.
