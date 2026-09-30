@@ -1,0 +1,19 @@
+ARG BASE_IMAGE=cylon-armada-cosmic-python
+FROM --platform=linux/amd64 ${BASE_IMAGE}
+
+ARG RAY_VERSION=2.40.0
+
+RUN /opt/conda/envs/cylon_dev/bin/python -c \
+    "import pyarrow, google.protobuf, grpc; \
+     open('/tmp/constraints.txt', 'w').write( \
+        'pyarrow==%s\ngrpcio==%s\nprotobuf==%s\n' % \
+        (pyarrow.__version__, grpc.__version__, google.protobuf.__version__))" \
+ && /opt/conda/envs/cylon_dev/bin/pip install --no-cache-dir \
+        -c /tmp/constraints.txt "ray[default]==${RAY_VERSION}" \
+ && rm -f /tmp/constraints.txt
+
+RUN /opt/conda/envs/cylon_dev/bin/python -c \
+    "import pycylon, ray, pyarrow; print('pycylon', pycylon.__version__, \
+     'ray', ray.__version__, 'pyarrow', pyarrow.__version__)"
+
+ENV RAY_DISABLE_IMPORT_WARNING=1

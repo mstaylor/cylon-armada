@@ -494,3 +494,13 @@ variable "soci_indexed_tag" {
   type        = string
   default     = "cylon-armada-cosmic-python"
 }
+
+# ---------------------------------------------------------------------------
+# Ray baseline arms (Experiment E)
+# ---------------------------------------------------------------------------
+
+variable "ray_image_tag" {
+  description = "ECR image tag for the Ray baseline arms. Built from Dockerfile.ray.python on top of the cosmic image, which already carries pycylon with the FMI transport that arm ray-cylon needs"
+  type        = string
+  default     = "cylon-armada-ray-python"
+}

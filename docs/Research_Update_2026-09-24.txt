@@ -88,9 +88,9 @@ criticism of the implementation.
 
 The science is a small part of the work. Inference costs 0.134 seconds per galaxy against a model
 call of 3.31 seconds, so on a measured run the redshift prediction was under 8 percent of runtime
-and commentary about it was 92 percent.
+and generating the written analysis was 92 percent.
 
-The commentary carries little information about the individual galaxy. That is what the reuse
+That written analysis carries little information about the individual galaxy. That is what the reuse
 numbers have been telling us. Without the validity criterion, 99.6 percent of galaxies accept one
 of five stored answers. With it, 88 percent accept one of 146. A task in which eight of nine
 objects take an interchangeable answer produces an output that is nearly constant across its input.
@@ -133,19 +133,42 @@ and about two cents rather than fifty eight dollars. Inference then accounts for
 of runtime, which is the honest shape for an astronomy pipeline.
 
 
-A DEPENDENCY WE HAD NOT EXAMINED
+THE REUSE CRITERION ACCEPTS ANALYSES ABOUT THE WRONG GALAXY
 
-Every reuse number we have reported rests on a validity criterion whose correctness we have never
-tested. Removing the criterion and accepting any sufficiently similar stored context raises reuse
-to 99.6 percent and collapses the store to five entries, because the prompts are template generated
-and two in five pairs already exceed the similarity threshold. With the criterion, reuse is 88.4
-percent and the store reaches 146.
+Every reuse number we have reported rests on a criterion deciding when one galaxy's written
+analysis may stand in for another's. We tested that criterion this week, and it does not hold.
 
-So the criterion, not the embedding, determines the result. Its tolerance is presently the model's
-own median prediction error, which our own documentation describes as exploratory rather than a
-validated statement of equivalence. We have not compared an accepted reuse against fresh inference
-on the same input. Until we do, reuse should be reported as acceptance under a stated policy and
-never as demonstrated correctness. This is now the highest value measurement outstanding.
+First, the criterion rather than the text similarity is what controls the outcome. Accepting any
+sufficiently similar stored analysis, with no redshift condition, raises reuse to 99.6 percent and
+collapses the number of distinct analyses to five, because the prompts are generated from templates
+and two in five pairs already exceed the similarity threshold. With the redshift condition, reuse
+is 88.4 percent and 146 distinct analyses are produced.
+
+Second, and this is the finding, the analyses it accepts are about the wrong galaxy. We sampled 40
+accepted reuses and inspected what each delivered analysis states. In 38 of the 40, the text gives
+the redshift of the galaxy it was originally written for, and not the redshift of the galaxy it was
+served for. None omitted the value or stayed general. The prompt states each galaxy's redshift to
+three decimal places and the criterion permits the two to differ by up to 0.009, so the substituted
+text asserts a number that belongs to a different object.
+
+We also compared each delivered analysis against a freshly generated one for the same galaxy, using
+a second fresh generation as a baseline for how much two answers to the identical prompt differ
+anyway. Reused text sits further from a fresh answer than that baseline, by 0.036 in cosine
+similarity, and the direction holds for 20 of the 26 distinct source galaxies in the sample. That
+part is statistically clear but modest, and cosine similarity between generated texts measures
+resemblance rather than correctness, so we treat the factual finding as the substantive one.
+
+The tolerance is presently the model's own median prediction error. Two galaxies whose predicted
+redshifts are close is a different statement from two galaxies whose analyses are interchangeable,
+and only the second justifies substitution. Until a criterion is derived from the content of the
+answers rather than from the error of the predictor, reuse should be reported as acceptance under a
+stated policy and never as demonstrated correctness.
+
+This also suspends a conclusion reported earlier in this update. The growth of stored analyses, and
+therefore the finding that dividing that work across workers would not pay, was measured under this
+criterion. A stricter criterion produces more distinct analyses and a faster growing store. Deriving
+the criterion properly is now the highest value measurement outstanding, because the reuse claim,
+the cost claim and the partitioning claim all rest on it.
 
 
 CHOOSING A COMPARATOR THAT ANSWERS THE FEEDBACK

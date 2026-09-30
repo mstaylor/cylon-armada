@@ -159,7 +159,7 @@ def test_retrieve_concatenates_a_list_of_gathered_tables():
 
     The row-distributed pipeline hands it a single table, since Embed is now
     PointToPoint. This pins the list form so a gather-shaped caller — which is
-    what a corpus-distributed layout would use — keeps working.
+    what an embedding-distributed layout would use — keeps working.
     """
     context_router = MagicMock()
     context_router.find_similar.return_value = [{"context_id": "c1", "similarity": 0.5}]
@@ -384,9 +384,9 @@ def test_bind_output_feeds_memory_upsert_end_to_end():
 
 
 def test_cosmic_uses_row_distributed_patterns_not_the_canonical_ones():
-    """Rows are distributed and the corpus is replicated, so Embed and Retrieve
+    """Rows are distributed and the embeddings are replicated, so Embed and Retrieve
     are local and MemoryUpsert is the one genuine collective. Table III's
-    mapping describes a corpus-distributed layout and is deliberately not used
+    mapping describes an embedding-distributed layout and is deliberately not used
     here (spec 3.3)."""
     from armada.cosmic_workflow import COSMIC_PATTERNS
     from cylon_armada.dag_compiler import CollectivePattern
@@ -695,6 +695,90 @@ def test_a_reused_row_reports_no_tokens():
     assert cost["output_tokens"] == 0
 
 
+def _photometry_reason_table(op, docs, scores, raw, features):
+    ctx_type = op.schema_in.field(0).type
+    return pa.table({
+        "context": pa.array([{"doc": d, "score": s} for d, s in zip(docs, scores)],
+                            type=ctx_type),
+        "raw_text": pa.array(raw, type=pa.large_utf8()),
+        "photometry_features": pa.array(features, type=_PHOTOMETRY_FEATURES_TYPE),
+    })
+
+
+def test_reason_synthesizes_a_photometry_hit_from_the_querys_own_magnitudes():
+    """A hit must not return the matched candidate's stored text."""
+    from armada.cosmic_workflow import build_reason_operator
+
+    chain_executor = MagicMock()
+    op = build_reason_operator(chain_executor, dimensions=D)
+
+    borrowed_text = "some other galaxy's specific numbers\nFLAGGED_BANDS: r"
+    out = op.fn(_photometry_reason_table(
+        op, [borrowed_text], [0.95], ["prompt"], [_ONE_FLAGGED_FEATURES]))
+
+    response = out.column("response").to_pylist()[0]
+    assert response != borrowed_text
+    assert "r=2.50" in response
+    chain_executor.execute.assert_not_called()
+    assert out.column("reused").to_pylist() == [True]
+
+
+def test_reason_still_reuses_normally_when_photometry_features_is_absent():
+    """redshift_analysis/outlier_analysis hits keep returning the matched
+    candidate's text unchanged — synthesis only applies to photometry rows."""
+    from armada.cosmic_workflow import build_reason_operator
+
+    op = build_reason_operator(MagicMock(), dimensions=D)
+
+    out = op.fn(_reason_table(op, ["an earlier analysis"], [0.97], ["prompt"]))
+
+    assert out.column("response").to_pylist() == ["an earlier analysis"]
+
+
+def test_reason_calls_the_llm_on_a_photometry_miss_even_with_features_present():
+    from armada.cosmic_workflow import build_reason_operator
+
+    chain_executor = MagicMock()
+    chain_executor.execute.return_value = {"response": "fresh", "input_tokens": 1,
+                                           "output_tokens": 2, "latency_ms": 5.0,
+                                           "model_id": "m"}
+    op = build_reason_operator(chain_executor, dimensions=D)
+
+    out = op.fn(_photometry_reason_table(
+        op, [""], [0.0], ["prompt"], [_ONE_FLAGGED_FEATURES]))
+
+    chain_executor.execute.assert_called_once_with("prompt")
+    assert out.column("response").to_pylist() == ["fresh"]
+    assert out.column("reused").to_pylist() == [False]
+
+
+def test_a_resolved_hit_whose_synthesis_fails_downgrades_cache_hits_not_just_llm_calls():
+    """A row Retrieve already counted as a cache_hits must not also count
+    as an llm_calls once Reason falls back to Bedrock after failed
+    synthesis."""
+    from armada.cosmic_workflow import build_reason_operator
+    from armada.run_metrics import RunMetrics
+
+    chain_executor = MagicMock()
+    chain_executor.execute.return_value = {"response": "fresh", "input_tokens": 1,
+                                           "output_tokens": 2, "latency_ms": 5.0,
+                                           "model_id": "m"}
+    metrics = RunMetrics()
+    metrics.record_retrieval(True)  # simulates Retrieve resolving this row as a hit
+    op = build_reason_operator(chain_executor, dimensions=D, metrics=metrics)
+
+    malformed_features = [float("nan"), 0.0, 0.0, 0.0, 0.0]  # non-finite -> synthesis fails
+    out = op.fn(_photometry_reason_table(
+        op, ["candidate text"], [0.9], ["prompt"], [malformed_features]))
+
+    chain_executor.execute.assert_called_once_with("prompt")
+    assert out.column("reused").to_pylist() == [False]
+    summary = metrics.summary()
+    assert summary["cache_hits"] == 0
+    assert summary["llm_calls"] == 1
+    assert summary["synthesis_fallbacks"] == 1
+
+
 def test_bind_emits_no_envelope_for_a_reused_row():
     """A hit stores nothing: duplicating the context it just reused would grow
     the store with copies and slow every later similarity search."""
@@ -1001,3 +1085,158 @@ def test_the_reuse_key_survives_retrieve_and_reason():
     after_reason = build_reason_operator(chain, dimensions=D).fn(after_retrieve)
 
     assert after_reason.column("reuse_key").to_pylist() == [0.42]
+
+
+# --- Bind: photometry_classification write-time verification ---------------
+
+_PHOTOMETRY_FEATURES_TYPE = pa.list_(pa.float64(), 5)
+_TYPICAL_FEATURES = [0.5, -0.5, 1.0, -1.0, 0.0]
+_ONE_FLAGGED_FEATURES = [0.0, 0.0, 2.50, 0.0, 0.0]  # flags 'r'
+
+
+def test_bind_verifies_a_correct_photometry_response_and_stamps_a_key():
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({
+        "response": pa.array(["r=2.50: flagged\nFLAGGED_BANDS: r"], type=pa.large_utf8()),
+        "reuse_key": pa.array([None], type=pa.float64()),
+        "photometry_features": pa.array([_ONE_FLAGGED_FEATURES], type=_PHOTOMETRY_FEATURES_TYPE),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert "reuse_key" in envelope
+    assert envelope["reuse_key"] > 1000.0
+
+
+def test_bind_refuses_a_wrong_photometry_response():
+    """The response claims 'typical' but the galaxy's own magnitudes say
+    otherwise — this row must get no reuse_key at all, so it can never be
+    matched as a reuse candidate later."""
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({
+        "response": pa.array(["FLAGGED_BANDS: NONE"], type=pa.large_utf8()),
+        "reuse_key": pa.array([None], type=pa.float64()),
+        "photometry_features": pa.array([_ONE_FLAGGED_FEATURES], type=_PHOTOMETRY_FEATURES_TYPE),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert "reuse_key" not in envelope
+
+
+def test_bind_refuses_a_photometry_response_missing_the_marker():
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({
+        "response": pa.array(["Looks typical to me."], type=pa.large_utf8()),
+        "reuse_key": pa.array([None], type=pa.float64()),
+        "photometry_features": pa.array([_TYPICAL_FEATURES], type=_PHOTOMETRY_FEATURES_TYPE),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert "reuse_key" not in envelope
+
+
+def test_bind_leaves_a_non_photometry_rows_key_untouched():
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({
+        "response": pa.array(["some redshift analysis"], type=pa.large_utf8()),
+        "reuse_key": pa.array([0.015], type=pa.float64()),
+        "photometry_features": pa.array([None], type=_PHOTOMETRY_FEATURES_TYPE),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert envelope["reuse_key"] == pytest.approx(0.015)
+
+
+def test_bind_refuses_a_photometry_range_key_with_no_features_to_verify_it_against():
+    """A photometry-range key with no features column was never checked
+    against this row's response."""
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+    from armada.reuse_policy import PHOTOMETRY_KEY_OFFSET
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({
+        "response": pa.array(["FLAGGED_BANDS: r"], type=pa.large_utf8()),
+        "reuse_key": pa.array([PHOTOMETRY_KEY_OFFSET + 4], type=pa.float64()),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert "reuse_key" not in envelope
+
+
+def test_bind_reverifies_a_photometry_row_even_when_it_already_carries_an_upfront_key():
+    """Bind must re-verify unconditionally, whether or not a key is already set."""
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+    from armada.reuse_policy import photometry_reuse_key_for
+
+    op = build_bind_operator(workflow_id="wf")
+    upfront_key = photometry_reuse_key_for(_ONE_FLAGGED_FEATURES)
+    table = pa.table({
+        "response": pa.array(["FLAGGED_BANDS: NONE"], type=pa.large_utf8()),
+        "reuse_key": pa.array([upfront_key], type=pa.float64()),
+        "photometry_features": pa.array([_ONE_FLAGGED_FEATURES], type=_PHOTOMETRY_FEATURES_TYPE),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert "reuse_key" not in envelope
+
+
+def test_bind_confirms_a_photometry_rows_upfront_key_when_the_response_is_correct():
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+    from armada.reuse_policy import photometry_reuse_key_for
+
+    op = build_bind_operator(workflow_id="wf")
+    upfront_key = photometry_reuse_key_for(_ONE_FLAGGED_FEATURES)
+    table = pa.table({
+        "response": pa.array(["r=2.50: flagged\nFLAGGED_BANDS: r"], type=pa.large_utf8()),
+        "reuse_key": pa.array([upfront_key], type=pa.float64()),
+        "photometry_features": pa.array([_ONE_FLAGGED_FEATURES], type=_PHOTOMETRY_FEATURES_TYPE),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert envelope["reuse_key"] == pytest.approx(upfront_key)
+
+
+def test_bind_without_photometry_features_column_is_unaffected():
+    """Every existing caller (and redshift_analysis/outlier_analysis-only
+    runs) doesn't pass this column at all — must behave exactly as before."""
+    import json
+
+    from armada.cosmic_workflow import build_bind_operator
+
+    op = build_bind_operator(workflow_id="wf")
+    table = pa.table({
+        "response": pa.array(["a"], type=pa.large_utf8()),
+        "reuse_key": pa.array([None], type=pa.float64()),
+    })
+
+    envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
+
+    assert "reuse_key" not in envelope

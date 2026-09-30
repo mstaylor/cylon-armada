@@ -243,3 +243,190 @@ def test_world_size_one_matches_langchain_native_invoke():
     assert [s["task_description"] for s in executor_stored] == \
            [s["task_description"] for s in invoke_stored]
     assert [s["response"] for s in executor_stored] == [s["response"] for s in invoke_stored]
+
+
+# ---------------------------------------------------------------------------
+# photometry_classification write-time verification, full chain
+# ---------------------------------------------------------------------------
+
+def test_photometry_features_survive_the_full_chain_and_produce_a_verified_reuse_key():
+    """photometry_features has to ride unchanged through Preprocess -> Embed
+    -> Retrieve -> Reason -> Bind for Bind's write-time verification to have
+    anything to check. Each of those four operators got its own passthrough
+    line added individually — this is what proves the wiring holds together
+    as a chain, not just in each operator's own isolated unit test."""
+    from cosmic_ai.task_generator import template_for
+    from armada.reuse_policy import PHOTOMETRY_BANDS, PHOTOMETRY_KEY_OFFSET, photometry_ground_truth_flags
+
+    predictions, true_redshifts, magnitudes = _astromae_fixture(4)
+    residuals = np.abs(predictions - true_redshifts)
+    outlier_threshold = float(np.percentile(residuals, 90))
+    photo_idx = next(i for i in range(4)
+                     if template_for(i, float(residuals[i]), outlier_threshold, 0)
+                     == "photometry_classification")
+
+    prompts = generate_tasks_from_results(predictions, true_redshifts, magnitudes,
+                                          max_tasks=4, seed=42,
+                                          outlier_threshold=outlier_threshold)
+    mags = magnitudes[photo_idx]
+    ground_truth = photometry_ground_truth_flags(mags)
+    flagged_str = "NONE" if not ground_truth else ",".join(sorted(ground_truth))
+
+    services = _mock_services()
+    _, _, context_manager, chain_executor = services
+    chain_executor.execute.side_effect = lambda p: {
+        "response": f"analysis\nFLAGGED_BANDS: {flagged_str}",
+        "input_tokens": 1, "output_tokens": 1, "latency_ms": 1.0, "model_id": "mock",
+    }
+
+    table = pa.table({
+        "raw_text": pa.array([prompts[photo_idx]], type=pa.large_utf8()),
+        "reuse_key": pa.array([None], type=pa.float64()),
+        "photometry_features": pa.array([[float(v) for v in mags]],
+                                        type=pa.list_(pa.float64(), 5)),
+    })
+
+    bridge = SpyBridge(world_size=1, my_shard=None)
+    ArmadaExecutor(bridge).run(_workflow(services), input_tables=table, ctx=None, root=0)
+
+    stored = context_manager.store_context.call_args_list
+    assert len(stored) == 1
+    expected_bitmask = sum(1 << i for i, b in enumerate(PHOTOMETRY_BANDS) if b in ground_truth)
+    assert stored[0].kwargs["reuse_key"] == pytest.approx(PHOTOMETRY_KEY_OFFSET + expected_bitmask)
+
+
+def test_a_wrong_photometry_response_stores_with_no_reuse_key_over_the_full_chain():
+    from cosmic_ai.task_generator import template_for
+    from armada.reuse_policy import photometry_ground_truth_flags
+
+    predictions, true_redshifts, magnitudes = _astromae_fixture(4)
+    residuals = np.abs(predictions - true_redshifts)
+    outlier_threshold = float(np.percentile(residuals, 90))
+    photo_idx = next(i for i in range(4)
+                     if template_for(i, float(residuals[i]), outlier_threshold, 0)
+                     == "photometry_classification")
+
+    prompts = generate_tasks_from_results(predictions, true_redshifts, magnitudes,
+                                          max_tasks=4, seed=42,
+                                          outlier_threshold=outlier_threshold)
+    mags = magnitudes[photo_idx]
+    ground_truth = photometry_ground_truth_flags(mags)
+    # Deliberately wrong: claim the opposite of the truth.
+    wrong_str = "NONE" if ground_truth else "u"
+
+    services = _mock_services()
+    _, _, context_manager, chain_executor = services
+    chain_executor.execute.side_effect = lambda p: {
+        "response": f"analysis\nFLAGGED_BANDS: {wrong_str}",
+        "input_tokens": 1, "output_tokens": 1, "latency_ms": 1.0, "model_id": "mock",
+    }
+
+    table = pa.table({
+        "raw_text": pa.array([prompts[photo_idx]], type=pa.large_utf8()),
+        "reuse_key": pa.array([None], type=pa.float64()),
+        "photometry_features": pa.array([[float(v) for v in mags]],
+                                        type=pa.list_(pa.float64(), 5)),
+    })
+
+    bridge = SpyBridge(world_size=1, my_shard=None)
+    ArmadaExecutor(bridge).run(_workflow(services), input_tables=table, ctx=None, root=0)
+
+    stored = context_manager.store_context.call_args_list
+    assert len(stored) == 1
+    assert stored[0].kwargs["reuse_key"] is None
+
+
+def test_photometry_reuse_actually_fires_end_to_end_on_a_matching_query():
+    """A photometry query whose upfront key matches an existing candidate
+    must actually reuse it through the real gated Retrieve/Reason, and the
+    returned response must come from the query's own values, not the
+    candidate's borrowed text."""
+    from armada.cosmic_workflow import (
+        build_embed_operator,
+        build_preprocess_operator,
+        build_reason_operator,
+        build_retrieve_operator,
+    )
+    from armada.reuse_policy import photometry_reuse_key_for, redshift_validator
+
+    candidate_mags = [0.0, 0.0, 2.50, 0.0, 0.0]      # flags 'r'
+    query_mags = [0.0, 0.0, 3.00, 0.0, 0.0]           # also flags only 'r' — same key
+    candidate_key = photometry_reuse_key_for(candidate_mags)
+    query_key = photometry_reuse_key_for(query_mags)
+    assert candidate_key == query_key                # precondition: same flagged set
+
+    borrowed_text = "some other galaxy's own numbers\nFLAGGED_BANDS: r"
+    embedding_service, context_router, context_manager, chain_executor = _mock_services()
+    context_router.find_similar.return_value = [{"context_id": "candidate-1", "similarity": 0.9}]
+    context_router.context_manager.get_context.return_value = {
+        "response": borrowed_text,
+        "reuse_key": candidate_key,
+    }
+
+    # Preprocess | Embed | Retrieve | Reason only — Bind/MemoryUpsert are not
+    # needed to observe the response, and a reused row is never bound for
+    # storage anyway (nothing would reach store_context to inspect there).
+    partial_workflow = (
+        build_preprocess_operator(dimensions=D)
+        | build_embed_operator(embedding_service, dimensions=D)
+        | build_retrieve_operator(context_router, workflow_id=WORKFLOW_ID, dimensions=D,
+                                  reuse_validator=redshift_validator(tolerance=0.0))
+        | build_reason_operator(chain_executor, dimensions=D)
+    )
+
+    table = pa.table({
+        "raw_text": pa.array(["query prompt"], type=pa.large_utf8()),
+        "reuse_key": pa.array([query_key], type=pa.float64()),
+        "photometry_features": pa.array([[float(v) for v in query_mags]],
+                                        type=pa.list_(pa.float64(), 5)),
+    })
+
+    bridge = SpyBridge(world_size=1, my_shard=None)
+    result = ArmadaExecutor(bridge).run(partial_workflow, input_tables=table, ctx=None, root=0)
+
+    chain_executor.execute.assert_not_called()
+
+    response = result.column("response").to_pylist()[0]
+    assert result.column("reused").to_pylist() == [True]
+    assert response != borrowed_text
+    assert "r=3.00" in response       # the query's own value
+    assert "2.50" not in response    # the candidate's borrowed value, absent
+    assert "FLAGGED_BANDS: r" in response
+
+
+def test_photometry_reuse_stores_nothing_end_to_end_on_a_matching_query():
+    """The storage-side half of the same reproduction: a reused row must
+    never be bound, so context_manager.store_context is never called for it.
+    Split from the response-content test above so a failure names exactly
+    which contract broke."""
+    from armada.reuse_policy import photometry_reuse_key_for, redshift_validator
+
+    candidate_mags = [0.0, 0.0, 2.50, 0.0, 0.0]
+    query_mags = [0.0, 0.0, 3.00, 0.0, 0.0]
+    candidate_key = photometry_reuse_key_for(candidate_mags)
+    query_key = photometry_reuse_key_for(query_mags)
+
+    embedding_service, context_router, context_manager, chain_executor = _mock_services()
+    context_router.find_similar.return_value = [{"context_id": "candidate-1", "similarity": 0.9}]
+    context_router.context_manager.get_context.return_value = {
+        "response": "some other galaxy's own numbers\nFLAGGED_BANDS: r",
+        "reuse_key": candidate_key,
+    }
+
+    workflow = build_cosmic_workflow(
+        embedding_service, context_router, context_manager, chain_executor,
+        workflow_id=WORKFLOW_ID, dimensions=D, reuse_validator=redshift_validator(tolerance=0.0),
+    )
+
+    table = pa.table({
+        "raw_text": pa.array(["query prompt"], type=pa.large_utf8()),
+        "reuse_key": pa.array([query_key], type=pa.float64()),
+        "photometry_features": pa.array([[float(v) for v in query_mags]],
+                                        type=pa.list_(pa.float64(), 5)),
+    })
+
+    bridge = SpyBridge(world_size=1, my_shard=None)
+    ArmadaExecutor(bridge).run(workflow, input_tables=table, ctx=None, root=0)
+
+    chain_executor.execute.assert_not_called()
+    context_manager.store_context.assert_not_called()

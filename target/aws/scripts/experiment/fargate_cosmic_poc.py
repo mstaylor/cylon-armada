@@ -16,9 +16,15 @@ Usage:
     python fargate_cosmic_poc.py --scaling weak --runs 5 --live
     python fargate_cosmic_poc.py --scaling strong --backend armada --world-sizes 4 --live
 
-Each world size runs `--runs` paired runs; within a run the two arms execute
-back to back, never concurrently, and their order alternates between runs so
-that Bedrock latency drift over the session cannot masquerade as an effect.
+Each world size runs `--runs` paired runs; within a run the arms execute back
+to back, never concurrently, and their order alternates between runs so that
+Bedrock latency drift over the session cannot masquerade as an effect. Order
+fairness over a short sweep depends on the arm count: with the arms that have
+executors today, every arm leads within the first three runs and leads equally
+often over the full cycle. Changing ARMS or ARMS_WITHOUT_EXECUTOR means
+re-checking test_gating_the_ray_arms_does_not_unbalance_who_leads and
+test_leader_diversity_over_short_runs rather than assuming the stride
+generalises.
 
 Prerequisites:
     - cylon-armada-python image built with the AstroMAE deps and pushed to ECR
@@ -29,11 +35,13 @@ import argparse
 import itertools
 import json
 import logging
+import math
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import boto3
+from botocore.exceptions import ClientError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -104,26 +112,57 @@ def galaxies_for(scaling, world_size, per_rank, total):
     return min(per_rank * world_size, total)
 
 
-ARMS = ("armada", "langchain", "isolated")
+ARMS = ("armada", "langchain", "isolated", "ray-native", "ray-cylon")
+
+ARMS_WITHOUT_EXECUTOR = ("ray-native", "ray-cylon")
+LAUNCHABLE_ARMS = tuple(arm for arm in ARMS if arm not in ARMS_WITHOUT_EXECUTOR)
+
 _ORDERS = tuple(itertools.permutations(ARMS))
+
+
+def _order_stride(n_arms, n_orders):
+    """Calculate a stride through permutations that cycles through different leaders.
+
+    With n arms there are n! permutations. A naive modulo would cycle through them
+    consecutively, but the first n_arms permutations all start with the same leader,
+    so a short sweep would have one arm always leading. A stride skips by at least
+    one block (n_orders // n_arms) and is coprime with n_orders, which guarantees
+    the full cycle visits every permutation and so gives every arm an equal number
+    of leads over n! runs.
+
+    Distinct leaders over the first n runs is NOT guaranteed by that construction
+    and must not be assumed for an arbitrary arm count. It holds at the current
+    five arms (stride 29, first five runs led by all five arms) and is pinned by
+    test_leader_diversity_over_short_runs; it is false at three arms, where
+    stride 5 leads with arms 0, 2, 2. Anyone changing ARMS must re-check that
+    test rather than trusting this function to generalise.
+    """
+    block = n_orders // n_arms
+    stride = block
+    while math.gcd(stride, n_orders) != 1:
+        stride += 1
+    return stride
+
+
+_ORDER_STRIDE = _order_stride(len(ARMS), len(_ORDERS))
 
 
 def arm_order(run_index):
     """The arms in the order they run, cycling through every permutation.
 
-    Rotation alone is not enough with three arms: it produces one fixed cyclic
-    sequence, so `isolated` would always immediately follow `langchain` and
-    never `armada`. Both of those touch Redis and ContextTable state, and
-    `isolated` supplies the headline isolation-penalty number, so any warm-up or
-    leftover-state bias from the preceding arm would land on it in one constant
-    undetected direction. Permuting varies which arm precedes which, not only
-    which leads.
+    Rotation alone is not enough: it produces one fixed cyclic sequence, so certain
+    arms would always follow the same arm. Both the store and collectives touch
+    shared state, and `isolated` supplies the headline isolation-penalty number,
+    so any warm-up or leftover-state bias from the preceding arm would land on it
+    in one constant undetected direction. Permuting varies which arm precedes which.
+    The stride spreads the leader across runs; see _order_stride for exactly what
+    that does and does not guarantee.
     """
-    return _ORDERS[run_index % len(_ORDERS)]
+    return _ORDERS[(run_index * _ORDER_STRIDE) % len(_ORDERS)]
 
 
 _ARM_SELECTIONS = {
-    "all": ARMS,
+    "all": LAUNCHABLE_ARMS,
     "both": ("armada", "langchain"),
 }
 
@@ -135,8 +174,26 @@ def _selected_arms(backend):
     Folding it into "all" would silently add a third arm — 50% more Fargate and
     Bedrock than the name implies — to every caller and script that already
     passes it.
+
+    The Ray arms are registered in ARMS so the ordering and override machinery
+    can be built and tested against their names, but they have no executor:
+    run_epochs has no branch for either, ContextManager rejects the plasma
+    store ray-native maps to, and run_task cannot point a task at the Ray
+    image. Launching one costs a Fargate task per rank and yields no
+    measurement, so "all" excludes them and naming one explicitly fails here
+    rather than at the far end of a sweep.
     """
-    return _ARM_SELECTIONS.get(backend, (backend,))
+    selected = _ARM_SELECTIONS.get(backend, (backend,))
+    pending = tuple(arm for arm in selected if arm in ARMS_WITHOUT_EXECUTOR)
+    if pending:
+        raise ValueError(
+            f"arm(s) {list(pending)} have no executor and cannot be launched: "
+            f"run_epochs in run_cosmic_local.py dispatches only on "
+            f"{list(LAUNCHABLE_ARMS)}, and no ECS task definition serves the Ray "
+            f"image. Remove them from ARMS_WITHOUT_EXECUTOR once a launcher "
+            f"exists."
+        )
+    return selected
 
 
 def plan_launches(backend, runs):
@@ -146,15 +203,17 @@ def plan_launches(backend, runs):
     arm per run in arm_order; "both" the two sharing arms; a single backend
     yields one launch per run in the same slot it would have had.
     """
+    selected = _selected_arms(backend)
     launches = []
     for run_index in range(runs):
         for arm in arm_order(run_index):
-            if arm in _selected_arms(backend):
+            if arm in selected:
                 launches.append((run_index, arm))
     return launches
 
 
-_CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon"}
+_CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon",
+                  "ray-native": "plasma", "ray-cylon": "cylon"}
 
 
 def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
@@ -192,23 +251,87 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
     }
 
 
-def _run_tasks(ecs, world_size, overrides_for_rank):
+# run_task failure reason AWS returns when the AZ/instance family it picked has
+# no Fargate capacity right now — transient, and retrying (often into the other
+# subnet's AZ) succeeds within minutes. Any other failure reason (bad task
+# definition, IAM, etc.) is not retried.
+CAPACITY_FAILURE_REASON = "Capacity is unavailable"
+CAPACITY_RETRY_MAX_DELAY_S = 300
+
+CAPACITY_RETRYABLE_ERROR_CODES = (
+    "ThrottlingException",
+    "Throttling",
+    "RequestLimitExceeded",
+    "TooManyRequestsException",
+    "ServiceUnavailable",
+)
+
+CAPACITY_BUDGET_FRACTION = 0.5
+
+
+def capacity_budget_s(timeout_ms, fraction=CAPACITY_BUDGET_FRACTION):
+    """How long one rank may spend retrying before its cohort is already dead.
+
+    Every rank launched earlier is blocked inside FMI communicator construction
+    with FMI_MAX_TIMEOUT = timeout_ms. A rank that retries past that point
+    launches into a cohort whose peers have already given up: it pairs with
+    nobody, and the driver then waits out the full arm timeout on tasks that
+    cannot produce a measurement. Bounding retries at a fraction of the peers'
+    own timeout keeps the failure fast and loud instead of slow and silent.
+    """
+    return (timeout_ms / 1000.0) * fraction
+
+
+def _capacity_retryable(failures):
+    return bool(failures) and all(
+        CAPACITY_FAILURE_REASON in f.get("reason", "")
+        or f.get("reason", "") in CAPACITY_RETRYABLE_ERROR_CODES
+        for f in failures
+    )
+
+
+def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
+               capacity_backoff_s, budget_s):
     def _launch(rank):
-        resp = ecs.run_task(
-            cluster=CLUSTER,
-            taskDefinition=TASK_DEFINITION,
-            launchType="FARGATE",
-            networkConfiguration={
-                "awsvpcConfiguration": {
-                    "subnets": SUBNETS,
-                    "assignPublicIp": "ENABLED",
-                }
-            },
-            overrides=overrides_for_rank(rank),
-        )
-        if resp.get("failures"):
-            raise RuntimeError(f"rank {rank} run_task failed: {resp['failures']}")
-        return resp["tasks"][0]["taskArn"]
+        attempt = 0
+        deadline = time.monotonic() + budget_s
+        while True:
+            try:
+                resp = ecs.run_task(
+                    cluster=CLUSTER,
+                    taskDefinition=TASK_DEFINITION,
+                    launchType="FARGATE",
+                    networkConfiguration={
+                        "awsvpcConfiguration": {
+                            "subnets": SUBNETS,
+                            "assignPublicIp": "ENABLED",
+                        }
+                    },
+                    overrides=overrides_for_rank(rank),
+                )
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code not in CAPACITY_RETRYABLE_ERROR_CODES:
+                    raise
+                failures = [{"reason": code}]
+            else:
+                failures = resp.get("failures")
+                if not failures:
+                    return resp["tasks"][0]["taskArn"]
+            if not _capacity_retryable(failures) or attempt >= capacity_retries:
+                raise RuntimeError(f"rank {rank} run_task failed: {failures}")
+            delay = min(capacity_backoff_s * (2 ** attempt), CAPACITY_RETRY_MAX_DELAY_S)
+            if time.monotonic() + delay > deadline:
+                raise RuntimeError(
+                    f"rank {rank} still has no Fargate capacity with only "
+                    f"{deadline - time.monotonic():.0f}s of its {budget_s:.0f}s budget "
+                    f"left; abandoning the arm rather than launching into a cohort "
+                    f"whose peers' FMI communicators have already timed out"
+                )
+            logger.warning("  rank %d hit Fargate capacity limits (attempt %d/%d), retrying in %ds",
+                            rank, attempt + 1, capacity_retries, delay)
+            time.sleep(delay)
+            attempt += 1
 
     # Ranks must come up together — the channel establishes connections during
     # communicator construction, so a straggler stalls every peer it pairs with.
@@ -320,7 +443,9 @@ def launch_world_size(ecs, world_size, args):
                          overrides["containerOverrides"][0]["environment"]})
             continue
         arns = _run_tasks(ecs, world_size, lambda rank: build_overrides(
-            rank, world_size, comm_name, s3_prefix, point_args, arm))
+            rank, world_size, comm_name, s3_prefix, point_args, arm),
+            args.capacity_retries, args.capacity_backoff_s,
+            capacity_budget_s(args.timeout_ms))
         logger.info("  launched %d tasks; waiting for the arm to finish", len(arns))
         _wait_for_tasks(ecs, arns, args.arm_timeout_s)
         _record_arm_timing(ecs, arns, s3_prefix)
@@ -364,7 +489,7 @@ def build_parser():
                         help="residual above which a galaxy gets the outlier prompt, pinned "
                              "from the whole population (p90 over 1253 SDSS galaxies). Unpinned, "
                              "the generator derives it per shard and the workload moves with N")
-    parser.add_argument("--backend", choices=["armada", "langchain", "isolated", "all", "both"],
+    parser.add_argument("--backend", choices=list(ARMS) + ["all", "both"],
                         default="all",
                         help="which arm(s); the experiment is a paired run, so both by default")
     parser.add_argument("--runs", type=int, default=5,
@@ -383,6 +508,12 @@ def build_parser():
     parser.add_argument("--timeout-ms", type=int, default=120000)
     parser.add_argument("--arm-timeout-s", type=int, default=1800,
                         help="how long to wait for one arm's tasks to stop before the next")
+    parser.add_argument("--capacity-retries", type=int, default=6,
+                        help="per-rank retries on a transient Fargate 'Capacity is "
+                             "unavailable' run_task failure before giving up")
+    parser.add_argument("--capacity-backoff-s", type=int, default=30,
+                        help="base delay for exponential backoff between capacity "
+                             f"retries, capped at {CAPACITY_RETRY_MAX_DELAY_S}s")
     parser.add_argument("--live", action="store_true",
                         help="real Bedrock on every rank — costs money per galaxy")
     parser.add_argument("--dry-run", action="store_true")

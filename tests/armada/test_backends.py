@@ -341,7 +341,7 @@ def test_a_galaxys_prompt_is_the_same_at_every_world_size():
     Template choice also alternates on index parity, and that index is local to
     the array passed in — so galaxy 19 is odd at N=1 and even as rank 1's first
     row at N=64, giving the same galaxy a different prompt. Pinning the
-    threshold fixes one route to corpus-size dependence; the offset fixes the
+    threshold fixes one route to population-size dependence; the offset fixes the
     other. Without both, an isolation curve measured across N mixes the effect
     under study with a moving workload.
     """
@@ -357,7 +357,7 @@ def test_a_galaxys_prompt_is_the_same_at_every_world_size():
     mags = rng.normal(0.0, 1.0, (total, 5))
     threshold = float(np.percentile(np.abs(pred - true), 90))
 
-    def corpus(world_size):
+    def galaxy_prompts(world_size):
         out = {}
         for rank in range(world_size):
             lo, hi = shard_bounds(total, world_size, rank)
@@ -368,9 +368,9 @@ def test_a_galaxys_prompt_is_the_same_at_every_world_size():
                 out[lo + offset] = prompt
         return out
 
-    reference = corpus(1)
+    reference = galaxy_prompts(1)
     for world_size in (2, 4, 8, 15):
-        assert corpus(world_size) == reference, f"corpus changed at N={world_size}"
+        assert galaxy_prompts(world_size) == reference, f"prompts changed at N={world_size}"
 
 
 def test_a_shard_local_index_alone_changes_the_prompt():
@@ -391,22 +391,22 @@ def test_a_shard_local_index_alone_changes_the_prompt():
     assert prompt(0) != prompt(1)
 
 
-def test_the_corpus_hash_identifies_the_workload_a_rank_ran():
-    """Recorded so the frozen-corpus claim is a fact the results carry, not a
+def test_the_workload_hash_identifies_the_workload_a_rank_ran():
+    """Recorded so the frozen-galaxies claim is a fact the results carry, not a
     property the runner is trusted to have preserved."""
-    from armada.run_cosmic_local import corpus_hash
+    from armada.run_cosmic_local import workload_hash
 
-    a = corpus_hash(0, ["p0", "p1"], [0.1, 0.2])
-    assert a == corpus_hash(0, ["p0", "p1"], [0.1, 0.2])
-    assert a != corpus_hash(0, ["p0", "CHANGED"], [0.1, 0.2])
-    assert a != corpus_hash(0, ["p0", "p1"], [0.1, 0.9])
-    assert a != corpus_hash(5, ["p0", "p1"], [0.1, 0.2])
+    a = workload_hash(0, ["p0", "p1"], [0.1, 0.2])
+    assert a == workload_hash(0, ["p0", "p1"], [0.1, 0.2])
+    assert a != workload_hash(0, ["p0", "CHANGED"], [0.1, 0.2])
+    assert a != workload_hash(0, ["p0", "p1"], [0.1, 0.9])
+    assert a != workload_hash(5, ["p0", "p1"], [0.1, 0.2])
 
 
 def test_concatenated_shard_hashes_match_across_world_sizes():
     """The property the sweep needs: the same population sharded differently
-    must still identify as the same corpus."""
-    from armada.run_cosmic_local import corpus_hash, shard_bounds
+    must still identify as the same galaxies."""
+    from armada.run_cosmic_local import workload_hash, shard_bounds
 
     prompts = [f"prompt-{i}" for i in range(12)]
     keys = [i / 100 for i in range(12)]
@@ -415,11 +415,11 @@ def test_concatenated_shard_hashes_match_across_world_sizes():
         parts = []
         for rank in range(world_size):
             lo, hi = shard_bounds(12, world_size, rank)
-            parts.append(corpus_hash(lo, prompts[lo:hi], keys[lo:hi]))
+            parts.append(workload_hash(lo, prompts[lo:hi], keys[lo:hi]))
         return "".join(parts)
 
     assert len({digest(n) for n in (1, 2, 3, 4, 6)}) == 5
-    per_rank = {n: [corpus_hash(*(lambda lo, hi: (lo, prompts[lo:hi], keys[lo:hi]))(
+    per_rank = {n: [workload_hash(*(lambda lo, hi: (lo, prompts[lo:hi], keys[lo:hi]))(
         *shard_bounds(12, n, r))) for r in range(n)] for n in (1, 2, 4)}
     assert per_rank[2][0] != per_rank[1][0]
 

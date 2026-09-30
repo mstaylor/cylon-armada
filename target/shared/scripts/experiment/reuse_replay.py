@@ -67,7 +67,7 @@ class RankReplay:
     """One rank's view: which contexts it can see, and what it hit."""
 
     def __init__(self, rank, shard, embeddings, threshold, top_k=5,
-                 gate_values=None, gate_tolerance=None):
+                 gate_values=None, gate_tolerance=None, record_accepted_pairs=False):
         self.rank = rank
         self.shard = shard
         self.threshold = threshold
@@ -81,6 +81,11 @@ class RankReplay:
         self.llm_calls = 0
         self.gate_rejections = 0
         self.gate_errors = []
+        # Populated only when requested: identifies WHICH candidate a hit
+        # matched, for callers that need to sample real accepted pairs (e.g.
+        # validating an accepted reuse against fresh inference) rather than
+        # just the aggregate counts summary() reports.
+        self.accepted_pairs = [] if record_accepted_pairs else None
 
     @property
     def galaxies(self):
@@ -108,15 +113,33 @@ class RankReplay:
             return False
 
         if self._gate_values is None or self._gate_tolerance is None:
+            if self.accepted_pairs is not None:
+                best = candidates[above][np.argmax(sims[above])]
+                self.accepted_pairs.append((int(index), int(best), None))
             return True
 
         ranked = candidates[above][np.argsort(-sims[above])][: self.top_k]
-        errors = np.abs(self._gate_values[ranked] - self._gate_values[index])
-        if not (errors <= self._gate_tolerance).any():
+        # gate_values is (N,) for a single-feature policy (e.g. predicted
+        # redshift alone) or (N, K) for a multi-feature one (e.g. predicted
+        # redshift plus the standardized magnitudes) — Euclidean distance over
+        # the K columns collapses to plain abs-difference when K==1, so this
+        # is a strict generalisation, not a second code path.
+        diff = self._gate_values[ranked] - self._gate_values[index]
+        errors = np.abs(diff) if self._gate_values.ndim == 1 else np.linalg.norm(diff, axis=1)
+        admits = errors <= self._gate_tolerance
+        if not admits.any():
             self.gate_rejections += 1
             return False
 
         self.gate_errors.append(float(errors.min()))
+        if self.accepted_pairs is not None:
+            # The runtime's own Retrieve walks candidates in cosine order and
+            # reuses the first one the policy admits (see cosmic_workflow.py's
+            # build_retrieve_operator) — argmax on a boolean array returns the
+            # first True, i.e. the same, best-cosine admitted candidate.
+            first_admitted = int(np.argmax(admits))
+            matched = int(ranked[first_admitted])
+            self.accepted_pairs.append((int(index), matched, float(errors[first_admitted])))
         return True
 
     def run_epoch(self, indices):
@@ -140,7 +163,7 @@ class RankReplay:
         self._visible.extend(indices)
 
     def summary(self):
-        return {
+        result = {
             "rank": self.rank,
             "shard": list(self.shard),
             "galaxies": self.galaxies,
@@ -152,16 +175,27 @@ class RankReplay:
             "gate_rejections": self.gate_rejections,
             "worst_gate_error": max(self.gate_errors) if self.gate_errors else 0.0,
         }
+        if self.accepted_pairs is not None:
+            # (query_index, matched_candidate_index, gate_error) per hit;
+            # gate_error is None when replayed without a gate.
+            result["accepted_pairs"] = list(self.accepted_pairs)
+        return result
 
 
 def replay(embeddings, world_size, topology, threshold=0.85, epoch_batch_size=4,
-           order=None, top_k=5, gate_values=None, gate_tolerance=None):
+           order=None, top_k=5, gate_values=None, gate_tolerance=None,
+           record_accepted_pairs=False):
     """Replay one (world_size, topology) point over the whole population.
 
     `order` permutes the catalogue before sharding, which is how a caller asks
     whether the result depends on partitioning: contiguous sharding of a
     catalogue whose neighbours are already similar flatters the isolated
     topology, and shuffling removes that advantage.
+
+    `record_accepted_pairs` adds an `"accepted_pairs"` list to each rank's
+    summary — (query_index, matched_candidate_index, gate_error) per hit —
+    for callers that need actual accepted-reuse identities (e.g. sampling
+    pairs to validate against fresh inference), not just the aggregate counts.
     """
     if topology not in TOPOLOGIES:
         raise ValueError(f"unknown topology {topology!r}, expected one of {TOPOLOGIES}")
@@ -175,7 +209,7 @@ def replay(embeddings, world_size, topology, threshold=0.85, epoch_batch_size=4,
     gate_values = None if gate_values is None else np.asarray(gate_values, dtype=np.float64)
     ranks = [
         RankReplay(rank, shard_bounds(n_items, world_size, rank), embeddings, threshold,
-                   top_k, gate_values, gate_tolerance)
+                   top_k, gate_values, gate_tolerance, record_accepted_pairs)
         for rank in range(world_size)
     ]
     epochs_per_rank = [plan_epochs(r.galaxies, epoch_batch_size) for r in ranks]

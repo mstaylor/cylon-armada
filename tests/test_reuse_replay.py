@@ -283,3 +283,40 @@ def test_worst_gate_error_never_exceeds_the_tolerance():
     for r in replay(embeddings, 2, SHARED, 0.5, 4,
                     gate_values=values, gate_tolerance=0.05):
         assert r["worst_gate_error"] <= 0.05 + 1e-9
+
+
+def test_multi_feature_gate_rejects_a_pair_a_single_feature_gate_would_accept():
+    """A candidate close on feature 0 alone would pass a scalar gate, but a
+    combined Euclidean gate must also see feature 1 diverging — this is the
+    exact failure mode the redshift-only gate had against photometry that
+    disagreed even at near-identical predicted redshift."""
+    a = np.zeros(D, dtype=np.float32); a[0] = 1.0
+    b = a.copy(); b[1] = 0.05
+    embeddings = np.vstack([a, b])
+
+    gate_values = np.array([[0.10, 0.10], [0.101, 0.90]])  # feature 0 close, feature 1 far
+
+    scalar_summary = replay(embeddings, 1, ISOLATED, 0.85, 1,
+                            gate_values=gate_values[:, 0], gate_tolerance=0.01)[0]
+    multi_summary = replay(embeddings, 1, ISOLATED, 0.85, 1,
+                           gate_values=gate_values, gate_tolerance=0.01)[0]
+
+    assert scalar_summary["cache_hits"] == 1, "scalar gate sees only feature 0, and accepts"
+    assert multi_summary["cache_hits"] == 0, "multi-feature gate sees feature 1 diverge, rejects"
+    assert multi_summary["gate_rejections"] == 1
+
+
+def test_multi_feature_gate_with_one_column_matches_the_scalar_gate_exactly():
+    """Euclidean distance over a single column is abs-difference — the (N, 1)
+    shape must be a strict generalisation of the (N,) shape, not a second,
+    divergent code path."""
+    rng = np.random.default_rng(5)
+    embeddings = rng.normal(size=(30, D)).astype(np.float32)
+    values = rng.uniform(0.0, 1.0, size=30)
+
+    scalar = totals(replay(embeddings, 2, SHARED, 0.5, 4,
+                          gate_values=values, gate_tolerance=0.05))
+    as_column = totals(replay(embeddings, 2, SHARED, 0.5, 4,
+                             gate_values=values.reshape(-1, 1), gate_tolerance=0.05))
+
+    assert scalar == as_column

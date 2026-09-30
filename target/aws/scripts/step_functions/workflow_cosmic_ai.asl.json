@@ -1,0 +1,103 @@
+{
+  "Comment": "Cosmic AI published baseline (Arm A) — broadcast/scatter/gather through S3. Migrated from the click-ops DataParallel-CosmicAI state machine in the AI-for-Astronomy account.",
+  "StartAt": "Initialize",
+  "States": {
+    "Initialize": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "OutputPath": "$.Payload",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${INIT_FUNCTION_NAME}",
+        "Payload.$": "$"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "Distributed Test"
+    },
+    "Distributed Test": {
+      "Type": "Map",
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {
+          "InputType": "JSON"
+        },
+        "Parameters": {
+          "Bucket.$": "$.body.S3_BUCKET",
+          "Key.$": "$.body.S3_KEY"
+        }
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "EXPRESS"
+        },
+        "StartAt": "Model Inference",
+        "States": {
+          "Model Inference": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${EXECUTOR_FUNCTION_NAME}",
+              "Payload.$": "$"
+            },
+            "OutputPath": "$.Payload",
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException",
+                  "Lambda.TooManyRequestsException"
+                ],
+                "IntervalSeconds": 1,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "MaxConcurrency": ${MAX_CONCURRENCY},
+      "Label": "DistributedTest",
+      "Next": "Summarize",
+      "ResultPath": null
+    },
+    "Summarize": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "OutputPath": "$.Payload",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${SUMMARIZE_FUNCTION_NAME}",
+        "Payload.$": "$"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "End": true
+    }
+  },
+  "TimeoutSeconds": ${TIMEOUT_SECONDS}
+}

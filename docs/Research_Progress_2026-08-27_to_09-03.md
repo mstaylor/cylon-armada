@@ -131,7 +131,7 @@ Stated as the two claims separately, because they are often conflated:
    to say, it needs Lambda. This is the one item with real unknown risk attached.
 4. **Swap mocks for live services** — Bedrock Titan embeddings, the real ContextTable/Redis backend —
    and wire real AstroMAE inference in place of the fixture.
-5. **Scale validation at the science regime.** Everything above is verified at N ≤ 8 locally and N = 16
+5. **Scale validation at science scale.** Everything above is verified at N ≤ 8 locally and N = 16
    for establishment. The original Cosmic AI Lambda runs used **N = 110, 137, 173**; the establishment
    work makes that tractable in principle but it is unvalidated above 16.
 6. **Cost and rate discipline before any sweep.** At N = 110+ every rank issues embedding and LLM calls;
@@ -252,7 +252,7 @@ the 140-vCPU account quota). The figures discussed below are from that re-run.
 
 Separately, collective correctness was verified at **arbitrary, non-power-of-two world sizes** (N = 3,
 5) with real distributed collectives. This matters because the original Cosmic AI runs used N = 110,
-137, 173 — arbitrary N is the operating regime for the serverless arm, not a corner case.
+137, 173 — arbitrary N is the normal operating case for the serverless arm, not a corner case.
 
 ---
 

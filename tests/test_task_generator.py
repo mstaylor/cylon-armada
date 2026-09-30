@@ -10,8 +10,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'target', 'shared', 'scripts'))
 
 from cosmic_ai.task_generator import (
+    assert_default_photometry_template,
+    bands_for,
     generate_tasks_from_results,
     load_config,
+    template_for,
     _resolve_config,
     _format_bands,
     _DEFAULT_TEMPLATES,
@@ -156,3 +159,85 @@ class TestConfigResolution:
 
         assert survey_types == ["env survey"]
         os.unlink(f.name)
+
+
+class TestBandsFor:
+    def test_default_bands(self, monkeypatch):
+        monkeypatch.delenv("COSMIC_AI_CONFIG", raising=False)
+        assert bands_for() == BANDS
+
+    def test_config_file_bands(self):
+        config_data = {"bands": ["g", "u", "r", "i", "z"]}
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(config_data, f)
+            f.flush()
+
+            resolved = bands_for(config_path=f.name)
+
+        assert resolved == ("g", "u", "r", "i", "z")
+        os.unlink(f.name)
+
+
+class TestAssertDefaultPhotometryTemplate:
+    def test_the_built_in_default_is_accepted(self, monkeypatch):
+        monkeypatch.delenv("COSMIC_AI_CONFIG", raising=False)
+        assert_default_photometry_template()
+
+    def test_a_config_file_overriding_the_template_is_refused(self):
+        config_data = {"templates": {"photometry_classification": "custom question {band_str}"}}
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(config_data, f)
+            f.flush()
+
+            with pytest.raises(ValueError, match="photometry_classification template"):
+                assert_default_photometry_template(config_path=f.name)
+
+        os.unlink(f.name)
+
+    def test_a_config_file_overriding_an_unrelated_template_is_still_accepted(self):
+        config_data = {"templates": {"redshift_analysis": "custom redshift question {band_str}"}}
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(config_data, f)
+            f.flush()
+
+            assert_default_photometry_template(config_path=f.name)
+
+        os.unlink(f.name)
+
+
+class TestTemplateFor:
+    def test_outlier_when_residual_exceeds_threshold(self):
+        assert template_for(0, residual=0.5, outlier_threshold=0.1) == "outlier_analysis"
+
+    def test_even_global_index_is_redshift_analysis(self):
+        assert template_for(4, residual=0.01, outlier_threshold=0.1, index_offset=0) == \
+            "redshift_analysis"
+
+    def test_odd_global_index_is_photometry_classification(self):
+        assert template_for(5, residual=0.01, outlier_threshold=0.1, index_offset=0) == \
+            "photometry_classification"
+
+    def test_index_offset_shifts_parity(self):
+        """A shard's local index 0 at global offset 1 is globally odd."""
+        assert template_for(0, residual=0.01, outlier_threshold=0.1, index_offset=1) == \
+            "photometry_classification"
+
+    def test_matches_generate_tasks_from_results_choice_exactly(self, sample_data):
+        """template_for must not silently drift from the branching it was
+        extracted from — verified by checking every row's prompt contains the
+        markers only that row's chosen template would produce."""
+        tasks = generate_tasks_from_results(
+            sample_data["predictions"], sample_data["true_redshifts"],
+            sample_data["magnitudes"], max_tasks=None, index_offset=0,
+        )
+        residuals = np.abs(sample_data["predictions"] - sample_data["true_redshifts"])
+        outlier_threshold = np.percentile(residuals, 90)
+
+        for idx, task in enumerate(tasks):
+            expected = template_for(idx, float(residuals[idx]), outlier_threshold, 0)
+            if expected == "outlier_analysis":
+                assert "Analyze whether this prediction error is significant" in task
+            elif expected == "redshift_analysis":
+                assert "Assess the prediction accuracy" in task
+            else:
+                assert "identify which bands, if any" in task

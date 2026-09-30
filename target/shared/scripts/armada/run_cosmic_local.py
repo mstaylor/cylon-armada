@@ -52,10 +52,20 @@ import pyarrow as pa
 from armada.cosmic_workflow import build_cosmic_workflow
 from armada.epochs import epoch_count, plan_epochs
 from armada.executor import ArmadaExecutor, InputPlacement, required_peer_map
-from armada.reuse_policy import redshift_validator
+from armada.reuse_policy import (
+    PHOTOMETRY_BANDS,
+    is_photometry_key,
+    photometry_reuse_key_for,
+    redshift_validator,
+)
 from armada.run_metrics import RunMetrics
 from communicator.fmi_bridge import FMIBridge
-from cosmic_ai.task_generator import generate_tasks_from_results
+from cosmic_ai.task_generator import (
+    assert_default_photometry_template,
+    bands_for,
+    generate_tasks_from_results,
+    template_for,
+)
 
 logger = logging.getLogger("run_cosmic_local")
 
@@ -121,7 +131,72 @@ def collective_epochs(n_items, world_size, batch_size):
     return epoch_count(largest, batch_size)
 
 
-def corpus_hash(start, prompts, reuse_keys):
+def reuse_keys_for(predictions, true_redshifts, residuals, magnitudes,
+                   outlier_threshold, index_offset, n_local):
+    """Per-row reuse_key, template-aware. See
+    docs/Reuse_Gate_Validity_Findings_2026-09-28.md for the design and
+    measurements behind each template's key choice.
+    """
+    keys = []
+    for idx in range(n_local):
+        template = template_for(idx, float(residuals[idx]), outlier_threshold, index_offset)
+        if template == "redshift_analysis":
+            keys.append(_continuous_key(float(predictions[idx]) - float(true_redshifts[idx])))
+        elif template == "outlier_analysis":
+            keys.append(_continuous_key(float(predictions[idx])))
+        elif template == "photometry_classification":
+            keys.append(photometry_reuse_key_for(magnitudes[idx]))
+        else:
+            keys.append(None)
+    return keys
+
+
+def _continuous_key(value):
+    """None if value falls in photometry_classification's reserved key
+    range — see docs/Reuse_Gate_Validity_Findings_2026-09-28.md.
+    """
+    if is_photometry_key(value):
+        return None
+    return value
+
+
+def photometry_features_for(magnitudes, predictions, true_redshifts, residuals,
+                            outlier_threshold, index_offset, n_local):
+    """Per-row photometry_features passthrough: this row's own 5 magnitude
+    values for a valid photometry_classification row, else None. See
+    docs/Reuse_Gate_Validity_Findings_2026-09-28.md.
+    """
+    features = []
+    for idx in range(n_local):
+        template = template_for(idx, float(residuals[idx]), outlier_threshold, index_offset)
+        if template != "photometry_classification":
+            features.append(None)
+        elif photometry_reuse_key_for(magnitudes[idx]) is None:
+            features.append(None)
+        else:
+            features.append([float(v) for v in magnitudes[idx]])
+    return features
+
+
+def assert_photometry_band_order(config_path=None):
+    """Refuse to run if the resolved band order does not match
+    reuse_policy.PHOTOMETRY_BANDS."""
+    resolved = tuple(bands_for(config_path=config_path))
+    if resolved != PHOTOMETRY_BANDS:
+        raise ValueError(
+            f"resolved band order {resolved!r} does not match "
+            f"reuse_policy.PHOTOMETRY_BANDS {PHOTOMETRY_BANDS!r}"
+        )
+
+
+def assert_photometry_config_is_safe(config_path=None):
+    """Both preconditions a gated photometry run depends on: band order and
+    template text both match the built-in default."""
+    assert_photometry_band_order(config_path=config_path)
+    assert_default_photometry_template(config_path=config_path)
+
+
+def workload_hash(start, prompts, reuse_keys):
     """Identity of the workload this rank actually ran.
 
     A scaling curve is only interpretable if a galaxy's prompt and key are the
@@ -133,8 +208,8 @@ def corpus_hash(start, prompts, reuse_keys):
 
     This is a per-shard digest and it is NOT partition-independent: shard
     boundaries move with N, so concatenating per-rank hashes gives a different
-    string at a different world size even over an identical corpus. It proves
-    corresponding shards match at a FIXED N. Proving the corpus is frozen
+    string at a different world size even over identical galaxies. It proves
+    corresponding shards match at a FIXED N. Proving the galaxies are frozen
     ACROSS N needs a digest over the whole population in global index order,
     which is what the readiness check computes.
     """
@@ -270,7 +345,7 @@ def live_services(dimensions):
     from context.router import ContextRouter
     from cost.bedrock_pricing import BedrockConfig
 
-    config = BedrockConfig.resolve()
+    config = BedrockConfig.resolve(payload={"embedding_dimensions": dimensions})
     embedding_service = EmbeddingService(config=config)
     context_manager = ContextManager.from_config(
         config,
@@ -301,12 +376,16 @@ class ExecutionBackend(Enum):
     Armada = "armada"
     LangChain = "langchain"
     Isolated = "isolated"
+    RayNative = "ray-native"
+    RayCylon = "ray-cylon"
 
 
 _CONTEXT_STORE = {
     ExecutionBackend.Armada: "cylon",
     ExecutionBackend.LangChain: "redis",
     ExecutionBackend.Isolated: "cylon",
+    ExecutionBackend.RayNative: "plasma",
+    ExecutionBackend.RayCylon: "cylon",
 }
 
 
@@ -487,24 +566,39 @@ def main(argv=None):
     placement = InputPlacement.PreDistributed
 
     n_local = len(predictions)
+    residuals = np.abs(predictions - true_redshifts)
+    # Resolved explicitly (not left as None) so generate_tasks_from_results'
+    # own template choice and reuse_keys_for's per-row template lookup agree
+    # on the exact same threshold — passing None to both independently would
+    # let each derive its own np.percentile call and silently drift apart.
+    outlier_threshold = outlier_threshold_for()
+    if outlier_threshold is None:
+        outlier_threshold = float(np.percentile(residuals, 90))
+    gated = reuse_policy_for() is not None
+    if gated:
+        assert_photometry_config_is_safe()
     prompts = generate_tasks_from_results(predictions, true_redshifts, magnitudes,
                                           max_tasks=n_local, seed=42,
-                                          outlier_threshold=outlier_threshold_for(),
+                                          outlier_threshold=outlier_threshold,
                                           index_offset=start)[:n_local]
-    reuse_keys = [float(p) for p in predictions[:n_local]]
+    reuse_keys = reuse_keys_for(predictions, true_redshifts, residuals, magnitudes,
+                                outlier_threshold, start, n_local)
+    photometry_features = photometry_features_for(magnitudes, predictions, true_redshifts,
+                                                   residuals, outlier_threshold, start, n_local)
 
     seq = build_for(true_rank)
-    gated = reuse_policy_for() is not None
+    photometry_features_type = pa.list_(pa.float64(), 5)
 
-    def raw_table(texts, keys):
+    def raw_table(texts, keys, features):
         columns = {"raw_text": pa.array(list(texts), type=pa.large_utf8())}
         if gated:
             columns["reuse_key"] = pa.array(list(keys), type=pa.float64())
+            columns["photometry_features"] = pa.array(list(features), type=photometry_features_type)
         return pa.table(columns)
 
-    shards = [raw_table(prompts[lo:hi], reuse_keys[lo:hi])
+    shards = [raw_table(prompts[lo:hi], reuse_keys[lo:hi], photometry_features[lo:hi])
               for lo, hi in plan_epochs(n_local, args.epoch_batch_size)]
-    shards += [raw_table([], [])
+    shards += [raw_table([], [], [])
                for _ in range(collective_epochs(n_galaxies, world_size,
                                                 args.epoch_batch_size) - len(shards))]
 
@@ -515,7 +609,7 @@ def main(argv=None):
               "shard": [start, stop],
               "epochs": len(shards), "epoch_batch_size": args.epoch_batch_size,
               "placement": placement.value, "live": args.live,
-              "corpus_hash": corpus_hash(start, prompts, reuse_keys)}
+              "workload_hash": workload_hash(start, prompts, reuse_keys)}
     if args.real_inference:
         record["device"] = args.device
 

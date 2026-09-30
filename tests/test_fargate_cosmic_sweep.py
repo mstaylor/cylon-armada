@@ -10,6 +10,7 @@ Run: pytest tests/test_fargate_cosmic_sweep.py -v
 """
 
 import argparse
+import importlib
 import importlib.util
 import os
 
@@ -24,6 +25,29 @@ def _driver():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+_SHARED_SCRIPTS = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "target", "shared", "scripts"))
+
+
+def _shared_module(dotted):
+    """Import a shared-scripts module by absolute path.
+
+    Mirrors _driver's seam. Inserting a relative path into sys.path instead
+    would depend on pytest's working directory and would leak into every test
+    that ran afterwards in the session.
+    """
+    import sys
+
+    added = _SHARED_SCRIPTS not in sys.path
+    if added:
+        sys.path.insert(0, _SHARED_SCRIPTS)
+    try:
+        return importlib.import_module(dotted)
+    finally:
+        if added:
+            sys.path.remove(_SHARED_SCRIPTS)
 
 
 def _args(**overrides):
@@ -57,20 +81,22 @@ def test_arm_order_cycles_through_every_permutation():
     """Every arm must lead equally often, and — the part rotation misses —
     every arm must FOLLOW every other equally often."""
     m = _driver()
-    orders = [m.arm_order(i) for i in range(6)]
+    n_orders = len(m._ORDERS)
+    orders = [m.arm_order(i) for i in range(n_orders)]
 
-    assert len(set(orders)) == 6
-    assert m.arm_order(6) == m.arm_order(0)
+    assert len(set(orders)) == n_orders
+    assert m.arm_order(n_orders) == m.arm_order(0)
 
 
 def test_no_arm_systematically_follows_the_same_arm():
-    """Rotation alone leaves a fixed cyclic sequence: isolated would always
-    follow langchain and never armada. Both touch Redis and ContextTable state,
-    and isolated supplies the headline number, so leftover-state bias would land
-    on it in one constant undetected direction."""
+    """Rotation alone leaves a fixed cyclic sequence where certain arms always
+    follow the same arm. Both touch Redis and ContextTable state, and some arms
+    supply headline numbers, so leftover-state bias would land on them in one
+    constant undetected direction. A stride through permutations ensures variety."""
     m = _driver()
+    n_orders = len(m._ORDERS)
     predecessors = {arm: set() for arm in m.ARMS}
-    for i in range(6):
+    for i in range(n_orders):
         order = m.arm_order(i)
         for earlier, later in zip(order, order[1:]):
             predecessors[later].add(earlier)
@@ -83,10 +109,11 @@ def test_grouped_launches_never_split_a_run():
     m = _driver()
     launches = m.plan_launches("all", 3)
 
-    assert len(launches) == 9
+    assert len(launches) == 3 * len(m.LAUNCHABLE_ARMS)
     for run_index in range(3):
         in_run = [arm for idx, arm in launches if idx == run_index]
-        assert tuple(in_run) == m.arm_order(run_index)
+        expected = tuple(a for a in m.arm_order(run_index) if a in m.LAUNCHABLE_ARMS)
+        assert tuple(in_run) == expected
     assert [idx for idx, _ in launches] == sorted(idx for idx, _ in launches)
 
 
@@ -178,27 +205,45 @@ def test_every_arm_disables_the_context_table_snapshot():
                                    backend=arm)["containerOverrides"][0]["environment"]
     }
 
-    for arm in ("armada", "langchain", "isolated"):
+    for arm in m.ARMS:
         assert env_for(arm)["CONTEXT_TABLE_SNAPSHOT"] == "0"
 
 
-def test_all_three_arms_launch_per_run():
+def test_all_arms_launch_when_all_selected():
+    """'all' launches every arm that has an executor. The Ray arms are
+    registered names without one, so including them would spend a Fargate task
+    per rank to produce an error record or nothing at all."""
     m = _driver()
     arms = {arm for _, arm in m.plan_launches("all", 1)}
-    assert arms == {"armada", "langchain", "isolated"}
+    assert arms == set(m.LAUNCHABLE_ARMS)
 
 
 def test_no_arm_is_systematically_first():
     """Arm order varies across runs so session drift cannot be mistaken for an
-    effect. The cycle is one full set of permutations, so each arm leads
+    effect. The full cycle is one pass through every permutation, so each arm leads
     exactly the same number of times over it."""
     from collections import Counter
 
     m = _driver()
-    leaders = Counter(m.arm_order(i)[0] for i in range(6))
+    n_orders = len(m._ORDERS)
+    leaders = Counter(m.arm_order(i)[0] for i in range(n_orders))
 
-    assert set(leaders) == {"armada", "langchain", "isolated"}
+    assert set(leaders) == set(m.ARMS)
     assert len(set(leaders.values())) == 1
+
+
+def test_leader_diversity_over_short_runs():
+    """Production sweeps run only len(ARMS) repetitions, not the full permutation
+    cycle. Over that short window, leader diversity must not degrade. A broken
+    stride (e.g. consecutive stepping with 5 arms) would give [armada, armada,
+    armada, armada, armada] — satisfying full-cycle fairness but failing the
+    production constraint. This test catches that regression."""
+    m = _driver()
+    n_arms = len(m.ARMS)
+    leaders = set(m.arm_order(i)[0] for i in range(n_arms))
+
+    assert leaders == set(m.ARMS), \
+        f"Over {n_arms} runs, not all arms led; got leaders {leaders}"
 
 
 def test_every_arm_receives_the_same_reuse_tolerance_and_outlier_threshold():
@@ -206,7 +251,7 @@ def test_every_arm_receives_the_same_reuse_tolerance_and_outlier_threshold():
     being measured, exactly like the snapshot flag."""
     m = _driver()
     seen = set()
-    for arm in ("armada", "langchain", "isolated"):
+    for arm in m.ARMS:
         env = {e["name"]: e["value"] for e in m.build_overrides(
             0, 4, "c", "p/", _args(), backend=arm)["containerOverrides"][0]["environment"]}
         seen.add((env["REUSE_KEY_TOLERANCE"], env["OUTLIER_RESIDUAL_THRESHOLD"]))
@@ -289,3 +334,70 @@ def test_timing_summary_reports_the_slowest_task_not_the_mean():
     assert s["ranks"] == 2
     assert s["pull_s_max"] == 65.0
     assert s["total_s_max"] == 110.0
+
+
+def test_the_ray_arms_are_registered_but_refused_until_an_executor_exists():
+    """The names are registered so ordering, overrides and the context-store
+    mapping can be built and tested against them. Launching one is a different
+    matter: run_epochs has no branch for either arm, and ContextManager rejects
+    the plasma store ray-native maps to, before the try/except that would have
+    recorded the error. A sweep would burn a Fargate task per rank per run to
+    discover that. The refusal must name what is missing."""
+    m = _driver()
+
+    assert "ray-native" in m.ARMS
+    assert "ray-cylon" in m.ARMS
+
+    for arm in ("ray-native", "ray-cylon"):
+        with pytest.raises(ValueError) as excinfo:
+            m._selected_arms(arm)
+        assert "no executor" in str(excinfo.value)
+
+    with pytest.raises(ValueError):
+        m.plan_launches("ray-cylon", 1)
+
+
+def test_all_includes_every_arm_but_both_still_means_two():
+    """'both' has always meant exactly the two sharing arms. Folding the new
+    arms into it would silently add Fargate and Bedrock cost to every caller
+    that already passes it."""
+    m = _driver()
+
+    assert set(m._selected_arms("all")) == set(m.LAUNCHABLE_ARMS)
+    assert m._selected_arms("both") == ("armada", "langchain")
+    assert set(m.LAUNCHABLE_ARMS) | set(m.ARMS_WITHOUT_EXECUTOR) == set(m.ARMS)
+
+
+def test_ray_arms_have_a_context_store_mapping():
+    """A backend with no entry in _CONTEXT_STORE fails at runtime inside the
+    task, which costs a Fargate launch to discover."""
+    run_cosmic_local = _shared_module("armada.run_cosmic_local")
+    ExecutionBackend = run_cosmic_local.ExecutionBackend
+    _CONTEXT_STORE = run_cosmic_local._CONTEXT_STORE
+
+    assert _CONTEXT_STORE[ExecutionBackend.RayNative] == "plasma"
+    assert _CONTEXT_STORE[ExecutionBackend.RayCylon] == "cylon"
+
+
+def test_gating_the_ray_arms_does_not_unbalance_who_leads():
+    """arm_order permutes all five registered arms and plan_launches then drops
+    the two without an executor. Filtering a balanced sequence is not
+    automatically balanced, and the arm that leads is the one that pays any
+    cold-start or leftover-state cost. isolated supplies the headline
+    isolation-penalty number, so a bias landing on it constantly would be
+    invisible and would move that number."""
+    from collections import Counter
+
+    m = _driver()
+    launchable = set(m.LAUNCHABLE_ARMS)
+    leaders = Counter(
+        next(a for a in m.arm_order(i) if a in launchable)
+        for i in range(len(m._ORDERS))
+    )
+
+    assert set(leaders) == launchable
+    assert len(set(leaders.values())) == 1, f"leads are uneven: {dict(leaders)}"
+
+    short = [next(a for a in m.arm_order(i) if a in launchable)
+             for i in range(len(m.LAUNCHABLE_ARMS))]
+    assert set(short) == launchable, f"over {len(short)} runs the leaders were {short}"

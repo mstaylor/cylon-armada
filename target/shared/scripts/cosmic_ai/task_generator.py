@@ -35,10 +35,14 @@ _DEFAULT_TEMPLATES = {
         "accuracy and what it implies for this galaxy's distance estimate."
     ),
     "photometry_classification": (
-        "Given standardized ugriz photometry features {band_str} and "
-        "predicted redshift z={z_pred:.3f}, assess whether the "
-        "photometry is consistent with the predicted redshift and "
-        "flag any features that look anomalous."
+        "Given standardized ugriz photometry features {band_str} (each "
+        "value is a z-score relative to the training population: mean 0, "
+        "standard deviation 1), identify which bands, if any, have a "
+        "standardized value greater than 2 in absolute value. List each "
+        "band's value and whether it is flagged, then end your response "
+        "with exactly one line in this exact format, with no other text "
+        "on that line: FLAGGED_BANDS: <comma-separated band letters, or "
+        "NONE if no bands are flagged>."
     ),
     "outlier_analysis": (
         "The AstroMAE model predicted z={z_pred:.3f} for a galaxy "
@@ -155,6 +159,49 @@ def _format_bands(photometry, bands=BANDS):
     )
 
 
+def bands_for(config_path=None):
+    """Resolved band order for this run: config file bands if in effect,
+    else the built-in default BANDS."""
+    _, _, resolved_bands = _resolve_config(config_path=config_path)
+    return resolved_bands
+
+
+def assert_default_photometry_template(config_path=None):
+    """Refuse a gated run whose photometry_classification template text has
+    been overridden. reuse_policy.PHOTOMETRY_FLAG_THRESHOLD is a fixed
+    constant tied to the built-in wording; see
+    docs/Reuse_Gate_Validity_Findings_2026-09-28.md.
+    """
+    resolved_templates, _, _ = _resolve_config(config_path=config_path)
+    resolved = resolved_templates.get("photometry_classification")
+    default = _DEFAULT_TEMPLATES["photometry_classification"]
+    if resolved != default:
+        raise ValueError(
+            "photometry_classification template has been overridden by "
+            "config; reuse_policy.PHOTOMETRY_FLAG_THRESHOLD assumes the "
+            "built-in wording and cannot verify ground truth against a "
+            "different question — restore the default template before "
+            "gating photometry_classification reuse (REUSE_KEY_TOLERANCE)"
+        )
+
+
+def template_for(idx, residual, outlier_threshold, index_offset=0):
+    """Which canonical template galaxy `idx` uses: outlier_analysis for a
+    residual above threshold, else redshift_analysis/photometry_classification
+    alternating on the galaxy's population-global index parity.
+
+    Public so callers assigning a reuse policy per row (e.g.
+    armada/run_cosmic_local.py's per-template reuse_key) can match this
+    exactly rather than re-deriving the branching separately — the two would
+    silently drift apart the moment either one changed alone.
+    """
+    if residual > outlier_threshold:
+        return "outlier_analysis"
+    if (index_offset + idx) % 2 == 0:
+        return "redshift_analysis"
+    return "photometry_classification"
+
+
 def generate_tasks_from_results(
     predictions,
     true_redshifts,
@@ -190,7 +237,7 @@ def generate_tasks_from_results(
         index_offset: Position of this array's first row in the whole
             population. Template choice alternates on index parity, and that
             index is otherwise local, so galaxy 19 is odd when it starts at 0
-            and even when it starts a shard — the same corpus-size dependence
+            and even when it starts a shard — the same population-size dependence
             as the threshold, by a different route. Pass the shard's global
             start whenever the population is sharded.
         templates: Optional dict of custom templates (overrides config file).
@@ -242,14 +289,14 @@ def generate_tasks_from_results(
         residual = float(residuals[idx])
         band_str = _format_bands(mags, resolved_bands)
 
-        # Choose template based on residual — outliers get outlier_analysis
-        if residual > outlier_threshold:
+        template_name = template_for(idx, residual, outlier_threshold, index_offset)
+        if template_name == "outlier_analysis":
             template = resolved_templates.get("outlier_analysis", "")
             tasks.append(template.format(
                 z_pred=z_pred, z_true=z_true, residual=residual,
                 band_str=band_str,
             ))
-        elif (index_offset + idx) % 2 == 0:
+        elif template_name == "redshift_analysis":
             template = resolved_templates.get("redshift_analysis", "")
             tasks.append(template.format(
                 z_pred=z_pred, z_true=z_true, band_str=band_str,

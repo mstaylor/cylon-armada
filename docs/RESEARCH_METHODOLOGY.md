@@ -59,12 +59,12 @@ The framework (`cylon-armada`) is a novel contribution — not an off-the-shelf 
 **Precise answer: what are we running similarity against?**
 
 Each `armada_executor` worker holds a query embedding for its assigned task. It searches
-that query against the **corpus of embeddings for all previously completed LLM responses**
-stored in the shared context store (Redis or Cylon ContextTable) for the same `workflow_id`.
+that query against the **stored embeddings for all previously completed LLM responses**
+held in the shared context store (Redis or Cylon ContextTable) for the same `workflow_id`.
 
 ```
-Query:   embedding(current_task_description)            ← 1024-dim float32 vector
-Corpus:  { embedding(prior_task_i) : i ∈ completed }   ← all prior responses this workflow
+Query:             embedding(current_task_description)      ← 1024-dim float32 vector
+Stored embeddings: { embedding(prior_task_i) : i ∈ completed }   ← all prior responses this workflow
 ```
 
 **Step by step:**
@@ -76,10 +76,10 @@ Corpus:  { embedding(prior_task_i) : i ∈ completed }   ← all prior responses
 2. Each `armada_executor` fetches its query embedding from Redis.
 
 3. The **ContextRouter** fetches all embeddings previously stored in the context store
-   for this `workflow_id`. On run 1 the corpus is empty (cold start). On runs 2–4 it
+   for this `workflow_id`. On run 1 there are no stored embeddings yet (cold start). On runs 2–4 it
    contains the embeddings of all tasks whose LLM responses were computed in prior runs.
 
-4. Cosine similarity is computed between the query and every corpus embedding:
+4. Cosine similarity is computed between the query and every stored embedding:
 
    ```
    similarity(q, c) = (q · c) / (‖q‖ · ‖c‖)

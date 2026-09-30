@@ -81,11 +81,11 @@ that connective step.
 
 Patterns come from COSMIC_PATTERNS rather than from canonical_operators(),
 while the schemas still come from the canonical operators. Cosmic AI is
-row-distributed with a replicated corpus: each rank owns its galaxies end to
+row-distributed with replicated embeddings: each rank owns its galaxies end to
 end, so Embed and Retrieve are local and the only cross-rank requirement is
 that every rank sees every rank's new contexts, which is an AllGather.
 Table III of the proposal maps Embed to scatter-gather and Retrieve to reduce,
-which describes a corpus-distributed layout where Retrieve's reduce merges
+which describes an embedding-distributed layout where Retrieve's reduce merges
 partial top-k lists. SELECTCOLLECTIVE is evaluated at plan-compilation time,
 so the collective a typed operator maps to may depend on layout; the operator
 abstraction is what stays fixed. See
@@ -101,6 +101,11 @@ import numpy as np
 import pyarrow as pa
 
 from armada.operator import ArmadaOperator, ArmadaSequence
+from armada.reuse_policy import (
+    is_photometry_key,
+    synthesize_photometry_response,
+    verified_photometry_reuse_key,
+)
 from armada.run_metrics import is_throttle_error
 from cylon_armada.dag_compiler import CollectivePattern
 from experiment.exp_a2_schema import canonical_operators
@@ -157,6 +162,8 @@ def build_preprocess_operator(max_chars: Optional[int] = None, dimensions: int =
         }
         if "reuse_key" in table.column_names:
             out["reuse_key"] = table.column("reuse_key")
+        if "photometry_features" in table.column_names:
+            out["photometry_features"] = table.column("photometry_features")
         return pa.table(out)
 
     return ArmadaOperator("Preprocess", COSMIC_PATTERNS["Preprocess"],
@@ -184,6 +191,8 @@ def build_embed_operator(embedding_service, dimensions: int = 1024, metrics=None
             out["raw_text"] = table.column("raw_text")
         if "reuse_key" in table.column_names:
             out["reuse_key"] = table.column("reuse_key")
+        if "photometry_features" in table.column_names:
+            out["photometry_features"] = table.column("photometry_features")
         return pa.table(out)
 
     return ArmadaOperator("Embed", COSMIC_PATTERNS["Embed"],
@@ -291,6 +300,8 @@ def build_retrieve_operator(context_router, workflow_id: str, dimensions: int = 
             out["raw_text"] = table.column("raw_text")
         if "reuse_key" in table.column_names:
             out["reuse_key"] = table.column("reuse_key")
+        if "photometry_features" in table.column_names:
+            out["photometry_features"] = table.column("photometry_features")
         # Retrieve's own canonical output (ranked_docs) doesn't carry the
         # embedding forward — self-forward it under a fixed name so Bind can
         # still recover it, regardless of what the producer (Embed) named it.
@@ -325,6 +336,14 @@ def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None,
 
     A row with neither a resolved hit nor `raw_text` falls back to the empty
     prompt, which keeps a bare single-column caller working.
+
+    A photometry_classification hit returns
+    reuse_policy.synthesize_photometry_response(features) instead of the
+    matched candidate's stored text, so a reuse never states another
+    galaxy's numbers. If synthesis fails the row falls through to a real
+    Bedrock call instead of returning borrowed text, and
+    metrics.record_synthesis_fallback() corrects cache_hits for that row.
+    See docs/Reuse_Gate_Validity_Findings_2026-09-28.md.
     """
     canon = _canonical(dimensions)["Reason"]
     response_type = canon.schema_out.field(0).type
@@ -333,13 +352,27 @@ def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None,
         contexts = table.column(0).to_pylist()
         prompts = (table.column("raw_text").to_pylist()
                    if "raw_text" in table.column_names else [""] * len(contexts))
+        photometry_features = (table.column("photometry_features").to_pylist()
+                               if "photometry_features" in table.column_names
+                               else [None] * len(contexts))
         results, reused = [], []
-        for ctx, prompt in zip(contexts, prompts):
+        for ctx, prompt, features in zip(contexts, prompts, photometry_features):
             if ctx and ctx.get("doc"):
-                results.append({"response": ctx["doc"], "input_tokens": 0, "output_tokens": 0,
-                                "latency_ms": 0.0, "model_id": "", "cost_usd": 0.0})
-                reused.append(True)
-                continue
+                response = ctx["doc"]
+                is_hit = True
+                if features is not None:
+                    synthesized = synthesize_photometry_response(features)
+                    if synthesized is not None:
+                        response = synthesized
+                    else:
+                        is_hit = False
+                        if metrics is not None:
+                            metrics.record_synthesis_fallback()
+                if is_hit:
+                    results.append({"response": response, "input_tokens": 0, "output_tokens": 0,
+                                    "latency_ms": 0.0, "model_id": "", "cost_usd": 0.0})
+                    reused.append(True)
+                    continue
             result = _bedrock_call(lambda: chain_executor.execute(prompt), metrics)
             model_id = result.get("model_id", "")
             if pricing is None:
@@ -364,6 +397,8 @@ def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None,
             out["query_embedding"] = table.column("query_embedding")
         if "reuse_key" in table.column_names:
             out["reuse_key"] = table.column("reuse_key")
+        if "photometry_features" in table.column_names:
+            out["photometry_features"] = table.column("photometry_features")
         # Reason's own canonical output (response) doesn't carry LLM token
         # usage forward — ChainExecutor.execute() returns it, so capture it
         # here (as JSON text, Arrow has no generic dict type) or it's lost.
@@ -479,6 +514,16 @@ def build_bind_operator(workflow_id: str, rank=None) -> ArmadaOperator:
     rank, which ones this rank actually created. Left None the key is omitted
     and the context counts as originated wherever it is stored, which is the
     single-rank case.
+
+    A row carrying `photometry_features` is a photometry_classification row
+    (see reuse_keys_for/photometry_features_for in run_cosmic_local.py) and
+    is re-verified here unconditionally against
+    verified_photometry_reuse_key, regardless of whether it already carries
+    an upfront key — a wrong response strips the key rather than letting it
+    stand. A row with no `photometry_features` but a key already in
+    photometry_classification's reserved range (is_photometry_key) also has
+    that key stripped: it was never actually checked against a response.
+    See docs/Reuse_Gate_Validity_Findings_2026-09-28.md.
     """
     schema_in = pa.schema([pa.field("response", pa.large_utf8())])
     kv_type = pa.struct([pa.field("k", pa.large_utf8()), pa.field("v", pa.large_utf8())])
@@ -508,16 +553,24 @@ def build_bind_operator(workflow_id: str, rank=None) -> ArmadaOperator:
                   if "reused" in table.column_names else [False] * n)
         row_keys = (table.column("reuse_key").to_pylist()
                     if "reuse_key" in table.column_names else [None] * n)
+        photometry_features = (table.column("photometry_features").to_pylist()
+                               if "photometry_features" in table.column_names else [None] * n)
 
         rows = []
         for i in range(n):
             if reused[i]:
                 continue
+            effective_key = row_keys[i]
+            if photometry_features[i] is not None:
+                effective_key = verified_photometry_reuse_key(
+                    responses[i], photometry_features[i])
+            elif is_photometry_key(effective_key):
+                effective_key = None  # never verified against a response; see docstring
             envelope = {"workflow_id": workflow_id, "response": responses[i]}
             if rank is not None:
                 envelope["rank"] = rank
-            if row_keys[i] is not None:
-                envelope["reuse_key"] = row_keys[i]
+            if effective_key is not None:
+                envelope["reuse_key"] = effective_key
             if task_descriptions is not None:
                 envelope["task_description"] = task_descriptions[i]
             if embeddings_b64 is not None:

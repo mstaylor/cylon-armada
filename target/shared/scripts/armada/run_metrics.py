@@ -66,11 +66,28 @@ class RunMetrics:
         self.output_tokens_total = 0
         self.cost_usd_total = 0.0
         self.unpriced_calls = 0
+        self.synthesis_fallbacks = 0
 
     def record_retrieval(self, hit):
         self.retrievals += 1
         if hit:
             self.cache_hits += 1
+
+    def record_synthesis_fallback(self):
+        """Downgrade a resolved-but-unusable hit back to a miss.
+
+        Retrieve counts a resolved candidate as a cache hit (record_retrieval)
+        before Reason ever runs. For photometry_classification, Reason may
+        still call Bedrock afterward if synthesizing the query's own response
+        fails — an edge case reachable only from a malformed or externally
+        constructed row, since run_cosmic_local.py's own construction never
+        produces one. Left uncorrected, that single row would count as both
+        a cache_hits and an llm_calls, which cannot both be true of it and
+        would report a reuse rate higher than what the run actually did.
+        """
+        if self.cache_hits > 0:
+            self.cache_hits -= 1
+        self.synthesis_fallbacks += 1
 
     def record_llm_call(self, latency_ms, input_tokens=0, output_tokens=0, cost_usd=0.0):
         """Count a call; fold its latency into the mean only if one was reported.
@@ -156,4 +173,5 @@ class RunMetrics:
             "cost_usd_mean": (round(self.cost_usd_total / self.llm_calls, 8)
                               if self.llm_calls else 0.0),
             "unpriced_calls": self.unpriced_calls,
+            "synthesis_fallbacks": self.synthesis_fallbacks,
         }

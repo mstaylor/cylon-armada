@@ -51,7 +51,7 @@ row counts characteristic of the prior Cylon data-engineering work, and to subst
 petabyte-class motivation rather than only the 1 TB memory-bounded subset, Experiment A adds a
 single-node data-scale sweep on the same code paths:
 
-- Corpus size `R ∈ {10^4, 10^5, 10^6, 10^7}` embedding rows (10K to 10M), with `R` extended toward
+- Stored embeddings `R ∈ {10^4, 10^5, 10^6, 10^7}` rows (10K to 10M), with `R` extended toward
   10^8 to 10^9 on the HPC/EC2-EFA arm where memory permits.
 - Reported as throughput vs `R` and as bytes transferred, holding `D` fixed at 1024.
 
