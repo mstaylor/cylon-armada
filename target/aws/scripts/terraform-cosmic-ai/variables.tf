@@ -35,8 +35,9 @@ variable "python_runtime" {
 }
 
 variable "executor_image_uri" {
-  description = "ECR image URI built from docker/cosmic-ai-lambda/Dockerfile (lambda_entry3.handler entry point) — no default, must be built and pushed before apply"
+  description = "ECR image URI built from docker/cosmic-ai-lambda/Dockerfile (lambda_entry3.handler entry point) — matches the docker tag/push commands in README.md; override if you tagged it differently"
   type        = string
+  default     = "881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor"
 }
 
 variable "init_memory_mb" {
