@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 }
 
@@ -101,6 +105,22 @@ locals {
     RESULTS_PREFIX_EC2     = var.results_prefix_ecs_ec2
     CAPACITY_PROVIDER_NAME = var.ec2_capacity_provider_name
   }
+
+  # Track 1 Cosmic AI Arm A/B (non-agentic) names and ASL template variables
+  cosmic_ai_init_function_name      = "${var.project_name}-cosmic-ai-init"
+  cosmic_ai_executor_function_name  = "${var.project_name}-cosmic-ai-executor"
+  cosmic_ai_summarize_function_name = "${var.project_name}-cosmic-ai-summarize"
+  cosmic_ai_workflow_name           = "${var.project_name}-cosmic-ai-workflow"
+
+  cosmic_ai_asl_vars = {
+    AWS_REGION              = var.aws_region
+    ACCOUNT_ID              = var.account_id
+    INIT_FUNCTION_NAME      = local.cosmic_ai_init_function_name
+    EXECUTOR_FUNCTION_NAME  = local.cosmic_ai_executor_function_name
+    SUMMARIZE_FUNCTION_NAME = local.cosmic_ai_summarize_function_name
+    MAX_CONCURRENCY         = var.cosmic_ai_max_concurrency
+    TIMEOUT_SECONDS         = var.cosmic_ai_state_machine_timeout_seconds
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -150,6 +170,10 @@ data "aws_s3_bucket" "scripts" {
   bucket = var.scripts_bucket_name
 }
 
+data "aws_s3_bucket" "cosmic_ai_lambda_data" {
+  bucket = var.cosmic_ai_lambda_bucket_name
+}
+
 # Cosmic AI artifacts. Each ECS task pulls these at startup instead of carrying
 # ~90MB in the image. etag tracks content, so replacing a file locally triggers a
 # re-upload on the next apply. The count is gated on the file actually existing
@@ -175,6 +199,20 @@ resource "aws_s3_object" "cosmic_ai_data" {
   key    = var.cosmic_ai_data_key
   source = var.cosmic_ai_data_source
   etag   = filemd5(var.cosmic_ai_data_source)
+
+  tags = local.common_tags
+}
+
+# Track 1 Arm A/B executor (lambda_entry3.handler) fetches inference.py fresh
+# from S3 on every invocation rather than carrying it in the image - this is
+# the only path by which the instrumented/paginated fix actually takes effect.
+resource "aws_s3_object" "cosmic_ai_inference" {
+  count = try(fileexists(var.cosmic_ai_inference_source), false) ? 1 : 0
+
+  bucket = data.aws_s3_bucket.cosmic_ai_lambda_data.id
+  key    = var.cosmic_ai_inference_key
+  source = var.cosmic_ai_inference_source
+  etag   = filemd5(var.cosmic_ai_inference_source)
 
   tags = local.common_tags
 }
@@ -299,6 +337,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "${data.aws_s3_bucket.scripts.arn}/*",
           data.aws_s3_bucket.results.arn,
           "${data.aws_s3_bucket.results.arn}/*",
+          data.aws_s3_bucket.cosmic_ai_lambda_data.arn,
+          "${data.aws_s3_bucket.cosmic_ai_lambda_data.arn}/*",
         ]
       },
     ]
@@ -645,6 +685,96 @@ resource "aws_lambda_function" "python_benchmark" {
 }
 
 # ---------------------------------------------------------------------------
+# Lambda Functions — Cosmic AI Track 1, Arms A/B (non-agentic, Distributed Map)
+#
+# Replicates the click-ops DataParallel-CosmicAI state machine as managed
+# resources, under new names, without touching the original. init/summarize
+# are plain zip-packaged boto3 handlers (no image dependency); executor's
+# real entry point is the generic lambda_entry3.handler launcher, which
+# fetches inference.py fresh from S3 (aws_s3_object.cosmic_ai_inference)
+# into /tmp on every invocation rather than carrying it in the image.
+# ---------------------------------------------------------------------------
+
+data "archive_file" "cosmic_ai_init_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../terraform-cosmic-ai/lambda_src/initializer.py"
+  output_path = "${path.module}/.build/cosmic_ai_initializer.zip"
+}
+
+data "archive_file" "cosmic_ai_summarize_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../terraform-cosmic-ai/lambda_src/summarizer.py"
+  output_path = "${path.module}/.build/cosmic_ai_summarizer.zip"
+}
+
+resource "aws_lambda_function" "cosmic_ai_init" {
+  function_name    = local.cosmic_ai_init_function_name
+  role             = aws_iam_role.lambda_execution.arn
+  package_type     = "Zip"
+  filename         = data.archive_file.cosmic_ai_init_zip.output_path
+  source_code_hash = data.archive_file.cosmic_ai_init_zip.output_base64sha256
+  handler          = "initializer.lambda_handler"
+  runtime          = var.cosmic_ai_python_runtime
+  memory_size      = var.cosmic_ai_init_memory_mb
+  timeout          = var.cosmic_ai_init_timeout
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_function" "cosmic_ai_executor" {
+  function_name = local.cosmic_ai_executor_function_name
+  role          = aws_iam_role.lambda_execution.arn
+  package_type  = "Image"
+  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.cosmic_ai_executor_image_tag}"
+  memory_size   = var.cosmic_ai_executor_memory_mb
+  timeout       = var.cosmic_ai_executor_timeout
+
+  image_config {
+    command = ["lambda_entry3.handler"]
+  }
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_function" "cosmic_ai_summarize" {
+  function_name    = local.cosmic_ai_summarize_function_name
+  role             = aws_iam_role.lambda_execution.arn
+  package_type     = "Zip"
+  filename         = data.archive_file.cosmic_ai_summarize_zip.output_path
+  source_code_hash = data.archive_file.cosmic_ai_summarize_zip.output_base64sha256
+  handler          = "summarizer.lambda_handler"
+  runtime          = var.cosmic_ai_python_runtime
+  memory_size      = var.cosmic_ai_summarize_memory_mb
+  timeout          = var.cosmic_ai_init_timeout
+
+  dynamic "vpc_config" {
+    for_each = length(var.subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
 # Lambda Functions — Node.js (init / executor / aggregate)
 # ---------------------------------------------------------------------------
 
@@ -782,7 +912,7 @@ resource "aws_iam_role_policy" "step_functions_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # Invoke Lambda functions (all six)
+      # Invoke Lambda functions (all six, plus the Cosmic AI Track 1 trio)
       {
         Effect = "Allow"
         Action = ["lambda:InvokeFunction"]
@@ -795,6 +925,30 @@ resource "aws_iam_role_policy" "step_functions_policy" {
           aws_lambda_function.nodejs_executor.arn,
           aws_lambda_function.nodejs_aggregate.arn,
           aws_lambda_function.nodejs_worker.arn,
+          aws_lambda_function.cosmic_ai_init.arn,
+          aws_lambda_function.cosmic_ai_executor.arn,
+          aws_lambda_function.cosmic_ai_summarize.arn,
+        ]
+      },
+      # Cosmic AI Distributed Map ItemReader reads per-rank payloads from S3
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${data.aws_s3_bucket.cosmic_ai_lambda_data.arn}/*"]
+      },
+      # Distributed Map self-management (AWS-required for Map Run tracking)
+      {
+        Effect = "Allow"
+        Action = ["states:StartExecution"]
+        Resource = [
+          "arn:aws:states:${var.aws_region}:${var.account_id}:stateMachine:${local.cosmic_ai_workflow_name}"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = ["states:DescribeExecution", "states:StopExecution"]
+        Resource = [
+          "arn:aws:states:${var.aws_region}:${var.account_id}:execution:${local.cosmic_ai_workflow_name}:*"
         ]
       },
       # Run and monitor ECS tasks (used by ecs:runTask.sync)
@@ -921,6 +1075,21 @@ resource "aws_sfn_state_machine" "benchmark_workflow" {
   type     = "STANDARD"
 
   definition = templatefile("${path.module}/../step_functions/workflow_benchmark.asl.json", local.asl_vars)
+
+  tags = local.common_tags
+}
+
+# Cosmic AI Track 1, Arms A/B. Distributed Map (not inline Map, unlike
+# python_workflow) fan-out over S3 ItemReader - matches the per-rank worker
+# counts (up to 517) this arm needs, well past the inline Map's 256KB state
+# payload ceiling. STANDARD, no logging_configuration, matching the other
+# STANDARD peers below (built-in execution history is enough here).
+resource "aws_sfn_state_machine" "cosmic_ai_workflow" {
+  name     = local.cosmic_ai_workflow_name
+  role_arn = aws_iam_role.step_functions_execution.arn
+  type     = "STANDARD"
+
+  definition = templatefile("${path.module}/../step_functions/workflow_cosmic_ai.asl.json", local.cosmic_ai_asl_vars)
 
   tags = local.common_tags
 }

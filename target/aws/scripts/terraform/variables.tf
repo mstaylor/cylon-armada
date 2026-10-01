@@ -299,6 +299,78 @@ variable "cosmic_ai_local_dir" {
   default     = "/tmp/astromae"
 }
 
+variable "cosmic_ai_lambda_bucket_name" {
+  description = "Existing S3 bucket holding the Cosmic AI Track 1 Lambda pipeline's SDSS partitions, results, and the Anomaly Detection script folder lambda_entry3.py fetches at invocation time"
+  type        = string
+  default     = "cosmicai-data-cylon"
+}
+
+variable "cosmic_ai_inference_source" {
+  description = "Local path to the instrumented inference.py; skipped when the file is absent. This is NOT baked into any Lambda package or image - lambda_entry3.py fetches it fresh from S3 on every invocation, so the fix only takes effect once this upload lands"
+  type        = string
+  default     = "/home/parallels/AI-for-Astronomy/aws/lambda/inference.py"
+}
+
+variable "cosmic_ai_inference_key" {
+  description = "S3 key lambda_entry3.py fetches inference.py from, matching the Anomaly Detection folder structure the live pipeline already uses"
+  type        = string
+  default     = "Anomaly Detection/Inference/inference.py"
+}
+
+variable "cosmic_ai_python_runtime" {
+  description = "AWS Lambda Python runtime for the zip-packaged Cosmic AI init/summarize functions"
+  type        = string
+  default     = "python3.12"
+}
+
+variable "cosmic_ai_executor_image_tag" {
+  description = "ECR image tag for the Cosmic AI executor (lambda_entry3.handler, Cylon/FMI/torch), built from docker/cosmic-ai-lambda/Dockerfile"
+  type        = string
+  default     = "cosmic-ai-executor"
+}
+
+variable "cosmic_ai_init_memory_mb" {
+  description = "Memory for the Cosmic AI init Lambda - matches the live click-ops data-parallel-init configuration"
+  type        = number
+  default     = 128
+}
+
+variable "cosmic_ai_summarize_memory_mb" {
+  description = "Memory for the Cosmic AI summarize Lambda - matches the live click-ops resultSummary configuration"
+  type        = number
+  default     = 128
+}
+
+variable "cosmic_ai_executor_memory_mb" {
+  description = "Memory for the Cosmic AI executor Lambda - matches the live click-ops cosmic-executor configuration (max Lambda memory, needed for AstroMAE/torch)"
+  type        = number
+  default     = 10240
+}
+
+variable "cosmic_ai_init_timeout" {
+  description = "Timeout for the Cosmic AI init/summarize Lambdas - matches the live click-ops configuration"
+  type        = number
+  default     = 150
+}
+
+variable "cosmic_ai_executor_timeout" {
+  description = "Timeout for the Cosmic AI executor Lambda - matches the live click-ops configuration"
+  type        = number
+  default     = 900
+}
+
+variable "cosmic_ai_max_concurrency" {
+  description = "Distributed Map MaxConcurrency for the Cosmic AI Track 1 workflow - matches the live click-ops configuration"
+  type        = number
+  default     = 3000
+}
+
+variable "cosmic_ai_state_machine_timeout_seconds" {
+  description = "Overall timeout for the Cosmic AI Track 1 state machine - matches the live click-ops configuration"
+  type        = number
+  default     = 3600
+}
+
 variable "inference_device" {
   description = "torch device for AstroMAE inference. Fargate and Lambda are CPU-only; the ECS EC2 GPU arm sets cuda"
   type        = string

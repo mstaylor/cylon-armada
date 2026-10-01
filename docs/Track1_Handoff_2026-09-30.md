@@ -20,8 +20,26 @@ module's own architecture notes.
   `bytes_aggregated` at the aggregator (`summarizer.py`).
 - **Terraform migration module** —
   `target/aws/scripts/terraform-cosmic-ai/` in cylon-armada, validated with
-  a real `terraform plan` against the destination account (`cosmicai`
-  profile, account 881908115028): clean, 10 to add, 0 errors.
+  a real `terraform plan`: clean, 10 to add, 0 errors.
+- **Account switched to 448324707516** (`default` profile), not the
+  `cosmicai` profile/881908115028 originally planned. That account's IAM
+  user only has `PowerUserAccess`, which deliberately excludes
+  `iam:CreateRole` — confirmed by an actual `AccessDenied` on `terraform
+  apply`, and by checking every existing role in that account for one
+  already trusted by `lambda.amazonaws.com`/`states.amazonaws.com` (none
+  exists). 448324707516 is where the `cylon-armada` ECR repo and the
+  `cosmicai-data-cylon` S3 bucket (the one `inference.py`/`summarizer.py`
+  already hardcode) already live, and where you have full IAM access.
+- **Module made fully self-contained** — `initializer.py`/`summarizer.py`
+  are now also copied into `target/aws/scripts/terraform-cosmic-ai/
+  lambda_src/` (byte-identical to the `AI-for-Astronomy` originals), and
+  the `archive_file` data sources zip from there instead of reaching into
+  a sibling `AI-for-Astronomy` checkout. This was a real bug: the module's
+  previous default assumed `/home/parallels/AI-for-Astronomy` existed on
+  whatever machine runs `terraform apply`, which failed on a different
+  machine with "could not archive missing file."
+- `executor_image_uri` now has a default (matching the tag below), so
+  `terraform plan`/`apply` no longer prompts for it interactively.
 - **Two real bugs found and fixed along the way**:
   - The executor Dockerfile's `COPY lambda_entry3.py` / `COPY fmi.json`
     referenced files that did not exist in its original directory
@@ -54,31 +72,33 @@ source, plus installs torch/torchvision/timm. Not run this session.
 
 Same shared `cylon-armada` ECR repository the rest of this project uses
 (per `target/aws/scripts/terraform/variables.tf`'s `ecr_repository_name`
-convention — one repo, one tag per image), not a dedicated repo for this
-image. It does not exist yet in the destination account (`cosmicai`
-profile, 881908115028) — checked directly, `aws ecr describe-repositories
---profile cosmicai` returns none — so it still needs creating once there,
-same as it was created once in the source account.
+convention — one repo, one tag per image). It already exists in
+448324707516 (confirmed via `aws ecr describe-repositories
+--repository-names cylon-armada`), so no `create-repository` step is
+needed.
 
 ```bash
-aws ecr get-login-password --profile cosmicai --region us-east-1 | \
-  docker login --username AWS --password-stdin 881908115028.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin 448324707516.dkr.ecr.us-east-1.amazonaws.com
 
-aws ecr create-repository --profile cosmicai --region us-east-1 --repository-name cylon-armada
-
-docker tag cosmic-ai-executor:latest 881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
-docker push 881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
+docker tag cosmic-ai-executor:latest 448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
+docker push 448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
 ```
 
-Then, from `target/aws/scripts/terraform-cosmic-ai/`:
+**Update, 2026-10-01: the live deployment target changed.** `terraform-cosmic-ai/`
+is parked (targets the `cosmicai` account, 881908115028, which cannot
+`iam:CreateRole`). The Cosmic AI Arms A/B resources — the three Lambdas
+(`cosmic_ai_init`/`cosmic_ai_executor`/`cosmic_ai_summarize`), the
+`cosmic_ai_workflow` state machine, and the `cosmic_ai_inference` S3 upload
+(the fixed `inference.py`, fetched fresh from S3 by `lambda_entry3.handler`
+on every invocation) — are now resources inside the main module instead,
+reusing its existing shared `aws_iam_role.lambda_execution`/
+`aws_iam_role.step_functions_execution` roles. Apply from there:
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars already has the right image URI if you used the tag above —
-# edit it if you tagged/pushed differently.
-
+cd target/aws/scripts/terraform
 terraform init
-terraform plan    # re-verify before apply; last verified plan was clean
+terraform plan    # last verified clean: 54 to add, 0 errors, against 448324707516
 terraform apply
 ```
 
