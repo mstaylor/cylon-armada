@@ -28,12 +28,6 @@ variable "data_bucket_name" {
   default     = "cosmicai"
 }
 
-variable "ai_for_astronomy_dir" {
-  description = "Local checkout of the AI-for-Astronomy repo (source of initializer.py/summarizer.py)"
-  type        = string
-  default     = "/home/parallels/AI-for-Astronomy"
-}
-
 variable "python_runtime" {
   description = "AWS Lambda Python runtime for the zip-packaged init/summarize functions"
   type        = string

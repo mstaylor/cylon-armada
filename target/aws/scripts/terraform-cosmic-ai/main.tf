@@ -91,13 +91,13 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 
 data "archive_file" "init_zip" {
   type        = "zip"
-  source_file = "${var.ai_for_astronomy_dir}/aws/lambda/initializer.py"
+  source_file = "${path.module}/lambda_src/initializer.py"
   output_path = "${path.module}/.build/initializer.zip"
 }
 
 data "archive_file" "summarize_zip" {
   type        = "zip"
-  source_file = "${var.ai_for_astronomy_dir}/aws/lambda/summarizer.py"
+  source_file = "${path.module}/lambda_src/summarizer.py"
   output_path = "${path.module}/.build/summarizer.zip"
 }
 
