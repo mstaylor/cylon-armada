@@ -23,10 +23,10 @@ module's own architecture notes.
   a real `terraform plan` against the destination account (`cosmicai`
   profile, account 881908115028): clean, 10 to add, 0 errors.
 - **Two real bugs found and fixed along the way**:
-  - `docker/aws/lambda/cosmi-ai/Dockerfile` (in the `cylon` repo) referenced
-    `lambda_entry3.py`/`fmi.json` that did not exist in that directory —
-    they only existed on the remote `fmi-ds5110-support` branch. Copied
-    into place; the Dockerfile builds now.
+  - The executor Dockerfile's `COPY lambda_entry3.py` / `COPY fmi.json`
+    referenced files that did not exist in its original directory
+    (`cylon` repo, `docker/aws/lambda/cosmi-ai/`) — they only existed on
+    the remote `fmi-ds5110-support` branch. Both are now in place.
   - The click-ops state machine's Distributed Map used a schema
     (`"Iterator"` + sibling `"ProcessorConfig"`) the current AWS API
     rejects. Fixed to the modern `ItemProcessor` nesting in
@@ -35,14 +35,18 @@ module's own architecture notes.
   image at all (plain boto3, nothing beyond what the Lambda Python runtime
   bundles) — switched to zip packaging. Only the `executor` Lambda
   (`cosmic-executor`) genuinely needs a container image.
+- **Dockerfile replicated into this repo**, at `docker/cosmic-ai-lambda/`
+  (Dockerfile + `lambda_entry3.py` + `fmi.json`, byte-identical to the
+  `cylon` repo source) — the build no longer needs that other repo checked
+  out alongside this one.
 
 ## Next: build and deploy the executor image
 
 ```bash
 docker build --platform=linux/amd64 \
   -t cosmic-ai-executor \
-  -f /home/parallels/cylon/docker/aws/lambda/cosmi-ai/Dockerfile \
-  /home/parallels/cylon/docker/aws/lambda/cosmi-ai
+  -f docker/cosmic-ai-lambda/Dockerfile \
+  docker/cosmic-ai-lambda
 ```
 
 This is the slow step — it compiles Boost, AWS SDK C++, and FMI from

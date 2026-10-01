@@ -41,7 +41,7 @@ variable "python_runtime" {
 }
 
 variable "executor_image_uri" {
-  description = "ECR image URI built from cylon's docker/aws/lambda/cosmi-ai/Dockerfile (lambda_entry3.handler entry point) — no default, must be built and pushed before apply"
+  description = "ECR image URI built from docker/cosmic-ai-lambda/Dockerfile (lambda_entry3.handler entry point) — no default, must be built and pushed before apply"
   type        = string
 }
 
