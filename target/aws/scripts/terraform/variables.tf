@@ -306,9 +306,9 @@ variable "cosmic_ai_lambda_bucket_name" {
 }
 
 variable "cosmic_ai_inference_source" {
-  description = "Local path to the instrumented inference.py; skipped when the file is absent. This is NOT baked into any Lambda package or image - lambda_entry3.py fetches it fresh from S3 on every invocation, so the fix only takes effect once this upload lands"
+  description = "Local path to the instrumented inference.py; skipped when the file is absent. This is NOT baked into any Lambda package or image - lambda_entry3.py fetches it fresh from S3 on every invocation, so the fix only takes effect once this upload lands. Defaults to the repo-local copy in terraform-cosmic-ai/lambda_src/ so a plain apply works on any machine, not just one with an AI-for-Astronomy checkout"
   type        = string
-  default     = "/home/parallels/AI-for-Astronomy/aws/lambda/inference.py"
+  default     = "../terraform-cosmic-ai/lambda_src/inference.py"
 }
 
 variable "cosmic_ai_inference_key" {
