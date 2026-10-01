@@ -52,14 +52,22 @@ docker build --platform=linux/amd64 \
 This is the slow step — it compiles Boost, AWS SDK C++, and FMI from
 source, plus installs torch/torchvision/timm. Not run this session.
 
+Same shared `cylon-armada` ECR repository the rest of this project uses
+(per `target/aws/scripts/terraform/variables.tf`'s `ecr_repository_name`
+convention — one repo, one tag per image), not a dedicated repo for this
+image. It does not exist yet in the destination account (`cosmicai`
+profile, 881908115028) — checked directly, `aws ecr describe-repositories
+--profile cosmicai` returns none — so it still needs creating once there,
+same as it was created once in the source account.
+
 ```bash
 aws ecr get-login-password --profile cosmicai --region us-east-1 | \
   docker login --username AWS --password-stdin 881908115028.dkr.ecr.us-east-1.amazonaws.com
 
-aws ecr create-repository --profile cosmicai --region us-east-1 --repository-name cosmic-ai-executor
+aws ecr create-repository --profile cosmicai --region us-east-1 --repository-name cylon-armada
 
-docker tag cosmic-ai-executor:latest 881908115028.dkr.ecr.us-east-1.amazonaws.com/cosmic-ai-executor:latest
-docker push 881908115028.dkr.ecr.us-east-1.amazonaws.com/cosmic-ai-executor:latest
+docker tag cosmic-ai-executor:latest 881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
+docker push 881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
 ```
 
 Then, from `target/aws/scripts/terraform-cosmic-ai/`:
