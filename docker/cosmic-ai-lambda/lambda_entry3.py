@@ -64,6 +64,7 @@ def execute_script(data=None):
     usefolder = data['s3_object_type'] == 'folder'
     script = get_file(file_name=data['script'], bucket=data['s3_bucket'],
                       prefix=data['s3_object_name'], use_folder=usefolder)
+    os.environ['CODE_FETCH_END_TS'] = str(time.time())
 
     if script is None and not usefolder:
         print(f"unable to retrieve file {data['script']} from AWS S3")

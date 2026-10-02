@@ -11,7 +11,7 @@ import pytest
 ray = pytest.importorskip("ray")
 np = pytest.importorskip("numpy")
 
-from ray_arm.native import ContextRegistry, ShardActor
+from ray_arm.native import ContextRegistry, RunBarrier, ShardActor
 
 
 @pytest.fixture(scope="module")
@@ -135,3 +135,44 @@ def test_drain_new_and_visible_contexts_share_one_watermark(local_ray):
     ray.get(rank0.flush.remote())
     assert ray.get(rank1.visible_contexts.remote()) == ["a", "b"]
     assert ray.get(rank1.drain_new.remote()) == []
+
+
+def test_run_barrier_holds_every_rank_until_the_last_arrives(local_ray):
+    barrier = RunBarrier.remote(2)
+
+    first = barrier.wait.remote("published")
+    ready, _ = ray.wait([first], timeout=0.5)
+    assert ready == []
+
+    second = barrier.wait.remote("published")
+    ready, _ = ray.wait([first, second], num_returns=2, timeout=10)
+    assert len(ready) == 2
+
+
+def test_run_barrier_phases_are_independent(local_ray):
+    barrier = RunBarrier.remote(2)
+
+    ray.get([barrier.wait.remote("published"), barrier.wait.remote("published")], timeout=10)
+    drained = barrier.wait.remote("drained")
+    ready, _ = ray.wait([drained], timeout=0.5)
+    assert ready == []
+
+    ray.get([drained, barrier.wait.remote("drained")], timeout=10)
+
+
+def test_run_barrier_reports_departures_to_the_rank_that_cleans_up(local_ray):
+    barrier = RunBarrier.remote(3)
+
+    waiting = barrier.wait_departed.remote(2)
+    ray.get(barrier.depart.remote())
+    ready, _ = ray.wait([waiting], timeout=0.5)
+    assert ready == []
+
+    ray.get(barrier.depart.remote())
+    ray.get(waiting, timeout=10)
+
+
+def test_a_single_rank_barrier_never_blocks(local_ray):
+    barrier = RunBarrier.remote(1)
+    ray.get(barrier.wait.remote("published"), timeout=10)
+    ray.get(barrier.wait_departed.remote(0), timeout=10)
