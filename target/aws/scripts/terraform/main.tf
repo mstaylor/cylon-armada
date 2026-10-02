@@ -737,8 +737,9 @@ resource "aws_lambda_function" "cosmic_ai_executor" {
   memory_size   = var.cosmic_ai_executor_memory_mb
   timeout       = var.cosmic_ai_executor_timeout
 
+  # Unlike Dockerfile.fmi.python, this image's ENTRYPOINT is only runCyloninLambda.sh (exec "$@"), so CMD must carry the runtime client.
   image_config {
-    command = ["lambda_entry3.handler"]
+    command = ["python", "-m", "awslambdaric", "lambda_entry3.handler"]
   }
 
   dynamic "vpc_config" {

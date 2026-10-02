@@ -52,6 +52,7 @@ import pyarrow as pa
 from armada.cosmic_workflow import build_cosmic_workflow
 from armada.epochs import epoch_count, plan_epochs
 from armada.executor import ArmadaExecutor, InputPlacement, required_peer_map
+from armada.ray_native_executor import RayNativeExecutor
 from armada.reuse_policy import (
     PHOTOMETRY_BANDS,
     is_photometry_key,
@@ -66,6 +67,8 @@ from cosmic_ai.task_generator import (
     generate_tasks_from_results,
     template_for,
 )
+from ray_arm.cluster import join_by_discovery, start_head, wait_for_nodes
+from ray_arm.cylon_on_ray import CylonRayActor
 
 logger = logging.getLogger("run_cosmic_local")
 
@@ -405,21 +408,73 @@ def context_store_for(backend):
     return required
 
 
-def run_epochs(seq, shards, backend, bridge, ctx, root=0):
+def _redis_client_for_rendezvous():
+    import redis
+
+    return redis.Redis(host=os.environ.get("REDIS_HOST", ""),
+                       port=int(os.environ.get("REDIS_PORT", 6379)))
+
+
+def form_ray_cluster(rank, world_size, comm_name, redis_client, ray_api):
+    """Join this rank to the run's Ray cluster, rendezvousing through Redis.
+
+    Rank 0 starts the head and publishes its address under comm_name; every
+    other rank discovers that address and joins. Returns once the cluster
+    reports world_size live nodes, so establish_s covers the whole formation.
+    """
+    if rank == 0:
+        start_head(int(os.environ.get("RAY_PORT", 6380)), redis_client, comm_name)
+    else:
+        join_by_discovery(redis_client, comm_name,
+                          timeout_s=float(os.environ.get("RAY_RENDEZVOUS_TIMEOUT_S", 300)))
+    ray_api.init(address="auto", ignore_reinit_error=True)
+    wait_for_nodes(world_size,
+                   timeout_s=float(os.environ.get("RAY_CLUSTER_TIMEOUT_S", 300)),
+                   nodes_fn=lambda: sum(1 for node in ray_api.nodes() if node.get("Alive")))
+
+
+def ray_native_shard_actor(rank, world_size, comm_name, ray_api):
+    """This rank's ShardActor, pinned to this rank's own node.
+
+    The registry is named per run so concurrent runs on one cluster never
+    share a directory, and detached so it outlives rank 0's driver. Pinning
+    keeps each rank's ray.put in its own node's object store; left to the
+    scheduler, a rank's actor could land on another task's node and turn its
+    local reads into network transfers.
+    """
+    from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
+
+    from ray_arm.native import ContextRegistry, ShardActor
+
+    registry = ContextRegistry.options(
+        name=f"cosmic_registry_{comm_name}", get_if_exists=True, lifetime="detached"
+    ).remote()
+    node_id = ray_api.get_runtime_context().get_node_id()
+    return ShardActor.options(
+        scheduling_strategy=NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
+    ).remote(rank, world_size, registry)
+
+
+def run_epochs(seq, shards, backend, bridge=None, ctx=None, root=0, shard_actor=None):
     """Execute one epoch per shard, returning each epoch's result table.
 
-    Under Armada each epoch is one executor pass with the input already in
-    place on this rank, ending in MemoryUpsert's AllGather. Under LangChain it
-    is a plain invoke(); nothing crosses ranks because the store is shared.
+    Under Armada and ray-cylon each epoch is one executor pass ending in
+    MemoryUpsert's AllGather, moved over FMI either way — ray-cylon differs
+    only in how the bridge was constructed, never in how it runs. Under
+    ray-native each epoch runs locally except MemoryUpsert, which publishes
+    to and reads from the object store instead. Under LangChain/Isolated
+    nothing crosses ranks because the store itself is shared.
     """
     results = []
     for shard in shards:
         if backend in (ExecutionBackend.LangChain, ExecutionBackend.Isolated):
             results.append(seq.invoke(shard))
-        elif backend is ExecutionBackend.Armada:
+        elif backend in (ExecutionBackend.Armada, ExecutionBackend.RayCylon):
             results.append(ArmadaExecutor(bridge).run(
                 seq, input_tables=shard, ctx=ctx, root=root,
                 placement=InputPlacement.PreDistributed))
+        elif backend is ExecutionBackend.RayNative:
+            results.append(RayNativeExecutor(shard_actor).run(seq, shard))
         else:
             raise ValueError(f"unknown execution backend {backend!r}")
     return results
@@ -515,6 +570,7 @@ def main(argv=None):
 
     establish_s = 0.0
     bridge = None
+    shard_actor = None
     if backend is ExecutionBackend.Armada:
         # Derived before the bridge exists: the channel establishes its
         # connections while the communicator is built, so the topology has to
@@ -534,6 +590,24 @@ def main(argv=None):
         establish_s = time.perf_counter() - t0
         true_rank = bridge.rank
         channel = bridge.channel_type
+    elif backend in (ExecutionBackend.RayNative, ExecutionBackend.RayCylon):
+        import ray
+
+        t0 = time.perf_counter()
+        form_ray_cluster(rank, world_size, comm_name, _redis_client_for_rendezvous(), ray)
+        true_rank = rank
+        if backend is ExecutionBackend.RayNative:
+            shard_actor = ray_native_shard_actor(true_rank, world_size, comm_name, ray)
+            channel = "ray-plasma"
+        else:
+            actor = CylonRayActor(rank=rank, world_size=world_size, comm_name=comm_name,
+                                  required_peers=required_peer_map(build_for(rank), world_size),
+                                  nonblocking=not args.blocking)
+            actor.start_env()
+            bridge = actor._bridge
+            true_rank = actor.rank
+            channel = bridge.channel_type
+        establish_s = time.perf_counter() - t0
     else:
         true_rank = rank
         channel = "none"
@@ -619,7 +693,8 @@ def main(argv=None):
     t1 = time.perf_counter()
     try:
         results = run_epochs(seq, shards, backend, bridge=bridge,
-                             ctx=bridge._ctx if bridge is not None else None, root=root)
+                             ctx=bridge._ctx if bridge is not None else None,
+                             root=root, shard_actor=shard_actor)
     except Exception as exc:
         record["error"] = f"{type(exc).__name__}: {exc}"
         raise
@@ -640,6 +715,10 @@ def main(argv=None):
         if bridge.available:
             bridge.barrier()
         bridge.finalize()
+    if backend in (ExecutionBackend.RayNative, ExecutionBackend.RayCylon):
+        import ray
+
+        ray.shutdown()
     return 0
 
 

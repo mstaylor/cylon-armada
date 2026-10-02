@@ -19,14 +19,14 @@ def lambda_handler(event, context):
     obj = s3_client.get_object(Bucket=payload_bucket, Key=payload_key)
     payload_data = json.loads(obj["Body"].read().decode("utf-8"))
 
-    prefix = payload_data[0]['RESULT_PATH']
+    prefix = payload_data[0]['RESULT_PATH'].rstrip('/')
 
     logging.info(f'Combined result will be saved in {prefix}')
 
     # List all JSON files in the specified bucket and prefix, across all pages
     paginator = s3_client.get_paginator("list_objects_v2")
     contents = []
-    for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+    for page in paginator.paginate(Bucket=bucket_name, Prefix=f"{prefix}/"):
         contents.extend(page.get("Contents", []))
 
     # Check if files exist in the specified location
@@ -37,6 +37,7 @@ def lambda_handler(event, context):
         }
 
     output_file_key = f"{prefix}/combined_data.json"  # Path for the output file
+    metrics_file_key = f"{prefix}/aggregate_metrics.json"
     all_data = []
     ranks_aggregated = 0
     bytes_aggregated = 0
@@ -45,7 +46,7 @@ def lambda_handler(event, context):
         file_key = item["Key"]
 
         # Only process JSON files
-        if file_key.endswith(".json") and file_key != output_file_key:
+        if file_key.endswith(".json") and file_key not in (output_file_key, metrics_file_key):
             # Retrieve the file content
             obj = s3_client.get_object(Bucket=bucket_name, Key=file_key)
             body_bytes = obj["Body"].read()
@@ -84,7 +85,7 @@ def lambda_handler(event, context):
     }
     s3_client.put_object(
         Bucket=bucket_name,
-        Key=f"{prefix}/aggregate_metrics.json",
+        Key=metrics_file_key,
         Body=json.dumps(aggregate_metrics),
         ContentType="application/json",
     )

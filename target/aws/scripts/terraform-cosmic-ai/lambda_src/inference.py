@@ -155,6 +155,7 @@ def inference(
         profile_memory=True
     ) as prof:
         with torch.no_grad():
+            t_inference_start = time.time()
             for i, data in enumerate(dataloader):
                 image = data[0].to(device)  #Image is permuted, cropped and moved to cuda
                 magnitude = data[1].to(device)  #magnitude of of channels
@@ -169,6 +170,7 @@ def inference(
                 num_batches += 1
                 num_samples += len(image)
                 gc.collect()
+            inference_wall_s = time.time() - t_inference_start
 
     # num_samples = num_batches * batch_size
 
@@ -210,7 +212,8 @@ def inference(
     execution_info['init_s'] = stage_timings.get('init_s')
     execution_info['payload_fetch_s'] = stage_timings.get('payload_fetch_s')
     execution_info['scatter_s'] = stage_timings.get('scatter_s')
-    execution_info['inference_s'] = total_time
+    execution_info['model_load_s'] = stage_timings.get('model_load_s')
+    execution_info['inference_s'] = inference_wall_s
     execution_info['barrier_s'] = 0.0
     execution_info['publish_s'] = None
     execution_info['total_s'] = None
@@ -311,7 +314,9 @@ def engine(args, stage_timings=None):
     dataloader = DataLoader(
         data, batch_size=args.batch_size #, drop_last=True
     ) # data_loader(data, args.batch_size)
+    t_model_load_start = time.time()
     model = load_model(args.model_path, args.device)
+    stage_timings['model_load_s'] = time.time() - t_model_load_start
 
     inference(
         model, dataloader,

@@ -93,3 +93,15 @@ class ShardActor:
             self._contexts.extend(ray.get(new_refs))
         self._watermark = total
         return list(self._contexts)
+
+    def drain_new(self):
+        """Contexts published by any rank since this shard last read, and
+        only those — the epoch-scoped counterpart to visible_contexts, for a
+        caller (MemoryUpsert) that must see each contribution exactly once."""
+        new_refs, total = ray.get(self._registry.all_refs.remote(since=self._watermark))
+        self._watermark = total
+        if not new_refs:
+            return []
+        fetched = ray.get(new_refs)
+        self._contexts.extend(fetched)
+        return fetched

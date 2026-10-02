@@ -71,9 +71,16 @@ def execute_script(data=None):
     scriptargs = data['args']
     if scriptargs is not None:
         cmd = scriptargs.split()
-        subprocess.call(['python'] + [data['script']] + cmd, shell=False)
+        returncode = subprocess.call(['python'] + [data['script']] + cmd, shell=False)
     else:
-        subprocess.call(['python'] + [data['script']], shell=False)
+        returncode = subprocess.call(['python'] + [data['script']], shell=False)
+
+    if returncode != 0:
+        raise RuntimeError(
+            f"script {data['script']} exited with code {returncode} "
+            f"(rank={os.environ.get('RANK')}, world_size={os.environ.get('WORLD_SIZE')}, "
+            f"result_path={os.environ.get('RESULT_PATH')})"
+        )
 
 def handler(event, context):
 

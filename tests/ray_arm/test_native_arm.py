@@ -96,3 +96,42 @@ def test_numpy_payload_survives_the_object_store_round_trip(local_ray):
 
     assert len(visible) == 1
     np.testing.assert_array_equal(visible[0], array)
+
+
+def test_drain_new_returns_only_contexts_since_the_last_drain(local_ray):
+    """MemoryUpsert must see each epoch's new contributions exactly once. A
+    second drain_new with nothing published in between must return empty,
+    not the same contexts again — that would double count store/ingest."""
+    registry = ContextRegistry.remote()
+    rank0 = ShardActor.remote(0, 2, registry)
+    rank1 = ShardActor.remote(1, 2, registry)
+
+    ray.get(rank0.publish.remote(["epoch1-from-0"]))
+    ray.get(rank0.flush.remote())
+    first = ray.get(rank1.drain_new.remote())
+    assert first == ["epoch1-from-0"]
+
+    again = ray.get(rank1.drain_new.remote())
+    assert again == []
+
+    ray.get(rank0.publish.remote(["epoch2-from-0"]))
+    ray.get(rank0.flush.remote())
+    second = ray.get(rank1.drain_new.remote())
+    assert second == ["epoch2-from-0"]
+
+
+def test_drain_new_and_visible_contexts_share_one_watermark(local_ray):
+    """Both reads consume the same log position, so mixing them on one
+    shard must not replay or skip anything."""
+    registry = ContextRegistry.remote()
+    rank0 = ShardActor.remote(0, 2, registry)
+    rank1 = ShardActor.remote(1, 2, registry)
+
+    ray.get(rank0.publish.remote(["a"]))
+    ray.get(rank0.flush.remote())
+    assert ray.get(rank1.drain_new.remote()) == ["a"]
+
+    ray.get(rank0.publish.remote(["b"]))
+    ray.get(rank0.flush.remote())
+    assert ray.get(rank1.visible_contexts.remote()) == ["a", "b"]
+    assert ray.get(rank1.drain_new.remote()) == []
