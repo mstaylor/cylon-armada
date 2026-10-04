@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.7"
 
   required_providers {
     aws = {
@@ -127,6 +127,7 @@ locals {
     SUMMARIZE_FUNCTION_NAME = local.cosmic_ai_summarize_function_name
     MAX_CONCURRENCY         = var.cosmic_ai_max_concurrency
     TIMEOUT_SECONDS         = var.cosmic_ai_state_machine_timeout_seconds
+    EXECUTOR_RETRY_ERRORS   = jsonencode(var.cosmic_ai_executor_retry_errors)
   }
 }
 
@@ -151,6 +152,19 @@ resource "aws_security_group_rule" "fmi_direct_redis_ingress" {
 
 data "aws_ecr_repository" "main" {
   name = var.ecr_repository_name
+}
+
+data "aws_ecr_image" "lambda" {
+  for_each        = toset([var.python_image_tag, var.cosmic_ai_executor_image_tag, var.nodejs_image_tag])
+  repository_name = data.aws_ecr_repository.main.name
+  image_tag       = each.value
+}
+
+locals {
+  lambda_image_uri = {
+    for tag, image in data.aws_ecr_image.lambda :
+    tag => "${data.aws_ecr_repository.main.repository_url}@${image.image_digest}"
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -181,11 +195,36 @@ data "aws_s3_bucket" "cosmic_ai_lambda_data" {
   bucket = var.cosmic_ai_lambda_bucket_name
 }
 
-# Every upload below fails the plan when its source is missing, rather than
-# count-gating itself to zero: a skipped upload leaves the previous object
-# live in S3 with no error anywhere, which is how a stale inference.py served
-# the 2026-10-02 Arm A smoke run.
-resource "aws_s3_object" "cosmic_ai_model" {
+removed {
+  from = aws_s3_object.cosmic_ai_model
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = aws_s3_object.cosmic_ai_data
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+data "aws_s3_object" "cosmic_ai_model" {
+  count  = var.cosmic_ai_model_source == "" ? 1 : 0
+  bucket = data.aws_s3_bucket.scripts.id
+  key    = var.cosmic_ai_model_key
+}
+
+data "aws_s3_object" "cosmic_ai_data" {
+  count  = var.cosmic_ai_data_source == "" ? 1 : 0
+  bucket = data.aws_s3_bucket.scripts.id
+  key    = var.cosmic_ai_data_key
+}
+
+resource "aws_s3_object" "cosmic_ai_model_upload" {
+  count  = var.cosmic_ai_model_source == "" ? 0 : 1
   bucket = data.aws_s3_bucket.scripts.id
   key    = var.cosmic_ai_model_key
   source = var.cosmic_ai_model_source
@@ -194,19 +233,15 @@ resource "aws_s3_object" "cosmic_ai_model" {
   lifecycle {
     precondition {
       condition     = try(fileexists(var.cosmic_ai_model_source), false)
-      error_message = "cosmic_ai_model_source (${var.cosmic_ai_model_source}) does not exist; set it to the AstroMAE weights .pt on this machine."
+      error_message = "cosmic_ai_model_source (${var.cosmic_ai_model_source}) does not exist; set it to the AstroMAE weights .pt on this machine, or leave it empty to use the object already in S3."
     }
   }
 
   tags = local.common_tags
 }
 
-moved {
-  from = aws_s3_object.cosmic_ai_model[0]
-  to   = aws_s3_object.cosmic_ai_model
-}
-
-resource "aws_s3_object" "cosmic_ai_data" {
+resource "aws_s3_object" "cosmic_ai_data_upload" {
+  count  = var.cosmic_ai_data_source == "" ? 0 : 1
   bucket = data.aws_s3_bucket.scripts.id
   key    = var.cosmic_ai_data_key
   source = var.cosmic_ai_data_source
@@ -215,16 +250,11 @@ resource "aws_s3_object" "cosmic_ai_data" {
   lifecycle {
     precondition {
       condition     = try(fileexists(var.cosmic_ai_data_source), false)
-      error_message = "cosmic_ai_data_source (${var.cosmic_ai_data_source}) does not exist; set it to the SDSS inference partition .pt on this machine."
+      error_message = "cosmic_ai_data_source (${var.cosmic_ai_data_source}) does not exist; set it to the SDSS inference partition .pt on this machine, or leave it empty to use the object already in S3."
     }
   }
 
   tags = local.common_tags
-}
-
-moved {
-  from = aws_s3_object.cosmic_ai_data[0]
-  to   = aws_s3_object.cosmic_ai_data
 }
 
 resource "aws_s3_object" "cosmic_ai_inference" {
@@ -675,7 +705,7 @@ resource "aws_lambda_function" "python_init" {
   function_name = "${var.project_name}-init"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
+  image_uri     = local.lambda_image_uri[var.python_image_tag]
   memory_size   = var.python_memory_mb
   timeout       = var.lambda_timeout
 
@@ -702,7 +732,7 @@ resource "aws_lambda_function" "python_executor" {
   function_name = "${var.project_name}-executor"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
+  image_uri     = local.lambda_image_uri[var.python_image_tag]
   memory_size   = var.python_memory_mb
   timeout       = var.lambda_timeout
 
@@ -729,7 +759,7 @@ resource "aws_lambda_function" "python_aggregate" {
   function_name = "${var.project_name}-aggregate"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
+  image_uri     = local.lambda_image_uri[var.python_image_tag]
   memory_size   = var.python_memory_mb
   timeout       = var.lambda_timeout
 
@@ -766,7 +796,7 @@ resource "aws_lambda_function" "python_benchmark" {
   function_name = "${var.project_name}-benchmark"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
+  image_uri     = local.lambda_image_uri[var.python_image_tag]
   memory_size   = var.benchmark_memory_mb
   timeout       = var.benchmark_timeout
 
@@ -838,7 +868,7 @@ resource "aws_lambda_function" "cosmic_ai_executor" {
   function_name = local.cosmic_ai_executor_function_name
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.cosmic_ai_executor_image_tag}"
+  image_uri     = local.lambda_image_uri[var.cosmic_ai_executor_image_tag]
   memory_size   = var.cosmic_ai_executor_memory_mb
   timeout       = var.cosmic_ai_executor_timeout
 
@@ -888,7 +918,7 @@ resource "aws_lambda_function" "nodejs_init" {
   function_name = "${var.project_name}-init-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
+  image_uri     = local.lambda_image_uri[var.nodejs_image_tag]
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
 
@@ -915,7 +945,7 @@ resource "aws_lambda_function" "nodejs_executor" {
   function_name = "${var.project_name}-executor-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
+  image_uri     = local.lambda_image_uri[var.nodejs_image_tag]
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
 
@@ -942,7 +972,7 @@ resource "aws_lambda_function" "nodejs_aggregate" {
   function_name = "${var.project_name}-aggregate-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
+  image_uri     = local.lambda_image_uri[var.nodejs_image_tag]
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
 
@@ -969,7 +999,7 @@ resource "aws_lambda_function" "nodejs_worker" {
   function_name = "${var.project_name}-worker-node"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.nodejs_image_tag}"
+  image_uri     = local.lambda_image_uri[var.nodejs_image_tag]
   memory_size   = var.nodejs_memory_mb
   timeout       = var.lambda_timeout
 
@@ -1351,7 +1381,7 @@ resource "aws_lambda_function" "rendezvous_test" {
   function_name = "${var.project_name}-rendezvous-test"
   role          = aws_iam_role.lambda_execution.arn
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_repository.main.repository_url}:${var.python_image_tag}"
+  image_uri     = local.lambda_image_uri[var.python_image_tag]
   memory_size   = 256
   timeout       = 120
 

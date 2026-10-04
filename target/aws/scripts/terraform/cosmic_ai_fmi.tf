@@ -14,6 +14,7 @@ locals {
   cosmic_ai_fmi_asl_vars = merge(local.cosmic_ai_asl_vars, {
     INIT_FUNCTION_NAME      = local.cosmic_ai_fmi_init_function_name
     SUMMARIZE_FUNCTION_NAME = local.cosmic_ai_fmi_summarize_function_name
+    EXECUTOR_RETRY_ERRORS   = jsonencode(var.cosmic_ai_fmi_executor_retry_errors)
   })
 
   cosmic_ai_fmi_scripts = {

@@ -54,12 +54,7 @@
             "OutputPath": "$.Payload",
             "Retry": [
               {
-                "ErrorEquals": [
-                  "Lambda.ServiceException",
-                  "Lambda.AWSLambdaException",
-                  "Lambda.SdkClientException",
-                  "Lambda.TooManyRequestsException"
-                ],
+                "ErrorEquals": ${EXECUTOR_RETRY_ERRORS},
                 "IntervalSeconds": 1,
                 "MaxAttempts": 3,
                 "BackoffRate": 2

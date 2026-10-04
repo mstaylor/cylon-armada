@@ -88,6 +88,22 @@ variable "state_machine_timeout_seconds" {
   default     = 3600
 }
 
+variable "executor_retry_errors" {
+  description = "Errors the Distributed Map retries an executor invocation on"
+  type        = list(string)
+  default = [
+    "Lambda.ServiceException",
+    "Lambda.AWSLambdaException",
+    "Lambda.SdkClientException",
+    "Lambda.TooManyRequestsException",
+  ]
+
+  validation {
+    condition     = length(var.executor_retry_errors) > 0
+    error_message = "executor_retry_errors must not be empty; Step Functions rejects an empty ErrorEquals."
+  }
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention for the state machine's Express logs"
   type        = number

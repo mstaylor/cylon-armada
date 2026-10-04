@@ -270,15 +270,15 @@ variable "soci_image_tag_suffix" {
 }
 
 variable "cosmic_ai_model_source" {
-  description = "Local path to the AstroMAE weights .pt; skipped when the file is absent"
+  description = "Local path to new AstroMAE weights to upload to cosmic_ai_model_key. Empty uses the object already in S3, and the plan fails if that object is missing"
   type        = string
-  default     = "/home/parallels/AI-for-Astronomy/code/Anomaly Detection/Fine_Tune_Model/Mixed_Inception_z_VITAE_Base_Img_Full_New_Full.pt"
+  default     = ""
 }
 
 variable "cosmic_ai_data_source" {
-  description = "Local path to the SDSS inference partition .pt; skipped when the file is absent"
+  description = "Local path to a new SDSS inference partition to upload to cosmic_ai_data_key. Empty uses the object already in S3, and the plan fails if that object is missing"
   type        = string
-  default     = "/home/parallels/AI-for-Astronomy/code/Anomaly Detection/Inference/resized_inference.pt"
+  default     = ""
 }
 
 variable "cosmic_ai_model_key" {
@@ -381,6 +381,33 @@ variable "cosmic_ai_state_machine_timeout_seconds" {
   description = "Overall timeout for the Cosmic AI Track 1 state machine - matches the live click-ops configuration"
   type        = number
   default     = 3600
+}
+
+variable "cosmic_ai_executor_retry_errors" {
+  description = "Errors the Arm A Distributed Map retries an executor invocation on; Arm A ranks are independent, so re-running one is safe"
+  type        = list(string)
+  default = [
+    "Lambda.ServiceException",
+    "Lambda.AWSLambdaException",
+    "Lambda.SdkClientException",
+    "Lambda.TooManyRequestsException",
+  ]
+
+  validation {
+    condition     = length(var.cosmic_ai_executor_retry_errors) > 0
+    error_message = "cosmic_ai_executor_retry_errors must not be empty; Step Functions rejects an empty ErrorEquals."
+  }
+}
+
+variable "cosmic_ai_fmi_executor_retry_errors" {
+  description = "Errors the Arm B Distributed Map retries an executor invocation on; only throttling, since re-invoking a rank that already joined the FMI communicator deadlocks or duplicates the rank"
+  type        = list(string)
+  default     = ["Lambda.TooManyRequestsException"]
+
+  validation {
+    condition     = length(var.cosmic_ai_fmi_executor_retry_errors) > 0
+    error_message = "cosmic_ai_fmi_executor_retry_errors must not be empty; Step Functions rejects an empty ErrorEquals."
+  }
 }
 
 variable "inference_device" {

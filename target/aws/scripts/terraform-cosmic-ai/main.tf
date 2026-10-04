@@ -37,6 +37,7 @@ locals {
     SUMMARIZE_FUNCTION_NAME = local.summarize_function_name
     MAX_CONCURRENCY         = var.max_concurrency
     TIMEOUT_SECONDS         = var.state_machine_timeout_seconds
+    EXECUTOR_RETRY_ERRORS   = jsonencode(var.executor_retry_errors)
   }
 }
 
