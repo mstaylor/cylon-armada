@@ -177,7 +177,8 @@ def test_defaults_match_the_spec():
     args = m.build_parser().parse_args([])
     assert args.scaling == "strong"
     assert args.backend == "all"
-    assert args.runs == 5
+    assert args.runs == 4
+    assert args.warmup_runs == 1
     assert args.per_rank == 19
     assert args.epoch_batch_size == 4
 
@@ -336,25 +337,86 @@ def test_timing_summary_reports_the_slowest_task_not_the_mean():
     assert s["total_s_max"] == 110.0
 
 
-def test_the_ray_arms_are_registered_but_refused_until_an_executor_exists():
-    """The names are registered so ordering, overrides and the context-store
-    mapping can be built and tested against them. Launching one is a different
-    matter: run_epochs has no branch for either arm, and ContextManager rejects
-    the plasma store ray-native maps to, before the try/except that would have
-    recorded the error. A sweep would burn a Fargate task per rank per run to
-    discover that. The refusal must name what is missing."""
+def test_the_ray_arms_are_launchable_on_the_ray_task_definition():
+    """Both Ray arms now have an executor in run_cosmic_local and a task
+    definition carrying the Ray image. run_task cannot override a container
+    image, so a Ray arm sent to the cosmic family would run without Ray; every
+    other arm must stay on the cosmic family."""
     m = _driver()
 
-    assert "ray-native" in m.ARMS
-    assert "ray-cylon" in m.ARMS
-
+    assert m.ARMS_WITHOUT_EXECUTOR == ()
     for arm in ("ray-native", "ray-cylon"):
-        with pytest.raises(ValueError) as excinfo:
-            m._selected_arms(arm)
-        assert "no executor" in str(excinfo.value)
+        assert m._selected_arms(arm) == (arm,)
+        assert m.task_definition_for(arm) == m.RAY_TASK_DEFINITION
+    for arm in ("armada", "langchain", "isolated"):
+        assert m.task_definition_for(arm) == m.TASK_DEFINITION
+    assert m.RAY_TASK_DEFINITION == "cylon-armada-ray"
 
-    with pytest.raises(ValueError):
-        m.plan_launches("ray-cylon", 1)
+
+def test_ray_comparison_selects_armada_and_both_ray_arms():
+    m = _driver()
+    assert m._selected_arms("ray-comparison") == ("armada", "ray-native", "ray-cylon")
+    assert "ray-comparison" in m.build_parser().parse_args(
+        ["--backend", "ray-comparison"]).backend
+
+
+def test_ray_comparison_leaders_over_the_four_measured_runs():
+    """Whoever leads a run pays any leftover cold-start cost. Over the four
+    measured runs every compared arm must lead at least once; armada leads
+    twice, which is the imbalance a 3-of-5 filter of the permutation cycle
+    leaves at four runs and is recorded here so a change to it is noticed."""
+    m = _driver()
+    selected = set(m._selected_arms("ray-comparison"))
+    leaders = [next(a for a in m.arm_order(i) if a in selected) for i in range(4)]
+    assert set(leaders) == selected
+    assert leaders == ["armada", "armada", "ray-cylon", "ray-native"]
+
+
+def test_warmups_precede_measured_runs_and_land_under_their_own_prefix():
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-comparison", "--runs", "2", "--warmup-runs", "1"])
+    rows = m.sweep_matrix(args)
+    ws2 = [r for r in rows if r["world_size"] == 2]
+
+    phases = [r["phase"] for r in ws2]
+    assert phases == ["warmup"] * 3 + ["measured"] * 6
+    assert all("/warmup0/" in r["s3_prefix"] for r in ws2 if r["phase"] == "warmup")
+    assert all("/warmup" not in r["s3_prefix"] for r in ws2 if r["phase"] == "measured")
+    assert {r["arm"] for r in ws2} == {"armada", "ray-native", "ray-cylon"}
+
+
+def test_the_matrix_covers_every_world_size_and_counts_one_task_per_rank():
+    m = _driver()
+    args = m.build_parser().parse_args(["--dry-run", "--backend", "ray-comparison"])
+    rows = m.sweep_matrix(args)
+
+    assert sorted({r["world_size"] for r in rows})[:2] == [1, 2]
+    assert all(r["tasks"] == r["world_size"] for r in rows)
+    per_ws = len(m._selected_arms("ray-comparison")) * (args.runs + args.warmup_runs)
+    assert all(sum(1 for r in rows if r["world_size"] == n) == per_ws
+               for n in args.world_sizes)
+
+
+def test_task_hours_estimate_multiplies_tasks_by_the_per_task_minutes():
+    m = _driver()
+    rows = [{"world_size": 4, "tasks": 4}, {"world_size": 2, "tasks": 2}]
+    estimate = m.estimate_usage(rows, task_minutes=30, task_vcpu=4, task_memory_gb=8)
+    assert estimate == {"launches": 2, "tasks": 6, "task_hours": 3.0,
+                        "vcpu_hours": 12.0, "gb_hours": 24.0}
+
+
+def test_dry_run_prints_the_matrix_and_the_estimate(capsys):
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-comparison", "--world-sizes", "1", "2",
+         "--est-task-minutes", "10"])
+    m.print_dry_run(args)
+    out = capsys.readouterr().out
+    assert "ray-native" in out and "ray-cylon" in out and "armada" in out
+    assert "task-hours" in out
+    assert "45 tasks" in out
+    assert "7.5 task-hours" in out
 
 
 def test_all_includes_every_arm_but_both_still_means_two():
@@ -363,7 +425,7 @@ def test_all_includes_every_arm_but_both_still_means_two():
     that already passes it."""
     m = _driver()
 
-    assert set(m._selected_arms("all")) == set(m.LAUNCHABLE_ARMS)
+    assert set(m._selected_arms("all")) == set(m.LAUNCHABLE_ARMS) == set(m.ARMS)
     assert m._selected_arms("both") == ("armada", "langchain")
     assert set(m.LAUNCHABLE_ARMS) | set(m.ARMS_WITHOUT_EXECUTOR) == set(m.ARMS)
 
@@ -381,7 +443,7 @@ def test_ray_arms_have_a_context_store_mapping():
 
 def test_gating_the_ray_arms_does_not_unbalance_who_leads():
     """arm_order permutes all five registered arms and plan_launches then drops
-    the two without an executor. Filtering a balanced sequence is not
+    any without an executor (none today). Filtering a balanced sequence is not
     automatically balanced, and the arm that leads is the one that pays any
     cold-start or leftover-state cost. isolated supplies the headline
     isolation-penalty number, so a bias landing on it constantly would be
@@ -401,3 +463,69 @@ def test_gating_the_ray_arms_does_not_unbalance_who_leads():
     short = [next(a for a in m.arm_order(i) if a in launchable)
              for i in range(len(m.LAUNCHABLE_ARMS))]
     assert set(short) == launchable, f"over {len(short)} runs the leaders were {short}"
+
+
+class _RecordingEcs:
+    def __init__(self):
+        self.calls = []
+
+    def run_task(self, **kwargs):
+        self.calls.append(kwargs)
+        return {"tasks": [{"taskArn": f"arn:{len(self.calls)}"}], "failures": []}
+
+
+def test_ray_arm_tasks_launch_in_the_ray_security_group_and_others_do_not():
+    """The VPC default group admits all TCP from anywhere and Ray's GCS and
+    client ports are unauthenticated, so a Ray task must carry the
+    members-only group. The other arms keep the network they were measured on."""
+    m = _driver()
+    for arm, expected in (("ray-native", ["sg-ray"]), ("ray-cylon", ["sg-ray"]),
+                          ("armada", None), ("langchain", None)):
+        ecs = _RecordingEcs()
+        m._run_tasks(ecs, 2, lambda rank: {}, 0, 1, 60,
+                     task_definition=m.task_definition_for(arm),
+                     security_groups=m.security_groups_for(arm, ["sg-ray"]))
+        for call in ecs.calls:
+            vpc = call["networkConfiguration"]["awsvpcConfiguration"]
+            assert vpc.get("securityGroups") == expected, arm
+            assert vpc["subnets"] == m.SUBNETS
+
+
+def test_a_missing_ray_security_group_refuses_the_sweep():
+    m = _driver()
+
+    class Ec2:
+        def __init__(self, groups):
+            self.groups = groups
+
+        def describe_security_groups(self, Filters):
+            assert Filters == [{"Name": "group-name", "Values": [m.RAY_SECURITY_GROUP_NAME]}]
+            return {"SecurityGroups": self.groups}
+
+    assert m.resolve_ray_security_group(Ec2([{"GroupId": "sg-1"}])) == "sg-1"
+    with pytest.raises(RuntimeError, match="terraform apply"):
+        m.resolve_ray_security_group(Ec2([]))
+
+
+def test_the_ray_security_group_name_matches_terraform_and_admits_only_members():
+    m = _driver()
+    main_tf = open(os.path.join(os.path.dirname(__file__), "..", "target", "aws", "scripts",
+                                "terraform", "main.tf")).read()
+    start = main_tf.index('resource "aws_security_group" "ray_tasks"')
+    block = main_tf[start:main_tf.index("\n}\n", start)]
+    assert m.RAY_SECURITY_GROUP_NAME == "cylon-armada-ray-tasks"
+    assert 'name        = "${var.project_name}-ray-tasks"' in block
+    ingress = block[block.index("ingress {"):block.index("egress {")]
+    assert "self        = true" in ingress
+    assert "cidr_blocks" not in ingress
+
+
+def test_dry_run_prints_a_fargate_cost_estimate(capsys):
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-comparison", "--world-sizes", "1", "2",
+         "--est-task-minutes", "10", "--vcpu-hour-usd", "0.04", "--gb-hour-usd", "0.004"])
+    m.print_dry_run(args)
+    out = capsys.readouterr().out
+    assert "Estimated Fargate cost: $1.44" in out
+    assert m.RAY_SECURITY_GROUP_NAME in out

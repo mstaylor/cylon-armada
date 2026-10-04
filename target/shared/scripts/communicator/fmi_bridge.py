@@ -224,6 +224,11 @@ class FMIBridge:
         """True if FMI communicator is initialised and ready."""
         return self._comm is not None
 
+    @property
+    def context(self):
+        """The CylonContext table collectives are built in; None when unavailable."""
+        return self._ctx
+
     # ------------------------------------------------------------------
     # Primitives
     # ------------------------------------------------------------------

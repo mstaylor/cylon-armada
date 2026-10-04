@@ -13,20 +13,29 @@
 """One rank of a local multi-rank Cosmic AI run (SP1 Task 6).
 
 Launched once per rank by run_cosmic_local.sh. Builds the six-operator agentic
-workflow, derives the connection topology from its compiled plan, opens an
-FMIBridge over the direct-redis channel, and executes the pipeline.
+workflow and executes it under one of five backends (ExecutionBackend):
+armada and ray-cylon open an FMIBridge over the direct-redis channel, with
+ray-cylon building it through CylonRayActor inside a Ray cluster; ray-native
+shares contexts through the Ray object store with one end-of-run barrier;
+langchain shares through Redis; isolated shares nothing.
+
+Ray arms record ray_cluster_s (forming the cluster) apart from establish_s
+(the data plane's own setup), and ray-native records teardown_barrier_s (the
+end-of-run barrier and late drain) apart from run_s.
 
 Services are mocked by default: --live switches to real Bedrock/Redis/DynamoDB
 and therefore costs money on every rank (one embedding call and one LLM call per
 galaxy), so it is opt-in rather than the default.
 
 Environment (set by the launcher): RANK, WORLD_SIZE, COMM_NAME, REDIS_HOST,
-REDIS_PORT, FMI_LISTEN_PORT.
+REDIS_PORT, FMI_LISTEN_PORT. Ray arms also read RAY_PORT,
+RAY_RENDEZVOUS_TIMEOUT_S, RAY_CLUSTER_TIMEOUT_S, RAY_BARRIER_TIMEOUT_S and
+RAY_NAMESPACE.
 
-Rank identity differs by arm. Under the armada backend the rank is the one the
-FMI channel negotiates through Redis INCR (bridge.rank), which can differ from
-the RANK the launcher requested; under the langchain backend there is no
-channel to negotiate through, so the rank is RANK itself. Both are used to pick
+Rank identity differs by arm. Under the armada and ray-cylon backends the rank
+is the one the FMI channel negotiates through Redis INCR (bridge.rank), which
+can differ from the RANK the launcher requested; under the other backends there
+is no channel to negotiate through, so the rank is RANK itself. Both are used to pick
 this rank's shard and to stamp the rank that originated each context, so the
 two mechanisms are interchangeable for correctness — but do not assume a rank's
 shard is the same under both arms of a local run, and never reuse COMM_NAME
@@ -44,6 +53,7 @@ import logging
 import os
 import sys
 import time
+from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
@@ -433,26 +443,71 @@ def form_ray_cluster(rank, world_size, comm_name, redis_client, ray_api):
                    nodes_fn=lambda: sum(1 for node in ray_api.nodes() if node.get("Alive")))
 
 
-def ray_native_shard_actor(rank, world_size, comm_name, ray_api):
-    """This rank's ShardActor, pinned to this rank's own node.
+@dataclass(frozen=True)
+class RayNativeHandles:
+    """The actors one ray-native rank uses: its own shard, and the run's
+    shared registry and end-of-run barrier."""
 
-    The registry is named per run so concurrent runs on one cluster never
-    share a directory, and detached so it outlives rank 0's driver. Pinning
-    keeps each rank's ray.put in its own node's object store; left to the
-    scheduler, a rank's actor could land on another task's node and turn its
-    local reads into network transfers.
+    shard_actor: object
+    registry: object
+    barrier: object
+
+
+def ray_native_actors(rank, world_size, comm_name, ray_api):
+    """This rank's ShardActor, pinned to its own node, plus the run's named
+    registry and barrier.
+
+    The registry and barrier are named per run so concurrent runs on one
+    cluster never share them, placed in the RAY_NAMESPACE namespace because
+    each rank is its own driver with its own anonymous namespace, and
+    detached so they outlive rank 0's driver until release_ray_native_run
+    kills them. Pinning keeps each rank's
+    ray.put in its own node's object store; left to the scheduler, a rank's
+    actor could land on another task's node and turn its local reads into
+    network transfers. Returns only once the shard and registry actors are
+    running: .remote() returns before the actor process exists, so without
+    the wait their startup would be charged to the first epoch's run_s
+    instead of establish_s.
     """
     from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
-    from ray_arm.native import ContextRegistry, ShardActor
+    from ray_arm.native import ContextRegistry, RunBarrier, ShardActor
 
+    namespace = os.environ.get("RAY_NAMESPACE", "cylon-armada")
     registry = ContextRegistry.options(
-        name=f"cosmic_registry_{comm_name}", get_if_exists=True, lifetime="detached"
+        name=f"cosmic_registry_{comm_name}", namespace=namespace,
+        get_if_exists=True, lifetime="detached"
     ).remote()
+    barrier = RunBarrier.options(
+        name=f"cosmic_barrier_{comm_name}", namespace=namespace,
+        get_if_exists=True, lifetime="detached"
+    ).remote(world_size)
     node_id = ray_api.get_runtime_context().get_node_id()
-    return ShardActor.options(
+    shard_actor = ShardActor.options(
         scheduling_strategy=NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
     ).remote(rank, world_size, registry)
+    ray_api.get([shard_actor.watermark.remote(), registry.count.remote()])
+    return RayNativeHandles(shard_actor=shard_actor, registry=registry, barrier=barrier)
+
+
+def release_ray_native_run(handles, rank, world_size, ray_api, timeout_s):
+    """Kill the run's named actors once no rank can still need them.
+
+    Called after RayNativeExecutor.finish, so every rank is already past its
+    last read. Rank 0 alone cleans up, after every other rank has departed;
+    the others only depart. A departure whose reply is lost because rank 0
+    killed the barrier right after counting it is the expected end state,
+    not a failure.
+    """
+    if rank == 0:
+        ray_api.get(handles.barrier.wait_departed.remote(world_size - 1), timeout=timeout_s)
+        ray_api.kill(handles.registry)
+        ray_api.kill(handles.barrier)
+        return
+    try:
+        ray_api.get(handles.barrier.depart.remote(), timeout=timeout_s)
+    except ray_api.exceptions.RayActorError:
+        logger.info("rank %d departed as the run's barrier was released", rank)
 
 
 def run_epochs(seq, shards, backend, bridge=None, ctx=None, root=0, shard_actor=None):
@@ -524,7 +579,10 @@ def main(argv=None):
     parser.add_argument("--backend",
                         default=os.environ.get("EXECUTION_BACKEND", "armada"),
                         choices=[b.value for b in ExecutionBackend],
-                        help="armada (collectives) or langchain (native invoke, Redis-shared context)")
+                        help="armada (Cylon collectives over FMI), langchain (native invoke, "
+                             "Redis-shared context), isolated (no sharing), ray-native (Ray "
+                             "object store), or ray-cylon (Ray cluster, Cylon collectives "
+                             "over FMI); env EXECUTION_BACKEND")
     parser.add_argument("--epoch-batch-size", type=int,
                         default=int(os.environ.get("EPOCH_BATCH_SIZE", 4)),
                         help="galaxies per epoch; identical across arms (env EPOCH_BATCH_SIZE)")
@@ -569,8 +627,9 @@ def main(argv=None):
                                      pricing=pricing)
 
     establish_s = 0.0
+    ray_cluster_s = None
     bridge = None
-    shard_actor = None
+    ray_native = None
     if backend is ExecutionBackend.Armada:
         # Derived before the bridge exists: the channel establishes its
         # connections while the communicator is built, so the topology has to
@@ -593,11 +652,13 @@ def main(argv=None):
     elif backend in (ExecutionBackend.RayNative, ExecutionBackend.RayCylon):
         import ray
 
-        t0 = time.perf_counter()
+        t_cluster = time.perf_counter()
         form_ray_cluster(rank, world_size, comm_name, _redis_client_for_rendezvous(), ray)
+        ray_cluster_s = time.perf_counter() - t_cluster
+        t0 = time.perf_counter()
         true_rank = rank
         if backend is ExecutionBackend.RayNative:
-            shard_actor = ray_native_shard_actor(true_rank, world_size, comm_name, ray)
+            ray_native = ray_native_actors(true_rank, world_size, comm_name, ray)
             channel = "ray-plasma"
         else:
             actor = CylonRayActor(rank=rank, world_size=world_size, comm_name=comm_name,
@@ -688,18 +749,29 @@ def main(argv=None):
         record["device"] = args.device
 
     record["pricing_source"] = pricing.source
+    if ray_cluster_s is not None:
+        record["ray_cluster_s"] = round(ray_cluster_s, 4)
+    ray_barrier_timeout_s = float(os.environ.get("RAY_BARRIER_TIMEOUT_S", 300))
 
     results = []
     t1 = time.perf_counter()
+    run_end = None
     try:
         results = run_epochs(seq, shards, backend, bridge=bridge,
-                             ctx=bridge._ctx if bridge is not None else None,
-                             root=root, shard_actor=shard_actor)
+                             ctx=bridge._ctx if bridge is not None else None, root=root,
+                             shard_actor=ray_native.shard_actor if ray_native else None)
+        run_end = time.perf_counter()
+        if ray_native is not None:
+            late = RayNativeExecutor(ray_native.shard_actor).finish(
+                seq, ray_native.barrier, ray_barrier_timeout_s)
+            record["teardown_barrier_s"] = round(time.perf_counter() - run_end, 4)
+            if late is not None:
+                results.append(late)
     except Exception as exc:
         record["error"] = f"{type(exc).__name__}: {exc}"
         raise
     finally:
-        record["run_s"] = round(time.perf_counter() - t1, 4)
+        record["run_s"] = round((run_end or time.perf_counter()) - t1, 4)
         record.update(metrics.summary())
         record["acks_visible"] = sum(
             1
@@ -718,6 +790,8 @@ def main(argv=None):
     if backend in (ExecutionBackend.RayNative, ExecutionBackend.RayCylon):
         import ray
 
+        if ray_native is not None:
+            release_ray_native_run(ray_native, true_rank, world_size, ray, ray_barrier_timeout_s)
         ray.shutdown()
     return 0
 

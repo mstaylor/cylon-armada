@@ -166,3 +166,17 @@ def test_a_control_at_a_different_world_size_fails():
 
 def test_two_arms_still_gate_without_a_control():
     assert check_run(_records(19), _records(19)).passed
+
+
+def test_check_arms_gates_any_set_of_named_arms():
+    """The Ray comparison pairs armada with the two Ray arms, not with
+    langchain; the gate must hold any set of arms to the same agreement."""
+    from results.exp_e_gate import check_arms
+
+    passing = check_arms({"armada": _records(19), "ray-native": _records(19),
+                          "ray-cylon": _records(19)})
+    assert passing.passed, passing.failures
+
+    failing = check_arms({"armada": _records(19), "ray-native": _records(18)})
+    assert not failing.passed
+    assert any("ray-native" in f for f in failing.failures)

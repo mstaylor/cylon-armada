@@ -14,6 +14,17 @@ RUN /opt/conda/envs/cylon_dev/bin/python -c \
 
 RUN /opt/conda/envs/cylon_dev/bin/python -c \
     "import pycylon, ray, pyarrow; print('pycylon', pycylon.__version__, \
-     'ray', ray.__version__, 'pyarrow', pyarrow.__version__)"
+     'ray', ray.__version__, 'pyarrow', pyarrow.__version__); \
+     assert ray.__version__ == '${RAY_VERSION}', ray.__version__" \
+ && cd /cylon-armada/scripts \
+ && /opt/conda/envs/cylon_dev/bin/python -c \
+    "from communicator.fmi_bridge import _import_fmi; \
+     assert all(_import_fmi()), 'pycylon FMI not importable'; \
+     from cylon_armada.context_table import ContextTable; \
+     print('FMI OK, ContextTable', ContextTable(8).to_arrow().schema.field('embedding').type)" \
+ && /opt/conda/envs/cylon_dev/bin/python -c \
+    "import armada.run_cosmic_local, armada.ray_native_executor, ray_arm.native, \
+     ray_arm.cluster, ray_arm.cylon_on_ray; print('Ray arm modules OK')" \
+ && /opt/conda/envs/cylon_dev/bin/ray --version
 
 ENV RAY_DISABLE_IMPORT_WARNING=1

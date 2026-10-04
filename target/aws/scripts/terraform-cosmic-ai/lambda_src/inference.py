@@ -125,6 +125,25 @@ def environ_or_required(key, default = None, required=True):
             else {'default': default}
 
         )
+STAGE_FIELDS = (
+    'code_fetch_s', 'init_s', 'comm_init_s', 'payload_fetch_s', 'scatter_s', 'model_load_s',
+    'inference_s', 'barrier_s', 'publish_s', 'total_s',
+)
+
+
+def startup_timings(process_start_ts):
+    lambda_entry_ts = os.environ.get('LAMBDA_ENTRY_TS')
+    code_fetch_end_ts = os.environ.get('CODE_FETCH_END_TS')
+    if lambda_entry_ts is None:
+        return {'code_fetch_s': None, 'init_s': None}
+    if code_fetch_end_ts is None:
+        return {'code_fetch_s': None, 'init_s': process_start_ts - float(lambda_entry_ts)}
+    return {
+        'code_fetch_s': float(code_fetch_end_ts) - float(lambda_entry_ts),
+        'init_s': process_start_ts - float(code_fetch_end_ts),
+    }
+
+
 # Load Data
 def load_data(data_path, device):
     return torch.load(data_path, map_location=device)
@@ -140,10 +159,7 @@ def data_loader(data, batch_size):
 
 
 #Iterate over data for predicting the redshift and invoke the evaluation modules
-def inference(
-    model, dataloader, device, batch_size,
-    rank, result_path, data_path, args, stage_timings=None
-):
+def run_inference(model, dataloader, device, batch_size, rank, result_path, data_path):
     total_time = 0.0  # Initialize total time for execution
     num_batches = 0  # Initialize number of batches
     total_data_bits = 0  # Initialize total data bits processed
@@ -207,13 +223,25 @@ def inference(
     logging.info(f'Rank: {rank}. S3 request count: {len(s3_timing.request_times)}')
     logging.info(f'Rank: {rank}. S3 response count: {len(s3_timing.response_times)}')
 
+    execution_info['num_samples'] = num_samples
+    execution_info['inference_s'] = inference_wall_s
+    return execution_info
+
+
+def inference(
+    model, dataloader, device, batch_size,
+    rank, result_path, data_path, args, stage_timings=None
+):
+    execution_info = run_inference(model, dataloader, device, batch_size, rank, result_path, data_path)
+
     stage_timings = dict(stage_timings or {})
     process_start_ts = stage_timings.pop('process_start_ts', None)
+    execution_info['code_fetch_s'] = stage_timings.get('code_fetch_s')
     execution_info['init_s'] = stage_timings.get('init_s')
     execution_info['payload_fetch_s'] = stage_timings.get('payload_fetch_s')
     execution_info['scatter_s'] = stage_timings.get('scatter_s')
     execution_info['model_load_s'] = stage_timings.get('model_load_s')
-    execution_info['inference_s'] = inference_wall_s
+    execution_info['comm_init_s'] = 0.0
     execution_info['barrier_s'] = 0.0
     execution_info['publish_s'] = None
     execution_info['total_s'] = None
@@ -301,10 +329,7 @@ def partition_data(data, rank, world_size):
     
     return data
 
-#This is the engine module for invoking and calling various modules
-def engine(args, stage_timings=None):
-    stage_timings = dict(stage_timings or {})
-
+def load_partition_and_model(args, stage_timings):
     t_scatter_start = time.time()
     data = load_data(
         data_path=args.data_path, bucket=args.data_bucket
@@ -317,6 +342,13 @@ def engine(args, stage_timings=None):
     t_model_load_start = time.time()
     model = load_model(args.model_path, args.device)
     stage_timings['model_load_s'] = time.time() - t_model_load_start
+    return dataloader, model
+
+
+#This is the engine module for invoking and calling various modules
+def engine(args, stage_timings=None):
+    stage_timings = dict(stage_timings or {})
+    dataloader, model = load_partition_and_model(args, stage_timings)
 
     inference(
         model, dataloader,
@@ -328,8 +360,6 @@ def engine(args, stage_timings=None):
 # Pathes and other inference hyperparameters can be adjusted below
 if __name__ == '__main__':
     process_start_ts = time.time()
-    _lambda_entry_ts = os.environ.get('LAMBDA_ENTRY_TS')
-    init_s = (process_start_ts - float(_lambda_entry_ts)) if _lambda_entry_ts else None
 
     prj_dir = '/tmp/Anomaly Detection/'  #adjust based on your system's directory
     parser = argparse.ArgumentParser()
@@ -376,6 +406,6 @@ if __name__ == '__main__':
 
     engine(args, stage_timings={
         'process_start_ts': process_start_ts,
-        'init_s': init_s,
+        **startup_timings(process_start_ts),
         'payload_fetch_s': payload_fetch_s,
     })

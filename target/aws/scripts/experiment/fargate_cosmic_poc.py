@@ -13,15 +13,29 @@ run_task pattern.
 
 Usage:
     python fargate_cosmic_poc.py --world-sizes 1 2 --dry-run
-    python fargate_cosmic_poc.py --scaling weak --runs 5 --live
+    python fargate_cosmic_poc.py --backend ray-comparison --dry-run
+    python fargate_cosmic_poc.py --scaling weak --runs 4 --live
     python fargate_cosmic_poc.py --scaling strong --backend armada --world-sizes 4 --live
 
-Each world size runs `--runs` paired runs; within a run the arms execute back
+The Ray arms run on their own task definition (RAY_TASK_DEFINITION), because
+run_task cannot override a container image and only the Ray image carries Ray.
+Every rank is still one task: rank 0 starts the Ray head and publishes its
+address through Redis under COMM_NAME, the others discover it and join.
+
+Each world size first runs --warmup-runs unmeasured runs, written under
+warmup<k>/ and never aggregated, then --runs measured runs. A Fargate task is
+always a fresh microVM, so a warm-up cannot warm a container; what it warms is
+everything the tasks share (Redis, Bedrock, the S3 artifacts, the ECR
+registry), so the first measured run is not also the first touch of those.
+--dry-run prints the full matrix and an estimate of the task-hours it costs.
+
+Each world size runs `--runs` measured paired runs; within a run the arms execute back
 to back, never concurrently, and their order alternates between runs so that
 Bedrock latency drift over the session cannot masquerade as an effect. Order
-fairness over a short sweep depends on the arm count: with the arms that have
-executors today, every arm leads within the first three runs and leads equally
-often over the full cycle. Changing ARMS or ARMS_WITHOUT_EXECUTOR means
+fairness over a short sweep depends on the arm count: with all five arms, every
+arm leads within the first five runs and leads equally often over the full
+cycle; with the three ray-comparison arms every arm leads within the four
+measured runs, armada twice. Changing ARMS or ARMS_WITHOUT_EXECUTOR means
 re-checking test_gating_the_ray_arms_does_not_unbalance_who_leads and
 test_leader_diversity_over_short_runs rather than assuming the stride
 generalises.
@@ -56,6 +70,8 @@ CLUSTER = "CylonFargateExperiments"
 # target/aws/scripts/ecs/task_definition_fargate.json is not a deployed
 # definition — nothing reads it.
 TASK_DEFINITION = "cylon-armada-cosmic"
+RAY_TASK_DEFINITION = "cylon-armada-ray"
+RAY_SECURITY_GROUP_NAME = "cylon-armada-ray-tasks"
 CONTAINER_NAME = "cylon-armada"
 SUBNETS = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
 REDIS_ADDR = "dev-cylon-redis1.aws-cylondata.com:6379"
@@ -114,7 +130,8 @@ def galaxies_for(scaling, world_size, per_rank, total):
 
 ARMS = ("armada", "langchain", "isolated", "ray-native", "ray-cylon")
 
-ARMS_WITHOUT_EXECUTOR = ("ray-native", "ray-cylon")
+ARMS_WITHOUT_EXECUTOR = ()
+RAY_ARMS = ("ray-native", "ray-cylon")
 LAUNCHABLE_ARMS = tuple(arm for arm in ARMS if arm not in ARMS_WITHOUT_EXECUTOR)
 
 _ORDERS = tuple(itertools.permutations(ARMS))
@@ -164,7 +181,41 @@ def arm_order(run_index):
 _ARM_SELECTIONS = {
     "all": LAUNCHABLE_ARMS,
     "both": ("armada", "langchain"),
+    "ray-comparison": ("armada", "ray-native", "ray-cylon"),
 }
+
+
+def resolve_ray_security_group(ec2):
+    """The id of the Ray tasks' security group terraform created, by name.
+
+    Without it a Ray task lands in the VPC default group, which here admits
+    all TCP from anywhere, and Ray's GCS and client ports have no
+    authentication. Refusing to launch is cheaper than that exposure.
+    """
+    groups = ec2.describe_security_groups(
+        Filters=[{"Name": "group-name", "Values": [RAY_SECURITY_GROUP_NAME]}])["SecurityGroups"]
+    if len(groups) != 1:
+        raise RuntimeError(
+            f"expected exactly one security group named {RAY_SECURITY_GROUP_NAME!r}, found "
+            f"{len(groups)}; terraform apply target/aws/scripts/terraform creates it")
+    return groups[0]["GroupId"]
+
+
+def security_groups_for(arm, ray_security_groups):
+    """Ray arms get the members-only Ray group; every other arm keeps the
+    default its results so far were measured under."""
+    return ray_security_groups if arm in RAY_ARMS else None
+
+
+def task_definition_for(arm):
+    """The task definition family an arm's tasks run on.
+
+    run_task cannot override a container image, so the image an arm needs is
+    chosen by family: the Ray arms on the Ray image, every other arm on the
+    cosmic image. Both families are sized and configured identically in
+    terraform, so the image is the only difference.
+    """
+    return RAY_TASK_DEFINITION if arm in RAY_ARMS else TASK_DEFINITION
 
 
 def _selected_arms(backend):
@@ -173,27 +224,30 @@ def _selected_arms(backend):
     "both" keeps meaning exactly the two sharing arms, as it always has.
     Folding it into "all" would silently add a third arm — 50% more Fargate and
     Bedrock than the name implies — to every caller and script that already
-    passes it.
+    passes it. "ray-comparison" is the headline comparison: Armada against
+    both Ray arms.
 
-    The Ray arms are registered in ARMS so the ordering and override machinery
-    can be built and tested against their names, but they have no executor:
-    run_epochs has no branch for either, ContextManager rejects the plasma
-    store ray-native maps to, and run_task cannot point a task at the Ray
-    image. Launching one costs a Fargate task per rank and yields no
-    measurement, so "all" excludes them and naming one explicitly fails here
-    rather than at the far end of a sweep.
+    An arm listed in ARMS_WITHOUT_EXECUTOR is refused here rather than at the
+    far end of a sweep, where it would cost a Fargate task per rank and yield
+    no measurement. None is listed today.
     """
     selected = _ARM_SELECTIONS.get(backend, (backend,))
     pending = tuple(arm for arm in selected if arm in ARMS_WITHOUT_EXECUTOR)
     if pending:
         raise ValueError(
-            f"arm(s) {list(pending)} have no executor and cannot be launched: "
-            f"run_epochs in run_cosmic_local.py dispatches only on "
-            f"{list(LAUNCHABLE_ARMS)}, and no ECS task definition serves the Ray "
-            f"image. Remove them from ARMS_WITHOUT_EXECUTOR once a launcher "
-            f"exists."
+            f"arm(s) {list(pending)} have no executor and cannot be launched; "
+            f"launchable arms are {list(LAUNCHABLE_ARMS)}"
         )
     return selected
+
+
+def plan_warmups(backend, warmup_runs):
+    """The ordered (warmup_index, backend) sequence run before the measured runs.
+
+    Ordered by arm_order exactly as measured runs are, so the warm-ups touch
+    the shared services in the same arm order a measured run would.
+    """
+    return plan_launches(backend, warmup_runs)
 
 
 def plan_launches(backend, runs):
@@ -291,7 +345,12 @@ def _capacity_retryable(failures):
 
 
 def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
-               capacity_backoff_s, budget_s):
+               capacity_backoff_s, budget_s, task_definition=TASK_DEFINITION,
+               security_groups=None):
+    vpc_configuration = {"subnets": SUBNETS, "assignPublicIp": "ENABLED"}
+    if security_groups:
+        vpc_configuration["securityGroups"] = list(security_groups)
+
     def _launch(rank):
         attempt = 0
         deadline = time.monotonic() + budget_s
@@ -299,14 +358,9 @@ def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
             try:
                 resp = ecs.run_task(
                     cluster=CLUSTER,
-                    taskDefinition=TASK_DEFINITION,
+                    taskDefinition=task_definition,
                     launchType="FARGATE",
-                    networkConfiguration={
-                        "awsvpcConfiguration": {
-                            "subnets": SUBNETS,
-                            "assignPublicIp": "ENABLED",
-                        }
-                    },
+                    networkConfiguration={"awsvpcConfiguration": vpc_configuration},
                     overrides=overrides_for_rank(rank),
                 )
             except ClientError as exc:
@@ -422,30 +476,117 @@ def collect_arm_timing(ecs, arns):
         return None
 
 
-def launch_world_size(ecs, world_size, args):
+def sweep_matrix(args):
+    """Every launch the sweep makes, in order, one row per arm-run.
+
+    Pure, so the dry run and the live run walk the same rows. Warm-ups at a
+    world size precede its measured runs and are written under warmup<k>/.
+    """
+    rows = []
+    for world_size in sorted(args.world_sizes):
+        galaxies = galaxies_for(args.scaling, world_size, args.per_rank, args.total)
+        phases = (("warmup", plan_warmups(args.backend, args.warmup_runs)),
+                  ("measured", plan_launches(args.backend, args.runs)))
+        for phase, launches in phases:
+            run_dir = "warmup" if phase == "warmup" else "run"
+            for run_index, arm in launches:
+                rows.append({
+                    "world_size": world_size, "galaxies": galaxies, "phase": phase,
+                    "run": run_index, "arm": arm, "tasks": world_size,
+                    "task_definition": task_definition_for(arm),
+                    "security_group": (RAY_SECURITY_GROUP_NAME if arm in RAY_ARMS
+                                       else "vpc default"),
+                    "s3_prefix": (f"{RESULTS_PREFIX}/{args.scaling}/{arm}/ws{world_size}/"
+                                  f"{run_dir}{run_index}/"),
+                })
+    return rows
+
+
+def estimate_usage(rows, task_minutes, task_vcpu, task_memory_gb):
+    """Task-hours for a set of launches, assuming every task runs task_minutes.
+
+    A planning figure only: refine task_minutes from a smoke run's
+    _timing.json (total_s_max is the slowest task's whole lifecycle).
+    """
+    tasks = sum(row["tasks"] for row in rows)
+    task_hours = tasks * task_minutes / 60.0
+    return {"launches": len(rows), "tasks": tasks, "task_hours": round(task_hours, 2),
+            "vcpu_hours": round(task_hours * task_vcpu, 2),
+            "gb_hours": round(task_hours * task_memory_gb, 2)}
+
+
+def estimate_cost_usd(usage, vcpu_hour_usd, gb_hour_usd):
+    """Fargate compute cost of an estimate_usage result; Bedrock, Redis,
+    ECR and S3 are not included."""
+    return round(usage["vcpu_hours"] * vcpu_hour_usd + usage["gb_hours"] * gb_hour_usd, 2)
+
+
+def print_dry_run(args):
+    """Print the full sweep matrix and its estimated cost, launching nothing."""
+    rows = sweep_matrix(args)
+
+    def usage(subset):
+        return estimate_usage(subset, args.est_task_minutes, args.task_vcpu,
+                              args.task_memory_gb)
+
+    print(f"Sweep matrix: scaling={args.scaling} backend={args.backend} "
+          f"warm-up runs={args.warmup_runs} measured runs={args.runs}")
+    def cost(cell):
+        return estimate_cost_usd(cell, args.vcpu_hour_usd, args.gb_hour_usd)
+
+    print(f"{'N':>4} {'galaxies':>8} {'phase':>8} {'run':>3}  {'arm':<11} "
+          f"{'tasks':>5}  {'task definition':<20} security group")
+    for row in rows:
+        print(f"{row['world_size']:>4} {row['galaxies']:>8} {row['phase']:>8} {row['run']:>3}  "
+              f"{row['arm']:<11} {row['tasks']:>5}  {row['task_definition']:<20} "
+              f"{row['security_group']}")
+    print()
+    print(f"{'N':>4} {'launches':>8} {'tasks':>6} {'task-hours':>11} {'USD':>9}")
+    for world_size in sorted(args.world_sizes):
+        cell = usage([r for r in rows if r["world_size"] == world_size])
+        print(f"{world_size:>4} {cell['launches']:>8} {cell['tasks']:>6} "
+              f"{cell['task_hours']:>11} {cost(cell):>9.2f}")
+    total = usage(rows)
+    warmup = usage([r for r in rows if r["phase"] == "warmup"])
+    print()
+    print(f"Total: {total['launches']} launches, {total['tasks']} tasks, "
+          f"{total['task_hours']} task-hours ({total['vcpu_hours']} vCPU-hours, "
+          f"{total['gb_hours']} GB-hours) at {args.est_task_minutes} min/task, "
+          f"{args.task_vcpu} vCPU / {args.task_memory_gb} GB per task; "
+          f"warm-ups account for {warmup['task_hours']} task-hours")
+    print(f"Estimated Fargate cost: ${cost(total):.2f} (warm-ups ${cost(warmup):.2f}) at "
+          f"${args.vcpu_hour_usd}/vCPU-hour and ${args.gb_hour_usd}/GB-hour; excludes Bedrock, "
+          f"Redis, ECR and S3")
+    return rows
+
+
+def launch_world_size(ecs, world_size, args, ray_security_groups=None):
+    rows = [row for row in sweep_matrix(args) if row["world_size"] == world_size]
     galaxies = galaxies_for(args.scaling, world_size, args.per_rank, args.total)
     point_args = argparse.Namespace(**{**vars(args), "galaxies": galaxies})
-    launches = plan_launches(args.backend, args.runs)
     logger.info("world_size=%d scaling=%s galaxies=%d launches=%s",
                 world_size, args.scaling, galaxies,
-                [f"run{r}:{arm}" for r, arm in launches])
+                [f"{row['phase']}{row['run']}:{row['arm']}" for row in rows])
 
     all_arns = []
-    for run_index, arm in launches:
-        comm_name = f"cosmic_{args.scaling}_{arm}_{world_size}_{run_index}_{uuid.uuid4().hex[:8]}"
-        s3_prefix = f"{RESULTS_PREFIX}/{args.scaling}/{arm}/ws{world_size}/run{run_index}/"
-        logger.info("  run %d arm %s comm_name=%s -> s3://%s/%s",
-                    run_index, arm, comm_name, RESULTS_BUCKET, s3_prefix)
+    for row in rows:
+        arm, run_index, s3_prefix = row["arm"], row["run"], row["s3_prefix"]
+        phase_tag = "w" if row["phase"] == "warmup" else ""
+        comm_name = (f"cosmic_{args.scaling}_{arm}_{world_size}_{phase_tag}{run_index}_"
+                     f"{uuid.uuid4().hex[:8]}")
+        logger.info("  %s %d arm %s comm_name=%s -> s3://%s/%s",
+                    row["phase"], run_index, arm, comm_name, RESULTS_BUCKET, s3_prefix)
         if args.dry_run:
             overrides = build_overrides(0, world_size, comm_name, s3_prefix, point_args, arm)
-            logger.info("  [dry-run] rank 0 env=%s",
+            logger.info("  [dry-run] rank 0 task_definition=%s env=%s", row["task_definition"],
                         {e["name"]: e["value"] for e in
                          overrides["containerOverrides"][0]["environment"]})
             continue
         arns = _run_tasks(ecs, world_size, lambda rank: build_overrides(
             rank, world_size, comm_name, s3_prefix, point_args, arm),
             args.capacity_retries, args.capacity_backoff_s,
-            capacity_budget_s(args.timeout_ms))
+            capacity_budget_s(args.timeout_ms), task_definition=row["task_definition"],
+            security_groups=security_groups_for(arm, ray_security_groups))
         logger.info("  launched %d tasks; waiting for the arm to finish", len(arns))
         _wait_for_tasks(ecs, arns, args.arm_timeout_s)
         _record_arm_timing(ecs, arns, s3_prefix)
@@ -489,11 +630,26 @@ def build_parser():
                         help="residual above which a galaxy gets the outlier prompt, pinned "
                              "from the whole population (p90 over 1253 SDSS galaxies). Unpinned, "
                              "the generator derives it per shard and the workload moves with N")
-    parser.add_argument("--backend", choices=list(ARMS) + ["all", "both"],
+    parser.add_argument("--backend", choices=list(ARMS) + list(_ARM_SELECTIONS),
                         default="all",
-                        help="which arm(s); the experiment is a paired run, so both by default")
-    parser.add_argument("--runs", type=int, default=5,
-                        help="paired runs per world size; arm order alternates between runs")
+                        help="which arm(s); 'ray-comparison' is armada against both Ray arms")
+    parser.add_argument("--runs", type=int, default=4,
+                        help="measured paired runs per world size; arm order alternates "
+                             "between runs; mean and sample std are taken across them")
+    parser.add_argument("--warmup-runs", type=int, default=1,
+                        help="unmeasured runs per world size before the measured ones, "
+                             "written under warmup<k>/ and never aggregated")
+    parser.add_argument("--est-task-minutes", type=float, default=10.0,
+                        help="dry-run planning estimate of one task's whole lifecycle; refine "
+                             "from a smoke run's _timing.json total_s_max")
+    parser.add_argument("--task-vcpu", type=float, default=4.0,
+                        help="dry-run estimate only; must match terraform ecs_python_cpu / 1024")
+    parser.add_argument("--task-memory-gb", type=float, default=8.0,
+                        help="dry-run estimate only; must match terraform ecs_python_memory_mb / 1024")
+    parser.add_argument("--vcpu-hour-usd", type=float, default=0.04048,
+                        help="dry-run estimate only; Fargate Linux/x86 on-demand vCPU-hour price")
+    parser.add_argument("--gb-hour-usd", type=float, default=0.004445,
+                        help="dry-run estimate only; Fargate Linux/x86 on-demand GB-hour price")
     parser.add_argument("--per-rank", type=int, default=19,
                         help="galaxies per rank under weak scaling (floor(1253/64))")
     parser.add_argument("--total", type=int, default=1253,
@@ -532,9 +688,18 @@ def main():
         logger.warning("world sizes %s omit 1 and/or 2 — the sweep convention requires both "
                        "as baseline points", args.world_sizes)
 
+    if args.dry_run:
+        print_dry_run(args)
+
+    ray_security_groups = None
+    if not args.dry_run and any(arm in RAY_ARMS for arm in _selected_arms(args.backend)):
+        ray_security_groups = [resolve_ray_security_group(boto3.client("ec2", region_name=REGION))]
+        logger.info("Ray arms launch in security group %s (%s)",
+                    ray_security_groups[0], RAY_SECURITY_GROUP_NAME)
+
     ecs = boto3.client("ecs", region_name=REGION)
     for i, world_size in enumerate(sorted(args.world_sizes)):
-        launch_world_size(ecs, world_size, args)
+        launch_world_size(ecs, world_size, args, ray_security_groups)
         if not args.dry_run and i < len(args.world_sizes) - 1:
             time.sleep(args.settle_s)
 

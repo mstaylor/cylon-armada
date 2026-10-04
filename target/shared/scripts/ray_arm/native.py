@@ -16,6 +16,8 @@ exists to compare against. Plain Python objects still work through
 property.
 """
 
+import asyncio
+
 import ray
 
 
@@ -105,3 +107,53 @@ class ShardActor:
         fetched = ray.get(new_refs)
         self._contexts.extend(fetched)
         return fetched
+
+
+DEPARTED_PHASE = "departed"
+
+
+@ray.remote
+class RunBarrier:
+    """End-of-run synchronisation across ranks, by named phase.
+
+    Async so a waiting rank parks on a condition inside the actor instead of
+    holding it: a synchronous actor runs one call at a time, so the first
+    waiter would block every later arrival and the barrier would deadlock.
+    Each phase is an independent single-use barrier, which lets a run order
+    "every rank has published" before "every rank has finished reading".
+
+    Departures are counted separately for the one rank that cleans up the
+    run's named actors, so it can wait for the others without them waiting
+    on it.
+    """
+
+    def __init__(self, parties):
+        self._parties = parties
+        self._arrived = {}
+        self._conditions = {}
+
+    def _condition(self, phase):
+        if phase not in self._conditions:
+            self._conditions[phase] = asyncio.Condition()
+        return self._conditions[phase]
+
+    async def _arrive(self, phase):
+        condition = self._condition(phase)
+        async with condition:
+            self._arrived[phase] = self._arrived.get(phase, 0) + 1
+            condition.notify_all()
+
+    async def _until(self, phase, count):
+        condition = self._condition(phase)
+        async with condition:
+            await condition.wait_for(lambda: self._arrived.get(phase, 0) >= count)
+
+    async def wait(self, phase):
+        await self._arrive(phase)
+        await self._until(phase, self._parties)
+
+    async def depart(self):
+        await self._arrive(DEPARTED_PHASE)
+
+    async def wait_departed(self, count):
+        await self._until(DEPARTED_PHASE, count)

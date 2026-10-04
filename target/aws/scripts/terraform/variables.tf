@@ -306,15 +306,27 @@ variable "cosmic_ai_lambda_bucket_name" {
 }
 
 variable "cosmic_ai_inference_source" {
-  description = "Local path to the instrumented inference.py; skipped when the file is absent. This is NOT baked into any Lambda package or image - lambda_entry3.py fetches it fresh from S3 on every invocation, so the fix only takes effect once this upload lands. Defaults to the repo-local copy in terraform-cosmic-ai/lambda_src/ so a plain apply works on any machine, not just one with an AI-for-Astronomy checkout"
+  description = "Local path to the instrumented inference.py that lambda_entry3.py fetches from S3 on every invocation. Empty means the repo copy in terraform-cosmic-ai/lambda_src/, resolved against this module's directory rather than the shell's working directory. A missing file fails the plan"
   type        = string
-  default     = "../terraform-cosmic-ai/lambda_src/inference.py"
+  default     = ""
 }
 
 variable "cosmic_ai_inference_key" {
   description = "S3 key lambda_entry3.py fetches inference.py from, matching the Anomaly Detection folder structure the live pipeline already uses"
   type        = string
   default     = "Anomaly Detection/Inference/inference.py"
+}
+
+variable "cosmic_ai_fmi_inference_key" {
+  description = "S3 key in cosmic_ai_lambda_bucket_name for the Arm B rank script, inside the Anomaly Detection folder lambda_entry3.py downloads"
+  type        = string
+  default     = "Anomaly Detection/Inference/inference_FMI.py"
+}
+
+variable "cosmic_ai_fmi_communicator_prefix" {
+  description = "S3 prefix, inside the Inference folder lambda_entry3.py downloads, where the shared communicator package (FMIBridge) is uploaded so inference_FMI.py imports the same module the rest of cylon-armada uses"
+  type        = string
+  default     = "Anomaly Detection/Inference/communicator"
 }
 
 variable "cosmic_ai_python_runtime" {
@@ -575,4 +587,34 @@ variable "ray_image_tag" {
   description = "ECR image tag for the Ray baseline arms. Built from Dockerfile.ray.python on top of the cosmic image, which already carries pycylon with the FMI transport that arm ray-cylon needs"
   type        = string
   default     = "cylon-armada-ray-python"
+}
+
+variable "ray_port" {
+  description = "GCS port the Ray head listens on (rank 0's ray start --head --port); workers join on it"
+  type        = number
+  default     = 6380
+}
+
+variable "ray_namespace" {
+  description = "Ray namespace for the per-run named registry and barrier actors; every rank is its own driver, so the names must live in one shared namespace"
+  type        = string
+  default     = "cylon-armada"
+}
+
+variable "ray_rendezvous_timeout_s" {
+  description = "How long a non-zero rank waits for rank 0 to publish the Ray head address in Redis"
+  type        = number
+  default     = 300
+}
+
+variable "ray_cluster_timeout_s" {
+  description = "How long each rank waits for the Ray cluster to reach world_size live nodes"
+  type        = number
+  default     = 300
+}
+
+variable "ray_barrier_timeout_s" {
+  description = "How long a ray-native rank waits at each end-of-run barrier phase before failing"
+  type        = number
+  default     = 300
 }

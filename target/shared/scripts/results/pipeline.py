@@ -80,11 +80,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Experiment family: which chart/notebook set to produce.
     parser.add_argument("--experiment", type=str, default="reuse",
-                        choices=["reuse", "zerocopy", "collectives", "collectives_compare"],
+                        choices=["reuse", "zerocopy", "collectives", "collectives_compare",
+                                 "armc_tolerance", "exp_e_scaling"],
                         help="reuse = cost/reuse charts (download/aggregate/charts/notebook); "
                              "zerocopy = Experiment A/A2 charts (charts/notebook on the results dir); "
                              "collectives_compare = Experiment B Rivanna-vs-Fargate charts "
-                             "(needs --rivanna-dir/--fargate-dir, writes to --output-dir)")
+                             "(needs --rivanna-dir/--fargate-dir, writes to --output-dir); "
+                             "armc_tolerance = Arm C Phase 1 chart 7 from the sweep dir's "
+                             "score.json (--local-dir); "
+                             "exp_e_scaling = Experiment E per-arm scaling summary and charts from "
+                             "the Fargate sweep's rank records (--local-dir, writes to --output-dir)")
 
     # Steps
     parser.add_argument("--step", type=str, action="append", choices=STEPS,
@@ -491,6 +496,31 @@ def main():
             notebook_name=(args.notebook_name if args.notebook_name != "context_reuse_results"
                            else "exp_b_collectives_rivanna_vs_fargate"),
         )
+        return
+
+    if args.experiment == "armc_tolerance":
+        if not args.local_dir:
+            parser.error("--local-dir (the armc_tolerance_sweep --out-dir) is required for "
+                         "--experiment armc_tolerance")
+        from .chart_tolerance import generate_tolerance_chart
+        for part in ("full", "report"):
+            for metric in ("agreement", "kappa"):
+                generate_tolerance_chart(os.path.join(args.local_dir, "score.json"),
+                                         os.path.join(args.local_dir, "charts"),
+                                         args.chart_format, args.chart_dpi, part, metric)
+        return
+
+    if args.experiment == "exp_e_scaling":
+        if not args.local_dir:
+            parser.error("--local-dir (the synced exp_e_cosmic results dir) is required for "
+                         "--experiment exp_e_scaling")
+        from .exp_e_scaling import write_summary
+        from .chart_exp_e_scaling import generate_exp_e_scaling_charts
+        csv_path, discarded_path = write_summary(args.local_dir, args.output_dir)
+        logger.info("Experiment E scaling summary: %s (discarded runs: %s)",
+                    csv_path, discarded_path)
+        generate_exp_e_scaling_charts(csv_path, os.path.join(args.output_dir, "charts"),
+                                      args.chart_format, args.chart_dpi)
         return
 
     # Build config

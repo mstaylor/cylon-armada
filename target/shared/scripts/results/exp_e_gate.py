@@ -121,12 +121,21 @@ def check_run(armada_records, langchain_records, isolated=None):
     run still gates, but when the no-sharing control is present it is held to
     the same agreement as the rest — an uncompared control is not a control.
     """
-    failures = []
-    arms = [("armada", armada_records), ("langchain", langchain_records)]
+    arms = {"armada": armada_records, "langchain": langchain_records}
     if isolated is not None:
-        arms.append(("isolated", isolated))
+        arms["isolated"] = isolated
+    return check_arms(arms)
 
-    checked = [(name, _check_arm(name, records, failures)) for name, records in arms]
+
+def check_arms(records_by_arm):
+    """Gate one grouped run over any named arms, in the order given.
+
+    Same rules as check_run: each arm must pass on its own, and every arm
+    present must agree with the first on world_size and galaxy coverage.
+    """
+    failures = []
+    checked = [(name, _check_arm(name, records, failures))
+               for name, records in records_by_arm.items()]
     present = [(name, result) for name, result in checked if result is not None]
     if len(present) < 2:
         return GateResult(passed=not failures, failures=failures)

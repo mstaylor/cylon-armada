@@ -112,6 +112,13 @@ locals {
   cosmic_ai_summarize_function_name = "${var.project_name}-cosmic-ai-summarize"
   cosmic_ai_workflow_name           = "${var.project_name}-cosmic-ai-workflow"
 
+  cosmic_ai_lambda_src_dir = "${path.module}/../terraform-cosmic-ai/lambda_src"
+  cosmic_ai_inference_source = (
+    var.cosmic_ai_inference_source != ""
+    ? var.cosmic_ai_inference_source
+    : "${local.cosmic_ai_lambda_src_dir}/inference.py"
+  )
+
   cosmic_ai_asl_vars = {
     AWS_REGION              = var.aws_region
     ACCOUNT_ID              = var.account_id
@@ -174,47 +181,71 @@ data "aws_s3_bucket" "cosmic_ai_lambda_data" {
   bucket = var.cosmic_ai_lambda_bucket_name
 }
 
-# Cosmic AI artifacts. Each ECS task pulls these at startup instead of carrying
-# ~90MB in the image. etag tracks content, so replacing a file locally triggers a
-# re-upload on the next apply. The count is gated on the file actually existing
-# rather than on the variable being set: the sources default to the standard
-# checkout so a plain apply uploads them with no tfvars, while an apply on a
-# machine without that checkout silently skips them instead of failing. try()
-# covers the empty-string case, where fileexists itself errors.
+# Every upload below fails the plan when its source is missing, rather than
+# count-gating itself to zero: a skipped upload leaves the previous object
+# live in S3 with no error anywhere, which is how a stale inference.py served
+# the 2026-10-02 Arm A smoke run.
 resource "aws_s3_object" "cosmic_ai_model" {
-  count = try(fileexists(var.cosmic_ai_model_source), false) ? 1 : 0
-
   bucket = data.aws_s3_bucket.scripts.id
   key    = var.cosmic_ai_model_key
   source = var.cosmic_ai_model_source
-  etag   = filemd5(var.cosmic_ai_model_source)
+  etag   = try(filemd5(var.cosmic_ai_model_source), null)
+
+  lifecycle {
+    precondition {
+      condition     = try(fileexists(var.cosmic_ai_model_source), false)
+      error_message = "cosmic_ai_model_source (${var.cosmic_ai_model_source}) does not exist; set it to the AstroMAE weights .pt on this machine."
+    }
+  }
 
   tags = local.common_tags
+}
+
+moved {
+  from = aws_s3_object.cosmic_ai_model[0]
+  to   = aws_s3_object.cosmic_ai_model
 }
 
 resource "aws_s3_object" "cosmic_ai_data" {
-  count = try(fileexists(var.cosmic_ai_data_source), false) ? 1 : 0
-
   bucket = data.aws_s3_bucket.scripts.id
   key    = var.cosmic_ai_data_key
   source = var.cosmic_ai_data_source
-  etag   = filemd5(var.cosmic_ai_data_source)
+  etag   = try(filemd5(var.cosmic_ai_data_source), null)
+
+  lifecycle {
+    precondition {
+      condition     = try(fileexists(var.cosmic_ai_data_source), false)
+      error_message = "cosmic_ai_data_source (${var.cosmic_ai_data_source}) does not exist; set it to the SDSS inference partition .pt on this machine."
+    }
+  }
 
   tags = local.common_tags
 }
 
-# Track 1 Arm A/B executor (lambda_entry3.handler) fetches inference.py fresh
-# from S3 on every invocation rather than carrying it in the image - this is
-# the only path by which the instrumented/paginated fix actually takes effect.
-resource "aws_s3_object" "cosmic_ai_inference" {
-  count = try(fileexists(var.cosmic_ai_inference_source), false) ? 1 : 0
+moved {
+  from = aws_s3_object.cosmic_ai_data[0]
+  to   = aws_s3_object.cosmic_ai_data
+}
 
+resource "aws_s3_object" "cosmic_ai_inference" {
   bucket = data.aws_s3_bucket.cosmic_ai_lambda_data.id
   key    = var.cosmic_ai_inference_key
-  source = var.cosmic_ai_inference_source
-  etag   = filemd5(var.cosmic_ai_inference_source)
+  source = local.cosmic_ai_inference_source
+  etag   = try(filemd5(local.cosmic_ai_inference_source), null)
+
+  lifecycle {
+    precondition {
+      condition     = try(fileexists(local.cosmic_ai_inference_source), false)
+      error_message = "cosmic_ai_inference_source (${local.cosmic_ai_inference_source}) does not exist."
+    }
+  }
 
   tags = local.common_tags
+}
+
+moved {
+  from = aws_s3_object.cosmic_ai_inference[0]
+  to   = aws_s3_object.cosmic_ai_inference
 }
 
 # ---------------------------------------------------------------------------
@@ -552,6 +583,80 @@ resource "aws_ecs_task_definition" "cosmic_armada" {
         "awslogs-group"         = aws_cloudwatch_log_group.ecs_python.name
         "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "cosmic"
+      }
+    }
+  }])
+
+  tags = local.common_tags
+}
+
+resource "aws_security_group" "ray_tasks" {
+  name        = "${var.project_name}-ray-tasks"
+  description = "Ray baseline arm tasks: all traffic between members only, no inbound from outside"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "Ray GCS, raylet, object manager, worker and FMI ports between ranks of one run"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.vpc_id != ""
+      error_message = "vpc_id must be set: the Ray task security group has to live in the VPC the sweep's subnets belong to."
+    }
+  }
+
+  tags = local.common_tags
+}
+
+# run_task cannot override a container image, which is the sole reason the Ray arms have their own family.
+resource "aws_ecs_task_definition" "ray_armada" {
+  family                   = "${var.project_name}-ray"
+  requires_compatibilities = ["FARGATE", "EC2"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.ecs_python_cpu)
+  memory                   = tostring(var.ecs_python_memory_mb)
+  task_role_arn            = aws_iam_role.ecs_task.arn
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+
+  container_definitions = jsonencode([{
+    name      = var.ecs_container_name
+    image     = "${data.aws_ecr_repository.main.repository_url}:${var.ray_image_tag}"
+    essential = true
+
+    entryPoint = ["/opt/conda/bin/conda", "run", "--no-capture-output", "-n", "cylon_dev"]
+    command    = ["python", "/cylon-armada/armada_ecs_runner.py"]
+
+    environment = concat(local.ecs_env, [
+      { name = "RAY_PORT", value = tostring(var.ray_port) },
+      { name = "RAY_NAMESPACE", value = var.ray_namespace },
+      { name = "RAY_RENDEZVOUS_TIMEOUT_S", value = tostring(var.ray_rendezvous_timeout_s) },
+      { name = "RAY_CLUSTER_TIMEOUT_S", value = tostring(var.ray_cluster_timeout_s) },
+      { name = "RAY_BARRIER_TIMEOUT_S", value = tostring(var.ray_barrier_timeout_s) },
+    ])
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.ecs_python.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ray"
       }
     }
   }])
@@ -929,6 +1034,8 @@ resource "aws_iam_role_policy" "step_functions_policy" {
           aws_lambda_function.cosmic_ai_init.arn,
           aws_lambda_function.cosmic_ai_executor.arn,
           aws_lambda_function.cosmic_ai_summarize.arn,
+          aws_lambda_function.cosmic_ai_fmi_init.arn,
+          aws_lambda_function.cosmic_ai_fmi_summarize.arn,
         ]
       },
       # Cosmic AI Distributed Map ItemReader reads per-rank payloads from S3
@@ -942,14 +1049,16 @@ resource "aws_iam_role_policy" "step_functions_policy" {
         Effect = "Allow"
         Action = ["states:StartExecution"]
         Resource = [
-          "arn:aws:states:${var.aws_region}:${var.account_id}:stateMachine:${local.cosmic_ai_workflow_name}"
+          "arn:aws:states:${var.aws_region}:${var.account_id}:stateMachine:${local.cosmic_ai_workflow_name}",
+          "arn:aws:states:${var.aws_region}:${var.account_id}:stateMachine:${local.cosmic_ai_fmi_workflow_name}",
         ]
       },
       {
         Effect = "Allow"
         Action = ["states:DescribeExecution", "states:StopExecution"]
         Resource = [
-          "arn:aws:states:${var.aws_region}:${var.account_id}:execution:${local.cosmic_ai_workflow_name}:*"
+          "arn:aws:states:${var.aws_region}:${var.account_id}:execution:${local.cosmic_ai_workflow_name}:*",
+          "arn:aws:states:${var.aws_region}:${var.account_id}:execution:${local.cosmic_ai_fmi_workflow_name}:*",
         ]
       },
       # Run and monitor ECS tasks (used by ecs:runTask.sync)

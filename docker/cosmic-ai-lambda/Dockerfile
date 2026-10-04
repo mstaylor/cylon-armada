@@ -41,14 +41,14 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-L
     echo "conda activate cylon_dev" >> ~/.bashrc && \
     echo "export LD_LIBRARY_PATH=$CYLON_PREFIX"/lib >> ~/.bashrc
 
-ADD https://google.com cache_bust
+ARG CYLON_FMI_BRANCH_REF=39c14b7df9a0c3eb260b85c155650ec176f3aab3
 
 WORKDIR $CYLON_HOME
 
 
 RUN git clone https://github.com/mstaylor/cylon.git $CYLON_HOME
 
-RUN cd $CYLON_HOME && git checkout -b fmi-ds5110-support origin/fmi-ds5110-support
+RUN cd $CYLON_HOME && git checkout -b fmi-ds5110-support ${CYLON_FMI_BRANCH_REF}
 
 SHELL ["/bin/bash", "--login", "-c"]
 
@@ -112,7 +112,9 @@ RUN git clone https://github.com/redis/hiredis.git /hiredis && \
 #fmi install
 #ADD https://google.com cache_bust
 
-RUN git clone https://github.com/mstaylor/fmi.git /fmi
+ARG FMI_REF=94ccfa1946fe4b02976a3ae64f49d04c343067da
+
+RUN git clone https://github.com/mstaylor/fmi.git /fmi && cd /fmi && git checkout ${FMI_REF}
 
 RUN cd /fmi && \
     cd python && \
@@ -137,8 +139,102 @@ RUN chmod 0755 /cylon/aws/scripts/runCyloninLambda.sh
 #RUN chmod 0755 /natchecker/client/natcheck
 #ADD https://google.com cache_bust
 
-COPY lambda_entry3.py $CYLON_HOME
-COPY fmi.json $CYLON_HOME
+ARG ARROW_VERSION=16.1.0
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    PY_VERSION=$(python -c 'import platform; print(platform.python_version())') && \
+    NUMPY_VERSION=$(python -c 'import numpy; print(numpy.__version__)') && \
+    conda install -y -c conda-forge \
+        "python=${PY_VERSION}" "numpy=${NUMPY_VERSION}" \
+        "pyarrow=${ARROW_VERSION}" "libarrow==${ARROW_VERSION}.*" \
+        "libarrow-acero==${ARROW_VERSION}.*" "libarrow-dataset==${ARROW_VERSION}.*" \
+        glog openmpi mpi4py "cython>=0.29.31" "pandas>=2.0,<2.2.3dev" fsspec && \
+    { conda remove -y --force pyopenssl || true; } && \
+    pip install pyOpenSSL==23.2.0 --force-reinstall && \
+    python -c "import numpy, torch, timm, torchvision; \
+assert numpy.__version__ == '${NUMPY_VERSION}', numpy.__version__; \
+assert torch.__version__.split('+')[0] == '2.5.0', torch.__version__; \
+assert torchvision.__version__.split('+')[0] == '0.20.0', torchvision.__version__; \
+assert timm.__version__ == '0.4.12', timm.__version__" && \
+    conda clean -afy
+
+ARG REDIS_PLUS_PLUS_REF=1.3.15
+
+RUN git clone https://github.com/sewenew/redis-plus-plus.git /redis-plus-plus && \
+    cd /redis-plus-plus && git checkout ${REDIS_PLUS_PLUS_REF} && \
+    mkdir build && cd build && \
+    cmake -DREDIS_PLUS_PLUS_CXX_STANDARD=11 .. && make && make install && \
+    rm -rf /redis-plus-plus
+
+ARG CYLON_MAIN_REF=3526bfbabd8659144b68a9ea274d2d59834e897f
+ENV CYLON_MAIN_HOME=/cylon-main
+ENV CYLON_MAIN_PREFIX=/cylon-main/install
+
+RUN git clone https://github.com/mstaylor/cylon.git $CYLON_MAIN_HOME && \
+    cd $CYLON_MAIN_HOME && git checkout ${CYLON_MAIN_REF} && rm -rf .git
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    cd $CYLON_MAIN_HOME && \
+    python build.py \
+        -cmake-flags="-DCYLON_USE_REDIS=1 -DCYLON_FMI=1 -DCYLON_SIMD=1 -DCMAKE_PREFIX_PATH=$CONDA_PREFIX" \
+        -ipath="$CYLON_MAIN_PREFIX" --cpp --python && \
+    rm -rf $CYLON_MAIN_HOME/build $CYLON_MAIN_HOME/python/pycylon/build
+
+ENV CYLON_ARMADA_HOME=/cylon-armada
+ENV CYLON_ARMADA_PREFIX=/cylon-armada/install
+
+COPY cpp/CMakeLists.txt $CYLON_ARMADA_HOME/cpp/CMakeLists.txt
+COPY cpp/src $CYLON_ARMADA_HOME/cpp/src
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    mkdir -p /tmp/cylon-armada-build && cd /tmp/cylon-armada-build && \
+    cmake -DCYLON_PREFIX=$CYLON_MAIN_PREFIX \
+          -DCYLON_USE_REDIS=1 \
+          -DCYLON_FMI=1 \
+          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+          -DCMAKE_INSTALL_PREFIX=$CYLON_ARMADA_PREFIX \
+          -DCMAKE_BUILD_TYPE=Release \
+          $CYLON_ARMADA_HOME/cpp && \
+    cmake --build . --parallel $(nproc) && \
+    cmake --install . && \
+    rm -rf /tmp/cylon-armada-build
+
+COPY python/setup.py $CYLON_ARMADA_HOME/python/setup.py
+COPY python/cylon_armada $CYLON_ARMADA_HOME/python/cylon_armada
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    cd $CYLON_ARMADA_HOME/python && \
+    rm -rf build cylon_armada/*.cpp cylon_armada/*.so cylon_armada/__pycache__ && \
+    LD_LIBRARY_PATH=$CYLON_MAIN_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib:/usr/local/lib:$LD_LIBRARY_PATH \
+    CYLON_PREFIX=$CYLON_MAIN_PREFIX \
+    CYLON_ARMADA_PREFIX=$CYLON_ARMADA_PREFIX \
+    CYLON_HOME=$CYLON_MAIN_HOME \
+    CYLON_REDIS=1 \
+    CYLON_FMI=1 \
+    python setup.py build_ext --inplace && \
+    rm -rf build
+
+ENV PYTHONPATH="${CYLON_ARMADA_HOME}/python:${PYTHONPATH}"
+ENV LD_LIBRARY_PATH="${CYLON_MAIN_PREFIX}/lib:${CYLON_ARMADA_PREFIX}/lib:/usr/local/lib:${LD_LIBRARY_PATH}"
+
+COPY docker/cosmic-ai-lambda/lambda_entry3.py $CYLON_HOME
+COPY docker/cosmic-ai-lambda/fmi.json $CYLON_HOME
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    python -c "import mpi4py; mpi4py.rc.initialize = False; mpi4py.rc.finalize = False; \
+import torch, timm; \
+from pycylon.net.fmi_config import FMIConfig; \
+from pycylon.net.reduce_op import ReduceOp; \
+from pycylon.frame import CylonEnv; \
+from cylon_armada.context_table import ContextTable; \
+print('embedding', ContextTable(8).to_arrow().schema.field('embedding').type); \
+print('torch', torch.__version__, 'timm', timm.__version__)" && \
+    md5sum $CYLON_HOME/lambda_entry3.py $CYLON_HOME/fmi.json
 
 # Set runtime interface client as default command for the container runtime
 ENTRYPOINT [ "/cylon/aws/scripts/runCyloninLambda.sh" ]

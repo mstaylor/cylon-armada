@@ -39,6 +39,31 @@ def ceil(a, b):
     return (a + b - 1) // b
 
 
+def assign_partitions(filenames, world_size):
+    data_map = {}
+    start_index = 0
+    total_files = len(filenames)
+
+    # some ranks may get multiple files
+    if total_files >= world_size:
+        for rank in range(0, int(world_size)):
+            # num files left / num of worlds left
+            step_size = ceil(total_files - start_index, world_size - rank)
+
+            if step_size == 1:
+                data_path = filenames[start_index]
+            else:
+                data_path = filenames[start_index:start_index + step_size]
+            start_index += step_size
+
+            data_map[rank] = data_path
+    else:
+        for rank in range(0, int(world_size)):
+            data_map[rank] = filenames[rank % total_files]
+
+    return data_map
+
+
 def lambda_handler(event, context):
     bucket = event["bucket"]
     object_type = event["object_type"]
@@ -75,61 +100,23 @@ def lambda_handler(event, context):
     filenames = filenames[:file_limit]
     # logging.info(f'Files {filenames}')
 
-    result = []
-    # dict to store which rank will use which data partition
-    data_map = {}
-    start_index = 0
-    total_files = len(filenames)
-
-    # some ranks may get multiple files
-    if total_files >= world_size:
-        for rank in range(0, int(world_size)):
-            # num files left / num of worlds left
-            step_size = ceil(total_files - start_index, world_size - rank)
-            # logging.info(f'Rank {rank}, start {start_index}, step size {step_size}.')
-
-            if step_size == 1:
-                data_path = filenames[start_index]
-            else:
-                data_path = filenames[start_index:start_index + step_size]
-            start_index += step_size
-
-            data_map[rank] = data_path
-
-            payload = {
-                "S3_BUCKET": bucket,
-                "S3_OBJECT_NAME": S3_object_name,
-                "SCRIPT": script,
-                "S3_OBJECT_TYPE": object_type,
-                "WORLD_SIZE": str(world_size),
-                "RANK": str(rank),
-                "DATA_BUCKET": data_bucket,
-                "DATA_PREFIX": data_bucket_prefix,
-                "DATA_PATH": data_path,
-                "RESULT_PATH": result_path,
-                "BATCH_SIZE": batch_size
-            }
-            result.append(payload)
-
-    else:
-        for rank in range(0, int(world_size)):
-            data_path = filenames[rank % file_limit]
-            data_map[rank] = data_path
-
-            payload = {
-                "S3_BUCKET": bucket,
-                "S3_OBJECT_NAME": S3_object_name,
-                "SCRIPT": script,
-                "S3_OBJECT_TYPE": object_type,
-                "WORLD_SIZE": str(world_size),
-                "RANK": str(rank),
-                "DATA_BUCKET": data_bucket,
-                "DATA_PREFIX": data_bucket_prefix,
-                "DATA_PATH": data_path,
-                "RESULT_PATH": result_path,
-                "BATCH_SIZE": batch_size
-            }
-            result.append(payload)
+    data_map = assign_partitions(filenames, world_size)
+    result = [
+        {
+            "S3_BUCKET": bucket,
+            "S3_OBJECT_NAME": S3_object_name,
+            "SCRIPT": script,
+            "S3_OBJECT_TYPE": object_type,
+            "WORLD_SIZE": str(world_size),
+            "RANK": str(rank),
+            "DATA_BUCKET": data_bucket,
+            "DATA_PREFIX": data_bucket_prefix,
+            "DATA_PATH": data_map[rank],
+            "RESULT_PATH": result_path,
+            "BATCH_SIZE": batch_size
+        }
+        for rank in range(world_size)
+    ]
 
     event['data_map'] = data_map
     # used by the container to know world settings

@@ -67,7 +67,8 @@ class RankReplay:
     """One rank's view: which contexts it can see, and what it hit."""
 
     def __init__(self, rank, shard, embeddings, threshold, top_k=5,
-                 gate_values=None, gate_tolerance=None, record_accepted_pairs=False):
+                 gate_values=None, gate_tolerance=None, record_accepted_pairs=False,
+                 reuse_validator=None, query_keys=None, stored_keys=None):
         self.rank = rank
         self.shard = shard
         self.threshold = threshold
@@ -75,6 +76,9 @@ class RankReplay:
         self._embeddings = embeddings
         self._gate_values = gate_values
         self._gate_tolerance = gate_tolerance
+        self._reuse_validator = reuse_validator
+        self._query_keys = query_keys
+        self._stored_keys = stored_keys
         self._visible = []
         self.retrievals = 0
         self.cache_hits = 0
@@ -112,6 +116,9 @@ class RankReplay:
         if not above.any():
             return False
 
+        if self._reuse_validator is not None:
+            return self._is_validated_hit(index, candidates[above], sims[above])
+
         if self._gate_values is None or self._gate_tolerance is None:
             if self.accepted_pairs is not None:
                 best = candidates[above][np.argmax(sims[above])]
@@ -141,6 +148,26 @@ class RankReplay:
             matched = int(ranked[first_admitted])
             self.accepted_pairs.append((int(index), matched, float(errors[first_admitted])))
         return True
+
+    def _is_validated_hit(self, index, candidates, sims):
+        """The production Retrieve path: walk the top_k candidates in cosine
+        order and accept the first whose stored key the injected
+        reuse_validator admits against this row's own key. A missing key on
+        either side refuses that candidate, as build_retrieve_operator does.
+        """
+        ranked = candidates[np.argsort(-sims, kind="stable")][: self.top_k]
+        query_key = self._query_keys[index]
+        for candidate in ranked:
+            candidate_key = self._stored_keys[candidate]
+            if query_key is None or candidate_key is None:
+                continue
+            if not self._reuse_validator(query_key, candidate_key):
+                continue
+            if self.accepted_pairs is not None:
+                self.accepted_pairs.append((int(index), int(candidate), None))
+            return True
+        self.gate_rejections += 1
+        return False
 
     def run_epoch(self, indices):
         """Retrieve for every row, and report which ones missed.
@@ -184,7 +211,8 @@ class RankReplay:
 
 def replay(embeddings, world_size, topology, threshold=0.85, epoch_batch_size=4,
            order=None, top_k=5, gate_values=None, gate_tolerance=None,
-           record_accepted_pairs=False):
+           record_accepted_pairs=False, reuse_validator=None, query_keys=None,
+           stored_keys=None):
     """Replay one (world_size, topology) point over the whole population.
 
     `order` permutes the catalogue before sharding, which is how a caller asks
@@ -196,6 +224,12 @@ def replay(embeddings, world_size, topology, threshold=0.85, epoch_batch_size=4,
     summary — (query_index, matched_candidate_index, gate_error) per hit —
     for callers that need actual accepted-reuse identities (e.g. sampling
     pairs to validate against fresh inference), not just the aggregate counts.
+
+    `reuse_validator(query_key, candidate_key) -> bool` replays the deployed
+    per-row policy instead of `gate_values`: `query_keys[i]` is row i's key at
+    Retrieve time and `stored_keys[i]` the key MemoryUpsert would store for it
+    after Bind, which can differ (Bind strips an unverified photometry key).
+    Both are indexed by population row.
     """
     if topology not in TOPOLOGIES:
         raise ValueError(f"unknown topology {topology!r}, expected one of {TOPOLOGIES}")
@@ -209,7 +243,8 @@ def replay(embeddings, world_size, topology, threshold=0.85, epoch_batch_size=4,
     gate_values = None if gate_values is None else np.asarray(gate_values, dtype=np.float64)
     ranks = [
         RankReplay(rank, shard_bounds(n_items, world_size, rank), embeddings, threshold,
-                   top_k, gate_values, gate_tolerance, record_accepted_pairs)
+                   top_k, gate_values, gate_tolerance, record_accepted_pairs,
+                   reuse_validator, query_keys, stored_keys)
         for rank in range(world_size)
     ]
     epochs_per_rank = [plan_epochs(r.galaxies, epoch_batch_size) for r in ranks]
