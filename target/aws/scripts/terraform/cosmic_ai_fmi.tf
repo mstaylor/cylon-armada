@@ -65,6 +65,16 @@ resource "aws_lambda_function" "cosmic_ai_fmi_init" {
   memory_size      = var.cosmic_ai_init_memory_mb
   timeout          = var.cosmic_ai_init_timeout
 
+  environment {
+    variables = {
+      FMI_CHANNEL_TYPE = var.cosmic_ai_fmi_channel_type
+      FMI_OPTIONS      = var.cosmic_ai_fmi_options
+      FMI_MAX_TIMEOUT  = tostring(var.fmi_max_timeout)
+      RENDEZVOUS_HOST  = var.rendezvous_host
+      RENDEZVOUS_PORT  = tostring(var.rendezvous_port)
+    }
+  }
+
   dynamic "vpc_config" {
     for_each = length(var.subnet_ids) > 0 ? [1] : []
     content {

@@ -320,9 +320,66 @@ def test_initializer_items_carry_fmi_settings_and_no_data_path(monkeypatch):
     assert items[0]["FMI_CHANNEL_TYPE"] == "direct" and items[0]["FMI_OPTIONS"] == "nonblocking"
 
 
-def test_initializer_rejects_event_without_rendezvous():
+FMI_ENVIRONMENT = {
+    "FMI_CHANNEL_TYPE": "direct", "FMI_OPTIONS": "nonblocking", "FMI_MAX_TIMEOUT": "300000",
+    "RENDEZVOUS_HOST": "rdv.env", "RENDEZVOUS_PORT": "10000",
+}
+
+BASE_EVENT = {
+    "bucket": "bkt", "object_type": "folder", "script": "/tmp/x.py", "S3_object_name": "Anomaly Detection",
+    "result_path": "res/env", "file_limit": "1", "world_size": 1, "batch_size": 512,
+    "data_bucket": "bkt", "data_prefix": "10MB",
+}
+
+
+def _clear_fmi_environment(monkeypatch):
+    for name in FMI_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _initialize(monkeypatch, event):
+    s3 = _FakeS3()
+    monkeypatch.setattr(initializer_FMI, "s3_client", s3)
+    monkeypatch.setattr(initializer_FMI, "get_file_list", lambda bucket, prefix: _files("10MB", 1))
+    response = initializer_FMI.lambda_handler(dict(event), None)
+    return json.loads(s3.objects[("bkt", response["body"]["S3_KEY"])])
+
+
+def test_initializer_reads_fmi_settings_from_environment_when_event_omits_them(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
+    for name, value in FMI_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+
+    item = _initialize(monkeypatch, BASE_EVENT)[0]
+
+    assert item["FMI_CHANNEL_TYPE"] == "direct" and item["FMI_OPTIONS"] == "nonblocking"
+    assert item["FMI_MAX_TIMEOUT"] == "300000"
+    assert item["RENDEZVOUS_HOST"] == "rdv.env" and item["RENDEZVOUS_PORT"] == "10000"
+
+
+def test_initializer_environment_takes_precedence_over_event(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
+    for name, value in FMI_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+    event = {**BASE_EVENT, "rendezvous_host": "rdv.event", "fmi_max_timeout": 1000}
+
+    item = _initialize(monkeypatch, event)[0]
+
+    assert item["RENDEZVOUS_HOST"] == "rdv.env"
+    assert item["FMI_MAX_TIMEOUT"] == "300000"
+
+
+def test_initializer_rejects_event_without_rendezvous(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
     with pytest.raises(initializer_FMI.InvalidFMIEvent):
         initializer_FMI.lambda_handler({"bucket": "bkt", "result_path": "r"}, None)
+
+
+def test_initializer_reports_settings_missing_from_both_environment_and_event(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
+    monkeypatch.setenv("RENDEZVOUS_HOST", "rdv.env")
+    with pytest.raises(initializer_FMI.InvalidFMIEvent, match="RENDEZVOUS_PORT"):
+        initializer_FMI.lambda_handler(dict(BASE_EVENT), None)
 
 
 def _summarize(monkeypatch, metrics, world_size=2):

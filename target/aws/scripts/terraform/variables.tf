@@ -329,6 +329,23 @@ variable "cosmic_ai_fmi_communicator_prefix" {
   default     = "Anomaly Detection/Inference/communicator"
 }
 
+variable "cosmic_ai_fmi_channel_type" {
+  description = "FMI channel the Arm B ranks pair over; Lambda accepts no inbound connections, so only the TCPunch direct channel applies"
+  type        = string
+  default     = "direct"
+}
+
+variable "cosmic_ai_fmi_options" {
+  description = "FMI communicator mode for the Arm B ranks"
+  type        = string
+  default     = "nonblocking"
+
+  validation {
+    condition     = contains(["nonblocking", "blocking"], var.cosmic_ai_fmi_options)
+    error_message = "cosmic_ai_fmi_options must be nonblocking or blocking, matching inference_FMI.py's --fmi_options choices."
+  }
+}
+
 variable "cosmic_ai_python_runtime" {
   description = "AWS Lambda Python runtime for the zip-packaged Cosmic AI init/summarize functions"
   type        = string

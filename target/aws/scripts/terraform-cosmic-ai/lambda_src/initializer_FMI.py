@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import uuid
 
 import boto3
@@ -10,25 +11,44 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 s3_client = boto3.client('s3')
 
-REQUIRED_FIELDS = (
+EVENT_FIELDS = (
     'bucket', 'object_type', 'script', 'S3_object_name', 'result_path', 'file_limit',
     'batch_size', 'data_bucket', 'data_prefix',
-    'fmi_channel_type', 'fmi_options', 'fmi_max_timeout', 'rendezvous_host', 'rendezvous_port',
 )
+
+ENVIRONMENT_FIELDS = {
+    'fmi_channel_type': 'FMI_CHANNEL_TYPE',
+    'fmi_options': 'FMI_OPTIONS',
+    'fmi_max_timeout': 'FMI_MAX_TIMEOUT',
+    'rendezvous_host': 'RENDEZVOUS_HOST',
+    'rendezvous_port': 'RENDEZVOUS_PORT',
+}
 
 
 class InvalidFMIEvent(ValueError):
     pass
 
 
+def resolve_environment_fields(event):
+    for field, variable in ENVIRONMENT_FIELDS.items():
+        value = os.environ.get(variable)
+        if value not in (None, ''):
+            event[field] = value
+    return event
+
+
 def validate_event(event):
-    missing = [field for field in REQUIRED_FIELDS if event.get(field) in (None, '')]
+    missing = [field for field in EVENT_FIELDS if event.get(field) in (None, '')]
+    missing += [
+        f'{field} (env {variable})' for field, variable in ENVIRONMENT_FIELDS.items()
+        if event.get(field) in (None, '')
+    ]
     if missing:
         raise InvalidFMIEvent(f'Arm B execution input is missing {missing} (result_path={event.get("result_path")})')
 
 
 def lambda_handler(event, context):
-    validate_event(event)
+    validate_event(resolve_environment_fields(event))
 
     bucket = event['bucket']
     result_path = event['result_path']
