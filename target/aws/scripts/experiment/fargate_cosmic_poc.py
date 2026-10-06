@@ -17,10 +17,10 @@ Usage:
     python fargate_cosmic_poc.py --scaling weak --runs 4 --live
     python fargate_cosmic_poc.py --scaling strong --backend armada --world-sizes 4 --live
 
-The Ray arms run on their own task definition (RAY_TASK_DEFINITION), because
-run_task cannot override a container image and only the Ray image carries Ray.
-Every rank is still one task: rank 0 starts the Ray head and publishes its
-address through Redis under COMM_NAME, the others discover it and join.
+Every arm runs on one task definition and one image, which carries Ray, so
+image size and pull time cannot differ between arms. Every rank is one task:
+under the Ray arms rank 0 starts the Ray head and publishes its address
+through Redis under COMM_NAME, the others discover it and join.
 
 Each world size first runs --warmup-runs unmeasured runs, written under
 warmup<k>/ and never aggregated, then --runs measured runs. A Fargate task is
@@ -30,15 +30,12 @@ registry), so the first measured run is not also the first touch of those.
 --dry-run prints the full matrix and an estimate of the task-hours it costs.
 
 Each world size runs `--runs` measured paired runs; within a run the arms execute back
-to back, never concurrently, and their order alternates between runs so that
-Bedrock latency drift over the session cannot masquerade as an effect. Order
-fairness over a short sweep depends on the arm count: with all five arms, every
-arm leads within the first five runs and leads equally often over the full
-cycle; with the three ray-comparison arms every arm leads within the four
-measured runs, armada twice. Changing ARMS or ARMS_WITHOUT_EXECUTOR means
-re-checking test_gating_the_ray_arms_does_not_unbalance_who_leads and
-test_leader_diversity_over_short_runs rather than assuming the stride
-generalises.
+to back, never concurrently, and their order cycles through the permutations
+of the arms being compared, so that Bedrock latency drift over the session
+cannot masquerade as an effect. Two arms alternate; five lead once each over
+five runs; three arms over four runs leave one extra lead, which falls on
+ray-cylon. Inside a comparison ray-cylon runs only at --ray-cylon-world-sizes:
+its data plane is Armada's, so it is a portability check, not a sweep arm.
 
 Prerequisites:
     - cylon-armada-python image built with the AstroMAE deps and pushed to ECR
@@ -46,6 +43,7 @@ Prerequisites:
 """
 
 import argparse
+import functools
 import itertools
 import json
 import logging
@@ -70,7 +68,6 @@ CLUSTER = "CylonFargateExperiments"
 # target/aws/scripts/ecs/task_definition_fargate.json is not a deployed
 # definition — nothing reads it.
 TASK_DEFINITION = "cylon-armada-cosmic"
-RAY_TASK_DEFINITION = "cylon-armada-ray"
 RAY_SECURITY_GROUP_NAME = "cylon-armada-ray-tasks"
 CONTAINER_NAME = "cylon-armada"
 SUBNETS = ["subnet-07995eea6c462cd73", "subnet-0979c94513025746c"]
@@ -164,6 +161,23 @@ def _order_stride(n_arms, n_orders):
 _ORDER_STRIDE = _order_stride(len(ARMS), len(_ORDERS))
 
 
+@functools.lru_cache(maxsize=None)
+def _orders_for(arms):
+    orders = tuple(itertools.permutations(arms))
+    return orders, _order_stride(len(arms), len(orders))
+
+
+def order_for(arms, run_index):
+    """The order the given arms run in, cycling through their own permutations.
+
+    Ordering over only the arms being compared keeps the leader balanced for
+    that selection: filtering the five-arm cycle down to two arms let one arm
+    lead three of four runs. Over all five arms this is exactly arm_order.
+    """
+    orders, stride = _orders_for(tuple(arms))
+    return orders[(run_index * stride) % len(orders)]
+
+
 def arm_order(run_index):
     """The arms in the order they run, cycling through every permutation.
 
@@ -207,17 +221,6 @@ def security_groups_for(arm, ray_security_groups):
     return ray_security_groups if arm in RAY_ARMS else None
 
 
-def task_definition_for(arm):
-    """The task definition family an arm's tasks run on.
-
-    run_task cannot override a container image, so the image an arm needs is
-    chosen by family: the Ray arms on the Ray image, every other arm on the
-    cosmic image. Both families are sized and configured identically in
-    terraform, so the image is the only difference.
-    """
-    return RAY_TASK_DEFINITION if arm in RAY_ARMS else TASK_DEFINITION
-
-
 def _selected_arms(backend):
     """Which arms a --backend value launches.
 
@@ -241,29 +244,37 @@ def _selected_arms(backend):
     return selected
 
 
-def plan_warmups(backend, warmup_runs):
-    """The ordered (warmup_index, backend) sequence run before the measured runs.
+def arms_at_world_size(backend, world_size, ray_cylon_world_sizes):
+    """The arms a --backend value launches at one world size.
 
-    Ordered by arm_order exactly as measured runs are, so the warm-ups touch
-    the shared services in the same arm order a measured run would.
-    """
-    return plan_launches(backend, warmup_runs)
-
-
-def plan_launches(backend, runs):
-    """The ordered (run_index, backend) sequence for one world size.
-
-    Pure, so ordering and grouping are testable without AWS. "all" yields every
-    arm per run in arm_order; "both" the two sharing arms; a single backend
-    yields one launch per run in the same slot it would have had.
+    ray-cylon's data plane is Armada's FMI bridge, so inside a comparison it
+    runs only at ray_cylon_world_sizes, as a portability check rather than a
+    sweep arm. Naming ray-cylon alone is an explicit request and is not trimmed.
     """
     selected = _selected_arms(backend)
-    launches = []
-    for run_index in range(runs):
-        for arm in arm_order(run_index):
-            if arm in selected:
-                launches.append((run_index, arm))
-    return launches
+    if len(selected) > 1 and world_size not in ray_cylon_world_sizes:
+        selected = tuple(arm for arm in selected if arm != "ray-cylon")
+    return selected
+
+
+def plan_warmups(backend, warmup_runs, arms=None):
+    """The ordered (warmup_index, backend) sequence run before the measured runs.
+
+    Ordered exactly as measured runs are, so the warm-ups touch the shared
+    services in the same arm order a measured run would.
+    """
+    return plan_launches(backend, warmup_runs, arms)
+
+
+def plan_launches(backend, runs, arms=None):
+    """The ordered (run_index, backend) sequence for one world size.
+
+    Pure, so ordering and grouping are testable without AWS. Each run orders
+    the launched arms by order_for over those arms alone; arms defaults to
+    everything the backend selects.
+    """
+    selected = arms if arms is not None else _selected_arms(backend)
+    return [(run_index, arm) for run_index in range(runs) for arm in order_for(selected, run_index)]
 
 
 _CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon",
@@ -485,15 +496,16 @@ def sweep_matrix(args):
     rows = []
     for world_size in sorted(args.world_sizes):
         galaxies = galaxies_for(args.scaling, world_size, args.per_rank, args.total)
-        phases = (("warmup", plan_warmups(args.backend, args.warmup_runs)),
-                  ("measured", plan_launches(args.backend, args.runs)))
+        arms = arms_at_world_size(args.backend, world_size, args.ray_cylon_world_sizes)
+        phases = (("warmup", plan_warmups(args.backend, args.warmup_runs, arms)),
+                  ("measured", plan_launches(args.backend, args.runs, arms)))
         for phase, launches in phases:
             run_dir = "warmup" if phase == "warmup" else "run"
             for run_index, arm in launches:
                 rows.append({
                     "world_size": world_size, "galaxies": galaxies, "phase": phase,
                     "run": run_index, "arm": arm, "tasks": world_size,
-                    "task_definition": task_definition_for(arm),
+                    "task_definition": TASK_DEFINITION,
                     "security_group": (RAY_SECURITY_GROUP_NAME if arm in RAY_ARMS
                                        else "vpc default"),
                     "s3_prefix": (f"{RESULTS_PREFIX}/{args.scaling}/{arm}/ws{world_size}/"
@@ -636,6 +648,9 @@ def build_parser():
     parser.add_argument("--runs", type=int, default=4,
                         help="measured paired runs per world size; arm order alternates "
                              "between runs; mean and sample std are taken across them")
+    parser.add_argument("--ray-cylon-world-sizes", type=int, nargs="+", default=[2, 8],
+                        help="world sizes at which ray-cylon runs inside a comparison; its data "
+                             "plane is Armada's, so it is a portability check, not a sweep arm")
     parser.add_argument("--warmup-runs", type=int, default=1,
                         help="unmeasured runs per world size before the measured ones, "
                              "written under warmup<k>/ and never aggregated")

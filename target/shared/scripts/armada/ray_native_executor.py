@@ -43,10 +43,10 @@ class RayNativeExecutor:
     def _publish_and_drain(self, contribution):
         import ray
 
-        if contribution.num_rows:
-            ray.get(self.shard_actor.publish.remote([contribution]))
-            ray.get(self.shard_actor.flush.remote())
-        return ray.get(self.shard_actor.drain_new.remote())
+        if not contribution.num_rows:
+            return ray.get(self.shard_actor.drain_new.remote())
+        self.shard_actor.publish.remote([ray.put(contribution)])
+        return [contribution, *ray.get(self.shard_actor.drain_new.remote())]
 
     def run(self, seq, input_tables):
         plan = lower(seq)

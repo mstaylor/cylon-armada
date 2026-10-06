@@ -41,6 +41,10 @@ class ContextRegistry:
         new_refs = [ref for _, ref in self._log[since:]]
         return new_refs, len(self._log)
 
+    def refs_from_others(self, rank, since=0):
+        new_refs = [ref for publisher, ref in self._log[since:] if publisher != rank]
+        return new_refs, len(self._log)
+
     def count(self):
         return len(self._log)
 
@@ -55,11 +59,16 @@ class ShardActor:
         self._registry = registry
         self._contexts = []
         self._watermark = 0
+        self._drain_watermark = 0
         self._pending_registration = None
 
-    def publish(self, objects):
-        refs = [ray.put(obj) for obj in objects]
-        self._pending_registration = self._registry.register.remote(self.rank, refs)
+    def publish(self, refs):
+        """Register references the caller already put into the object store.
+
+        The owner puts each payload once; the shard records the reference and
+        never copies the payload again.
+        """
+        self._pending_registration = self._registry.register.remote(self.rank, list(refs))
         return len(refs)
 
     def flush(self):
@@ -97,16 +106,17 @@ class ShardActor:
         return list(self._contexts)
 
     def drain_new(self):
-        """Contexts published by any rank since this shard last read, and
-        only those — the epoch-scoped counterpart to visible_contexts, for a
-        caller (MemoryUpsert) that must see each contribution exactly once."""
-        new_refs, total = ray.get(self._registry.all_refs.remote(since=self._watermark))
-        self._watermark = total
-        if not new_refs:
-            return []
-        fetched = ray.get(new_refs)
-        self._contexts.extend(fetched)
-        return fetched
+        """Contexts other ranks published since this shard last read.
+
+        The epoch-scoped read for MemoryUpsert, which consumes this rank's own
+        rows locally. Fetched payloads are not retained, so the object store
+        can release them once every reader is done.
+        """
+        new_refs, total = ray.get(
+            self._registry.refs_from_others.remote(self.rank, since=self._drain_watermark)
+        )
+        self._drain_watermark = total
+        return ray.get(new_refs) if new_refs else []
 
 
 DEPARTED_PHASE = "departed"

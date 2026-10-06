@@ -605,7 +605,13 @@ resource "aws_ecs_task_definition" "cosmic_armada" {
     entryPoint = ["/opt/conda/bin/conda", "run", "--no-capture-output", "-n", "cylon_dev"]
     command    = ["python", "/cylon-armada/armada_ecs_runner.py"]
 
-    environment = local.ecs_env
+    environment = concat(local.ecs_env, [
+      { name = "RAY_PORT", value = tostring(var.ray_port) },
+      { name = "RAY_NAMESPACE", value = var.ray_namespace },
+      { name = "RAY_RENDEZVOUS_TIMEOUT_S", value = tostring(var.ray_rendezvous_timeout_s) },
+      { name = "RAY_CLUSTER_TIMEOUT_S", value = tostring(var.ray_cluster_timeout_s) },
+      { name = "RAY_BARRIER_TIMEOUT_S", value = tostring(var.ray_barrier_timeout_s) },
+    ])
 
     logConfiguration = {
       logDriver = "awslogs"
@@ -646,50 +652,6 @@ resource "aws_security_group" "ray_tasks" {
       error_message = "vpc_id must be set: the Ray task security group has to live in the VPC the sweep's subnets belong to."
     }
   }
-
-  tags = local.common_tags
-}
-
-# run_task cannot override a container image, which is the sole reason the Ray arms have their own family.
-resource "aws_ecs_task_definition" "ray_armada" {
-  family                   = "${var.project_name}-ray"
-  requires_compatibilities = ["FARGATE", "EC2"]
-  network_mode             = "awsvpc"
-  cpu                      = tostring(var.ecs_python_cpu)
-  memory                   = tostring(var.ecs_python_memory_mb)
-  task_role_arn            = aws_iam_role.ecs_task.arn
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
-
-  runtime_platform {
-    cpu_architecture        = "X86_64"
-    operating_system_family = "LINUX"
-  }
-
-  container_definitions = jsonencode([{
-    name      = var.ecs_container_name
-    image     = "${data.aws_ecr_repository.main.repository_url}:${var.ray_image_tag}"
-    essential = true
-
-    entryPoint = ["/opt/conda/bin/conda", "run", "--no-capture-output", "-n", "cylon_dev"]
-    command    = ["python", "/cylon-armada/armada_ecs_runner.py"]
-
-    environment = concat(local.ecs_env, [
-      { name = "RAY_PORT", value = tostring(var.ray_port) },
-      { name = "RAY_NAMESPACE", value = var.ray_namespace },
-      { name = "RAY_RENDEZVOUS_TIMEOUT_S", value = tostring(var.ray_rendezvous_timeout_s) },
-      { name = "RAY_CLUSTER_TIMEOUT_S", value = tostring(var.ray_cluster_timeout_s) },
-      { name = "RAY_BARRIER_TIMEOUT_S", value = tostring(var.ray_barrier_timeout_s) },
-    ])
-
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = aws_cloudwatch_log_group.ecs_python.name
-        "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "ray"
-      }
-    }
-  }])
 
   tags = local.common_tags
 }

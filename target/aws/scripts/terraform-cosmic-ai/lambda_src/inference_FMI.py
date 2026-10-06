@@ -32,6 +32,8 @@ GATHERED_FIELDS = tuple(f for f in STAGE_FIELDS if f not in ('publish_s', 'total
 
 TRAILING_FIELDS = ('publish_s', 'total_s')
 
+INTEGER_FIELDS = ('num_samples', 'num_batches')
+
 PARTITION_MAP_SCHEMA = pa.schema([('rank', pa.int32()), ('partition_index', pa.int64())])
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -176,17 +178,19 @@ def run_rank(args, process_start_ts):
         publish_s = time.time() - t_publish_start
         total_s = time.time() - process_start_ts
 
+        t_trailing_start = time.time()
         trailing = gather_table(
             bridge, row_table(rank, TRAILING_FIELDS, {'publish_s': publish_s, 'total_s': total_s}), PAYLOAD_ROOT,
         )
+        trailing_gather_s = time.time() - t_trailing_start
 
         if rank == PAYLOAD_ROOT:
-            write_combined_result(args, partition_map, gathered, trailing, t_publish_start)
+            write_combined_result(args, partition_map, gathered, trailing, time.time(), trailing_gather_s)
     finally:
         bridge.finalize()
 
 
-def write_combined_result(args, partition_map, gathered, trailing, t_aggregate_start):
+def write_combined_result(args, partition_map, gathered, trailing, t_aggregate_start, trailing_gather_s):
     world_size = args.world_size
     stages = rows_by_rank(gathered, GATHERED_FIELDS)
     tails = rows_by_rank(trailing, TRAILING_FIELDS)
@@ -199,6 +203,9 @@ def write_combined_result(args, partition_map, gathered, trailing, t_aggregate_s
     records = []
     for rank in range(world_size):
         record = {**stages[rank], **tails[rank]}
+        for field in INTEGER_FIELDS:
+            if record.get(field) is not None:
+                record[field] = int(record[field])
         record['rank'] = rank
         record['batch_size'] = args.batch_size
         record['device'] = args.device
@@ -214,6 +221,7 @@ def write_combined_result(args, partition_map, gathered, trailing, t_aggregate_s
     )
     aggregate_metrics = {
         'aggregate_s': time.time() - t_aggregate_start,
+        'trailing_gather_s': trailing_gather_s,
         'ranks_aggregated': len(records),
         'bytes_aggregated': sum(t.nbytes for t in gathered) + sum(t.nbytes for t in trailing),
     }

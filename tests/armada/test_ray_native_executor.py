@@ -148,19 +148,38 @@ def test_finish_delivers_contributions_a_rank_missed_without_a_barrier(local_ray
 def test_finish_runs_the_operators_after_memory_upsert_on_the_late_rows(local_ray):
     registry = ContextRegistry.remote()
     barrier = RunBarrier.remote(1)
-    shard = ShardActor.remote(0, 1, registry)
+    shard = ShardActor.remote(0, 2, registry)
+    peer = ShardActor.remote(1, 2, registry)
     seq = (ArmadaOperator("Reason", CollectivePattern.PointToPoint, VALUE_SCHEMA, VALUE_SCHEMA,
                           fn=lambda t: t)
            | _recording_upsert([])
            | ArmadaOperator("Tag", CollectivePattern.PointToPoint, VALUE_SCHEMA, VALUE_SCHEMA,
                             fn=lambda t: pa.table({"value": [v * 100 for v in t.column("value").to_pylist()]})))
 
-    ray.get(shard.publish.remote([pa.table({"value": [7]})]))
-    ray.get(shard.flush.remote())
+    ray.get(peer.publish.remote([ray.put(pa.table({"value": [7]}))]))
+    ray.get(peer.flush.remote())
 
     final = RayNativeExecutor(shard).finish(seq, barrier, 30.0)
 
     assert final.column("value").to_pylist() == [700]
+
+
+def test_a_ranks_own_rows_reach_upsert_exactly_once(local_ray):
+    """Own rows are used locally in their epoch and must never return
+    through a later drain or the end-of-run drain."""
+    registry = ContextRegistry.remote()
+    barrier = RunBarrier.remote(1)
+    shard = ShardActor.remote(0, 1, registry)
+    seen = []
+    seq = _recording_upsert(seen)
+    executor = RayNativeExecutor(shard)
+
+    executor.run(seq, pa.table({"value": [1]}))
+    executor.run(seq, pa.table({"value": [2]}))
+    final = executor.finish(seq, barrier, 30.0)
+
+    assert seen == [[1], [2]]
+    assert final is None
 
 
 def test_finish_with_nothing_late_returns_none(local_ray):

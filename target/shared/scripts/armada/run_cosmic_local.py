@@ -421,8 +421,10 @@ def context_store_for(backend):
 def _redis_client_for_rendezvous():
     import redis
 
-    return redis.Redis(host=os.environ.get("REDIS_HOST", ""),
-                       port=int(os.environ.get("REDIS_PORT", 6379)))
+    host = os.environ.get("REDIS_HOST", "")
+    if not host:
+        raise ValueError("REDIS_HOST must be set: the Ray arms publish and discover the head address through Redis")
+    return redis.Redis(host=host, port=int(os.environ.get("REDIS_PORT", 6379)))
 
 
 def form_ray_cluster(rank, world_size, comm_name, redis_client, ray_api):
@@ -665,7 +667,7 @@ def main(argv=None):
                                   required_peers=required_peer_map(build_for(rank), world_size),
                                   nonblocking=not args.blocking)
             actor.start_env()
-            bridge = actor._bridge
+            bridge = actor.bridge
             true_rank = actor.rank
             channel = bridge.channel_type
         establish_s = time.perf_counter() - t0

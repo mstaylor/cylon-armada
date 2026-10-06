@@ -56,3 +56,27 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 _register_model_modules(); import sys; \
 assert 'NormalCell' in sys.modules and 'blocks.photoz' in sys.modules; \
 print('AstroMAE module aliases OK')"
+ARG RAY_VERSION=2.40.0
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    python -c "import pyarrow, google.protobuf, grpc; \
+open('/tmp/constraints.txt', 'w').write('pyarrow==%s\ngrpcio==%s\nprotobuf==%s\n' % \
+(pyarrow.__version__, grpc.__version__, google.protobuf.__version__))" && \
+    pip install --no-cache-dir -c /tmp/constraints.txt "ray[default]==${RAY_VERSION}" && \
+    rm -f /tmp/constraints.txt
+
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda activate cylon_dev && \
+    cd /cylon-armada/scripts && \
+    python -c "import pycylon, ray, pyarrow, torch, timm; \
+assert ray.__version__ == '${RAY_VERSION}', ray.__version__; \
+from communicator.fmi_bridge import _import_fmi; \
+assert all(_import_fmi()), 'pycylon FMI not importable'; \
+from cylon_armada.context_table import ContextTable; \
+print('ContextTable', ContextTable(8).to_arrow().schema.field('embedding').type); \
+import armada.run_cosmic_local, armada.ray_native_executor, ray_arm.native, ray_arm.cluster, ray_arm.cylon_on_ray; \
+print('ray', ray.__version__, 'pyarrow', pyarrow.__version__, 'torch', torch.__version__, 'timm', timm.__version__)" && \
+    ray --version
+
+ENV RAY_DISABLE_IMPORT_WARNING=1

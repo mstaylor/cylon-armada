@@ -407,3 +407,39 @@ def test_summarizer_fails_the_execution_when_a_rank_is_missing(monkeypatch):
 def test_summarizer_fails_the_execution_when_root_never_wrote_metrics(monkeypatch):
     with pytest.raises(summarizer_FMI.IncompleteGatherError, match="did not complete the gather"):
         _summarize(monkeypatch, None)
+
+
+def _combine(monkeypatch, world_size):
+    s3 = _FakeS3()
+    monkeypatch.setattr(inference_FMI, "s3_client", s3)
+    data_map = {str(r): f"10MB/{r + 1}.pt" for r in range(world_size)}
+    partition_map = inference_FMI.encode_data_map(data_map, world_size, "10MB")
+    gathered = [inference_FMI.row_table(r, inference_FMI.GATHERED_FIELDS,
+                                        {"num_samples": 511, "num_batches": 1, "inference_s": 1.5})
+                for r in range(world_size)]
+    trailing = [inference_FMI.row_table(r, inference_FMI.TRAILING_FIELDS,
+                                        {"publish_s": 0.1, "total_s": 7.0})
+                for r in range(world_size)]
+    args = types.SimpleNamespace(world_size=world_size, rank=0, comm_name="t", batch_size=512,
+                                 device="cpu", result_path="res/combine", data_prefix="10MB",
+                                 data_bucket="bkt")
+    inference_FMI.write_combined_result(args, partition_map, gathered, trailing,
+                                        __import__("time").time(), 0.25)
+    records = json.loads(s3.objects[("bkt", "res/combine/combined_data.json")])
+    metrics = json.loads(s3.objects[("bkt", "res/combine/aggregate_metrics.json")])
+    return records, metrics
+
+
+def test_combined_counts_are_integers_like_arm_a(monkeypatch):
+    records, _ = _combine(monkeypatch, 2)
+    for record in records:
+        assert record["num_samples"] == 511 and isinstance(record["num_samples"], int)
+        assert isinstance(record["num_batches"], int)
+        assert isinstance(record["inference_s"], float)
+
+
+def test_aggregate_metrics_time_the_trailing_gather_separately(monkeypatch):
+    _, metrics = _combine(monkeypatch, 2)
+    assert metrics["trailing_gather_s"] == 0.25
+    assert 0 <= metrics["aggregate_s"] < 1.0
+    assert metrics["ranks_aggregated"] == 2

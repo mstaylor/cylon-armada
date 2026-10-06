@@ -337,20 +337,16 @@ def test_timing_summary_reports_the_slowest_task_not_the_mean():
     assert s["total_s_max"] == 110.0
 
 
-def test_the_ray_arms_are_launchable_on_the_ray_task_definition():
-    """Both Ray arms now have an executor in run_cosmic_local and a task
-    definition carrying the Ray image. run_task cannot override a container
-    image, so a Ray arm sent to the cosmic family would run without Ray; every
-    other arm must stay on the cosmic family."""
+def test_every_arm_launches_on_the_cosmic_task_definition():
+    """One image carries Ray for every arm, so no arm pulls a different image
+    from the others."""
     m = _driver()
 
     assert m.ARMS_WITHOUT_EXECUTOR == ()
     for arm in ("ray-native", "ray-cylon"):
         assert m._selected_arms(arm) == (arm,)
-        assert m.task_definition_for(arm) == m.RAY_TASK_DEFINITION
-    for arm in ("armada", "langchain", "isolated"):
-        assert m.task_definition_for(arm) == m.TASK_DEFINITION
-    assert m.RAY_TASK_DEFINITION == "cylon-armada-ray"
+    args = m.build_parser().parse_args(["--dry-run", "--backend", "all", "--world-sizes", "1", "2"])
+    assert {row["task_definition"] for row in m.sweep_matrix(args)} == {m.TASK_DEFINITION}
 
 
 def test_ray_comparison_selects_armada_and_both_ray_arms():
@@ -361,15 +357,78 @@ def test_ray_comparison_selects_armada_and_both_ray_arms():
 
 
 def test_ray_comparison_leaders_over_the_four_measured_runs():
-    """Whoever leads a run pays any leftover cold-start cost. Over the four
-    measured runs every compared arm must lead at least once; armada leads
-    twice, which is the imbalance a 3-of-5 filter of the permutation cycle
-    leaves at four runs and is recorded here so a change to it is noticed."""
+    """Whoever leads a run pays any leftover cold-start cost. Four runs cannot
+    split evenly over three arms; ordering over the selected arms' own
+    permutations puts the extra lead on ray-cylon, the side check, rather than
+    on either headline arm. Recorded so a change to it is noticed."""
     m = _driver()
-    selected = set(m._selected_arms("ray-comparison"))
-    leaders = [next(a for a in m.arm_order(i) if a in selected) for i in range(4)]
-    assert set(leaders) == selected
-    assert leaders == ["armada", "armada", "ray-cylon", "ray-native"]
+    arms = m._selected_arms("ray-comparison")
+    leaders = [m.order_for(arms, i)[0] for i in range(4)]
+    assert leaders == ["armada", "ray-cylon", "ray-cylon", "ray-native"]
+
+
+@pytest.mark.parametrize("arms", [("armada", "langchain"), ("armada", "ray-native")])
+def test_two_arm_comparisons_alternate_who_leads(arms):
+    """Filtering the five-arm cycle down to two arms let one arm lead three of
+    four runs. Ordering over the two arms' own permutations alternates them."""
+    m = _driver()
+    assert [m.order_for(arms, i) for i in range(4)] == [arms, arms[::-1], arms, arms[::-1]]
+
+
+@pytest.mark.parametrize("arms", [("armada", "langchain"), ("armada", "ray-native", "ray-cylon"),
+                                  ("armada", "langchain", "isolated", "ray-native", "ray-cylon")])
+def test_every_selection_leads_equally_over_its_full_cycle(arms):
+    from collections import Counter
+    from math import factorial
+
+    m = _driver()
+    cycle = factorial(len(arms))
+    leaders = Counter(m.order_for(arms, i)[0] for i in range(cycle))
+    assert set(leaders) == set(arms)
+    assert len(set(leaders.values())) == 1, dict(leaders)
+
+
+def test_all_five_arms_keep_their_existing_order():
+    m = _driver()
+    assert [m.order_for(m.ARMS, i) for i in range(len(m._ORDERS))] == \
+        [m.arm_order(i) for i in range(len(m._ORDERS))]
+
+
+def test_plan_launches_orders_runs_over_the_selected_arms():
+    m = _driver()
+    launches = m.plan_launches("both", 2)
+    assert launches == [(0, "armada"), (0, "langchain"), (1, "langchain"), (1, "armada")]
+
+
+def test_ray_cylon_runs_only_at_its_configured_world_sizes():
+    """ray-cylon is a portability check, not a sweep arm: its data plane is
+    Armada's FMI bridge, so it runs only where --ray-cylon-world-sizes says."""
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-comparison", "--world-sizes", "1", "2", "4", "8"])
+    rows = m.sweep_matrix(args)
+
+    assert args.ray_cylon_world_sizes == [2, 8]
+    ray_cylon_sizes = {r["world_size"] for r in rows if r["arm"] == "ray-cylon"}
+    assert ray_cylon_sizes == {2, 8}
+    assert {r["arm"] for r in rows if r["world_size"] in (1, 4)} == {"armada", "ray-native"}
+
+
+def test_ray_cylon_world_sizes_are_overridable():
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-comparison", "--world-sizes", "1", "2", "4",
+         "--ray-cylon-world-sizes", "4"])
+    assert {r["world_size"] for r in m.sweep_matrix(args) if r["arm"] == "ray-cylon"} == {4}
+
+
+def test_naming_ray_cylon_alone_still_runs_it_at_every_requested_world_size():
+    """The restriction trims ray-cylon out of a comparison; asking for the arm
+    by itself is an explicit request and is honoured as given."""
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-cylon", "--world-sizes", "1", "2", "4"])
+    assert {r["world_size"] for r in m.sweep_matrix(args)} == {1, 2, 4}
 
 
 def test_warmups_precede_measured_runs_and_land_under_their_own_prefix():
@@ -393,9 +452,10 @@ def test_the_matrix_covers_every_world_size_and_counts_one_task_per_rank():
 
     assert sorted({r["world_size"] for r in rows})[:2] == [1, 2]
     assert all(r["tasks"] == r["world_size"] for r in rows)
-    per_ws = len(m._selected_arms("ray-comparison")) * (args.runs + args.warmup_runs)
-    assert all(sum(1 for r in rows if r["world_size"] == n) == per_ws
-               for n in args.world_sizes)
+    runs = args.runs + args.warmup_runs
+    for n in args.world_sizes:
+        arms = 3 if n in args.ray_cylon_world_sizes else 2
+        assert sum(1 for r in rows if r["world_size"] == n) == arms * runs, n
 
 
 def test_task_hours_estimate_multiplies_tasks_by_the_per_task_minutes():
@@ -415,8 +475,8 @@ def test_dry_run_prints_the_matrix_and_the_estimate(capsys):
     out = capsys.readouterr().out
     assert "ray-native" in out and "ray-cylon" in out and "armada" in out
     assert "task-hours" in out
-    assert "45 tasks" in out
-    assert "7.5 task-hours" in out
+    assert "40 tasks" in out
+    assert "6.67 task-hours" in out
 
 
 def test_all_includes_every_arm_but_both_still_means_two():
@@ -483,7 +543,7 @@ def test_ray_arm_tasks_launch_in_the_ray_security_group_and_others_do_not():
                           ("armada", None), ("langchain", None)):
         ecs = _RecordingEcs()
         m._run_tasks(ecs, 2, lambda rank: {}, 0, 1, 60,
-                     task_definition=m.task_definition_for(arm),
+                     task_definition=m.TASK_DEFINITION,
                      security_groups=m.security_groups_for(arm, ["sg-ray"]))
         for call in ecs.calls:
             vpc = call["networkConfiguration"]["awsvpcConfiguration"]
@@ -527,5 +587,5 @@ def test_dry_run_prints_a_fargate_cost_estimate(capsys):
          "--est-task-minutes", "10", "--vcpu-hour-usd", "0.04", "--gb-hour-usd", "0.004"])
     m.print_dry_run(args)
     out = capsys.readouterr().out
-    assert "Estimated Fargate cost: $1.44" in out
+    assert "Estimated Fargate cost: $1.28" in out
     assert m.RAY_SECURITY_GROUP_NAME in out

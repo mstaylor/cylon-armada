@@ -1,24 +1,29 @@
-output "init_function_arn" {
-  description = "ARN of the initializer Lambda"
-  value       = aws_lambda_function.init.arn
+output "account_id" {
+  description = "Account this deployment targets"
+  value       = data.aws_caller_identity.current.account_id
 }
 
-output "executor_function_arn" {
-  description = "ARN of the inference (Model Inference) Lambda"
-  value       = aws_lambda_function.executor.arn
-}
-
-output "summarize_function_arn" {
-  description = "ARN of the summarizer Lambda"
-  value       = aws_lambda_function.summarize.arn
+output "executor_image_uri" {
+  description = "Executor image, by digest"
+  value       = local.executor_image_uri
 }
 
 output "state_machine_arn" {
-  description = "ARN of the replicated Cosmic AI state machine"
+  description = "Arm A (S3) workflow"
   value       = aws_sfn_state_machine.workflow.arn
 }
 
-output "data_bucket_arn" {
-  description = "ARN of the existing data/results bucket this module reads and writes"
-  value       = data.aws_s3_bucket.data.arn
+output "fmi_state_machine_arn" {
+  description = "Arm B (Cylon FMI) workflow"
+  value       = aws_sfn_state_machine.fmi_workflow.arn
+}
+
+output "executor_function_arn" {
+  description = "Shared executor Lambda"
+  value       = aws_lambda_function.executor.arn
+}
+
+output "data_bucket" {
+  description = "Data bucket the campaign driver passes as --bucket and --data-bucket"
+  value       = data.aws_s3_bucket.data.id
 }

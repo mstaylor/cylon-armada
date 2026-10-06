@@ -105,6 +105,11 @@ class CylonRayActor:
         self.placement_strategy = placement_strategy
         self._bridge = None
 
+    @property
+    def bridge(self):
+        """The FMIBridge built by start_env; None before it runs or after shutdown."""
+        return self._bridge
+
     def start_env(self):
         self._bridge = FMIBridge(
             world_size=self.world_size,

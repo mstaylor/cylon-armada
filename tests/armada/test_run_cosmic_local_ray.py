@@ -305,10 +305,10 @@ def test_ray_cylon_charges_cluster_formation_to_ray_cluster_s_not_establish_s(mo
     class FakeCylonRayActor:
         def __init__(self, rank, world_size, comm_name, required_peers, nonblocking):
             self.rank = rank
-            self._bridge = None
+            self.bridge = None
 
         def start_env(self):
-            self._bridge = bridge
+            self.bridge = bridge
             clock.advance(ESTABLISH_S)
             return True
 
@@ -321,3 +321,9 @@ def test_ray_cylon_charges_cluster_formation_to_ray_cluster_s_not_establish_s(mo
     assert record["establish_s"] == ESTABLISH_S
     assert "teardown_barrier_s" not in record
     bridge.finalize.assert_called_once()
+
+
+def test_ray_rendezvous_fails_fast_without_redis_host(monkeypatch):
+    monkeypatch.delenv("REDIS_HOST", raising=False)
+    with pytest.raises(ValueError, match="REDIS_HOST"):
+        mod._redis_client_for_rendezvous()

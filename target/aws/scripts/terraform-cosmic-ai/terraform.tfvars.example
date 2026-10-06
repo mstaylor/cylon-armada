@@ -1,1 +1,0 @@
-executor_image_uri = "881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor"

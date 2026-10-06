@@ -4,9 +4,6 @@ import boto3, logging
 
 
 def lambda_handler(event, context):
-    bucket_name = "cosmicai-data-cylon"  # replace with your bucket name
-    # prefix = "results" # replace with your folder path within the bucket if needed
-
     t_aggregate_start = time.time()
 
     s3_client = boto3.client('s3')
@@ -20,6 +17,7 @@ def lambda_handler(event, context):
     payload_data = json.loads(obj["Body"].read().decode("utf-8"))
 
     prefix = payload_data[0]['RESULT_PATH'].rstrip('/')
+    bucket_name = payload_data[0]['DATA_BUCKET']
 
     logging.info(f'Combined result will be saved in {prefix}')
 

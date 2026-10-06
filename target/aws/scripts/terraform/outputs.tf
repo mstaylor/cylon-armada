@@ -221,16 +221,6 @@ output "cosmic_ai_fmi_workflow_arn" {
   value       = aws_sfn_state_machine.cosmic_ai_fmi_workflow.arn
 }
 
-output "ray_task_definition_family" {
-  description = "Task definition family the Fargate sweep driver launches both Ray arms on (fargate_cosmic_poc.py RAY_TASK_DEFINITION)"
-  value       = aws_ecs_task_definition.ray_armada.family
-}
-
-output "ray_task_definition_arn" {
-  description = "ARN of the Ray baseline arms' task definition"
-  value       = aws_ecs_task_definition.ray_armada.arn
-}
-
 output "ray_task_security_group_id" {
   description = "Security group the sweep driver attaches to Ray arm tasks (resolved by name, fargate_cosmic_poc.py RAY_SECURITY_GROUP_NAME)"
   value       = aws_security_group.ray_tasks.id

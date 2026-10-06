@@ -366,3 +366,27 @@ def test_actor_under_pack_binds_a_rank_specific_port(monkeypatch):
                                required_peers=PEERS,
                                placement_strategy="STRICT_SPREAD").start_env()
     assert built["listen_port"] == 10000
+
+
+def test_bridge_is_exposed_after_start_env_and_cleared_on_shutdown(monkeypatch):
+    from ray_arm import cylon_on_ray
+
+    class FakeBridge:
+        def __init__(self, world_size, rank, channel_type, comm_name=None, **kwargs):
+            self.rank = rank
+
+        @property
+        def available(self):
+            return True
+
+        def finalize(self):
+            pass
+
+    monkeypatch.setattr(cylon_on_ray, "FMIBridge", FakeBridge)
+    actor = cylon_on_ray.CylonRayActor(rank=0, world_size=2, comm_name="run_e", required_peers=PEERS)
+
+    assert actor.bridge is None
+    actor.start_env()
+    assert isinstance(actor.bridge, FakeBridge)
+    actor.shutdown()
+    assert actor.bridge is None

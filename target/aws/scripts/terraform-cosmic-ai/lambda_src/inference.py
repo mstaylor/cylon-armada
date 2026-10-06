@@ -144,6 +144,12 @@ def startup_timings(process_start_ts):
     }
 
 
+def fetch_payload():
+    """The run's payload.json, from the bucket the Map item names in S3_BUCKET."""
+    obj = s3_client.get_object(Bucket=os.environ['S3_BUCKET'], Key='payload.json')
+    return json.loads(obj["Body"].read().decode("utf-8"))
+
+
 # Load Data
 def load_data(data_path, device):
     return torch.load(data_path, map_location=device)
@@ -390,9 +396,7 @@ if __name__ == '__main__':
     # TODO: get it from state-input
     # get the result path
     t_payload_fetch_start = time.time()
-    obj = s3_client.get_object(Bucket='cosmicai-data-cylon', Key='payload.json')
-    file_content = obj["Body"].read().decode("utf-8")
-    config = json.loads(file_content)
+    config = fetch_payload()
     payload_fetch_s = time.time() - t_payload_fetch_start
 
     args.batch_size = int(config['batch_size'])
