@@ -1,0 +1,5 @@
+aws_profile         = "cosmicai-admin"
+account_id          = "881908115028"
+data_bucket_name    = "cosmicai"
+ecr_repository_name = "cosmic-ai-executor"
+executor_image_tag  = "latest"
