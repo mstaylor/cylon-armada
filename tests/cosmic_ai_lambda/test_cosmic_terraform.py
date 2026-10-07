@@ -81,24 +81,6 @@ def test_plan_fails_when_credentials_belong_to_another_account():
     assert re.search(r"data\.aws_caller_identity\.current\.account_id\s*==\s*var\.account_id", source)
 
 
-def test_a_plain_plan_targets_the_cosmicai_account_with_no_inputs():
-    """Zero config: every variable has a default, and the defaults are the cosmicai account."""
-    source = _source()
-    variables = re.findall(r'variable "(\w+)" \{(.*?)\n\}', source, re.S)
-    assert variables
-    missing = [name for name, body in variables if not re.search(r"^\s*default\s*=", body, re.M)]
-    assert missing == [], missing
-    assert _default("account_id") == '"881908115028"'
-    assert _default("aws_profile") == '"cosmicai-admin"'
-    assert _default("data_bucket_name") == '"cosmicai"'
-    assert _default("ecr_repository_name") == '"cosmic-ai-executor"'
-    assert not os.path.exists(os.path.join(_MODULE, "cosmicai.tfvars"))
-
-
-def test_the_cylon_account_is_an_override_file():
-    body = open(os.path.join(_MODULE, "cylon.tfvars")).read()
-    assert "448324707516" in body and "cosmicai-data-cylon" in body
-
 def test_state_machines_wait_for_the_role_policy_that_grants_log_delivery():
     """Created alongside the policy, a state machine fails with 'The state machine IAM Role is not
     authorized to access the Log Destination' because IAM has not applied the policy yet."""

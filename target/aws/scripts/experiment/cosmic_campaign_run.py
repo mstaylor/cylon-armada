@@ -69,6 +69,8 @@ def build_parser():
     p.add_argument("--object-type", default="folder")
     p.add_argument("--result-prefix", default="cylon-armada-track1")
     p.add_argument("--region", default="us-east-1")
+    p.add_argument("--profile", default="cylon",
+                   help="AWS CLI profile for the target account (cosmicai: cosmicai-admin)")
     p.add_argument("--manifest", default="cosmic_campaign_manifest.jsonl")
     p.add_argument("--poll-s", type=float, default=10.0)
     p.add_argument("--execution-timeout-s", type=float, default=1800.0)
@@ -251,7 +253,7 @@ def main(argv=None):
         return 0
     import boto3
 
-    sfn = boto3.client("stepfunctions", region_name=args.region)
+    sfn = boto3.Session(profile_name=args.profile).client("stepfunctions", region_name=args.region)
     arn = _state_machine_arn(sfn, STATE_MACHINES[args.arm])
     rows = run_campaign(planned, sfn, arn, args.manifest, args.poll_s, args.execution_timeout_s)
     failed = [r for r in rows if r["status"] != "SUCCEEDED"]

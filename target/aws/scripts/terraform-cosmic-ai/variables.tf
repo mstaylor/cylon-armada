@@ -5,15 +5,15 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  description = "AWS CLI profile; the cosmicai account by default, cylon.tfvars overrides it"
+  description = "AWS CLI profile; the cylon account by default, cosmicai.tfvars overrides it"
   type        = string
-  default     = "cosmicai-admin"
+  default     = "cylon"
 }
 
 variable "account_id" {
   description = "Account the plan must run against; the plan fails if the credentials belong to another"
   type        = string
-  default     = "881908115028"
+  default     = "448324707516"
 }
 
 variable "project_name" {
@@ -25,19 +25,19 @@ variable "project_name" {
 variable "data_bucket_name" {
   description = "Bucket holding the partitions, the Anomaly Detection folder, payloads and results"
   type        = string
-  default     = "cosmicai"
+  default     = "cosmicai-data-cylon"
 }
 
 variable "ecr_repository_name" {
   description = "ECR repository holding the executor image"
   type        = string
-  default     = "cosmic-ai-executor"
+  default     = "cylon-armada"
 }
 
 variable "executor_image_tag" {
   description = "Executor image tag; resolved to a digest at plan time so a push and an apply redeploy the executor"
   type        = string
-  default     = "latest"
+  default     = "cosmic-ai-executor"
 }
 
 variable "model_key" {

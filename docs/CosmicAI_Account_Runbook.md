@@ -6,6 +6,32 @@ the first experiments, from the host OS. Prepared 6 October 2026.
 Design: `docs/superpowers/specs/2026-10-06-cosmicai-account-portable-deployment-design.md`.
 Experiments: `docs/superpowers/specs/2026-10-06-cosmicai-agentic-campaign-design.md`.
 
+## Quick start: cylon account, zero config (current default)
+
+Since 7 October the module, the campaign driver and the aggregator all default to the cylon account
+(448324707516, AWS profile `cylon`, bucket `cosmicai-data-cylon`). The cosmicai account is an
+override, for when AWS lifts its 3,008 MB Lambda memory cap (sections 1 to 7 below).
+
+```bash
+cd target/aws/scripts/terraform-cosmic-ai
+terraform init
+terraform plan        # expect 18 to add; executor 10240 MB, image 448324707516...cylon-armada@sha256:51341c34...
+terraform apply
+```
+
+Pilot and summary, from the repository root:
+
+```bash
+export PYTHONPATH=$PWD/target/shared/scripts:$PYTHONPATH
+python target/aws/scripts/experiment/cosmic_campaign_run.py --dry-run --series baseline --experiment pilot
+python target/aws/scripts/experiment/cosmic_campaign_run.py --live --series baseline --experiment pilot --manifest pilot_cylon.jsonl
+python -m results.cosmic_lambda_results --manifest pilot_cylon.jsonl --out pilot_cylon.csv
+```
+
+Before the first plan on a host that already deployed cosmicai in the default workspace, run
+`terraform destroy` there with the previous (cosmicai) defaults, so the default workspace holds only
+the cylon deployment.
+
 ## Status before you start
 
 | Item | State |
@@ -92,7 +118,8 @@ From the cylon-armada repository root on the host, with the current working tree
 ```bash
 cd target/aws/scripts/terraform-cosmic-ai
 terraform init
-terraform plan
+terraform workspace new cosmicai     # later: terraform workspace select cosmicai
+terraform plan -var-file=cosmicai.tfvars
 ```
 
 Check the plan before applying:
@@ -105,12 +132,11 @@ Check the plan before applying:
 Then:
 
 ```bash
-terraform apply
+terraform apply -var-file=cosmicai.tfvars
 ```
 
-The cylon account is an override (`terraform workspace new cylon`, then `-var-file=cylon.tfvars`),
-kept in its own workspace so its state never mixes with cosmicai's. Do not use it yet: in the cylon
-account, the main `terraform/` module still defines Cosmic AI resources with the same names.
+The cylon account is the default and lives in the default workspace (see the quick start); the
+cosmicai workspace keeps the two accounts' state apart.
 
 ## 5. Check the deployment
 
@@ -129,7 +155,6 @@ Expected: `cylon-armada-cosmic-ai-workflow` and `cylon-armada-cosmic-ai-fmi-work
 The campaign driver and aggregator run with the cylon-armada Python code. From the repository root:
 
 ```bash
-export AWS_PROFILE=cosmicai-admin
 export PYTHONPATH=$PWD/target/shared/scripts:$PYTHONPATH
 cd target/aws/scripts/experiment
 ```
@@ -138,14 +163,14 @@ Dry run first; it launches nothing:
 
 ```bash
 python cosmic_campaign_run.py --dry-run --series baseline --experiment pilot \
-  --bucket cosmicai --data-bucket cosmicai
+  --profile cosmicai-admin --bucket cosmicai --data-bucket cosmicai
 ```
 
 ### Arm A, 1 and 2 workers
 
 ```bash
 python cosmic_campaign_run.py --live --series baseline --experiment pilot \
-  --bucket cosmicai --data-bucket cosmicai --manifest pilot_cosmicai.jsonl
+  --profile cosmicai-admin --bucket cosmicai --data-bucket cosmicai --manifest pilot_cosmicai.jsonl
 ```
 
 That is 8 executions (a cold-start run and 3 measured runs at 1 and 2 workers each).
@@ -164,7 +189,7 @@ Then:
 
 ```bash
 python cosmic_campaign_run.py --live --arm B --series baseline --experiment pilot \
-  --bucket cosmicai --data-bucket cosmicai --manifest pilot_cosmicai.jsonl
+  --profile cosmicai-admin --bucket cosmicai --data-bucket cosmicai --manifest pilot_cosmicai.jsonl
 ```
 
 ### Summarize
@@ -172,8 +197,7 @@ python cosmic_campaign_run.py --live --arm B --series baseline --experiment pilo
 ```bash
 cd ../../../..
 python -m results.cosmic_lambda_results --manifest target/aws/scripts/experiment/pilot_cosmicai.jsonl \
-  --bucket cosmicai --measured-runs 3 --batch-measured-runs 4 --cold-init-threshold-s 10 \
-  --out pilot_cosmicai.csv
+  --profile cosmicai-admin --bucket cosmicai --out pilot_cosmicai.csv
 ```
 
 Expected: every row `complete`, with Arm A and Arm B rows separate and a `cold_start` row for each
@@ -186,11 +210,11 @@ are complete, ramp to 41 workers, then run the full campaign. Dry run before eac
 execution count and cost estimate:
 
 ```bash
-python cosmic_campaign_run.py --dry-run --series scaling --max-workers 41 --bucket cosmicai --data-bucket cosmicai
+python cosmic_campaign_run.py --dry-run --series scaling --max-workers 41 --profile cosmicai-admin --bucket cosmicai --data-bucket cosmicai
 python cosmic_campaign_run.py --live --series scaling --max-workers 41 --experiment pilot \
-  --bucket cosmicai --data-bucket cosmicai --manifest pilot_cosmicai.jsonl
-python cosmic_campaign_run.py --dry-run --bucket cosmicai --data-bucket cosmicai
-python cosmic_campaign_run.py --live --experiment exp1 --bucket cosmicai --data-bucket cosmicai \
+  --profile cosmicai-admin --bucket cosmicai --data-bucket cosmicai --manifest pilot_cosmicai.jsonl
+python cosmic_campaign_run.py --dry-run --profile cosmicai-admin --bucket cosmicai --data-bucket cosmicai
+python cosmic_campaign_run.py --live --experiment exp1 --profile cosmicai-admin --bucket cosmicai --data-bucket cosmicai \
   --manifest exp1_cosmicai.jsonl
 ```
 
@@ -206,34 +230,3 @@ aws lambda get-account-settings --profile cosmicai-admin --region us-east-1 \
 - One campaign driver at a time per account: Arm A executions share `payload.json` at the bucket root.
 - CloudBank: do not grant access to anyone outside the ACCESS allocation process.
 - Nothing in this runbook stages or commits code.
-## Alternative: run in the cylon account while the memory cap stands
-
-The cosmicai account rejects Lambda functions above 3,008 MB until AWS lifts the new-account limit.
-The cylon account (448324707516) has no such cap, a concurrency limit of 11,000, the current image
-(`cylon-armada:cosmic-ai-executor`, `sha256:51341c34...`) and the data in `cosmicai-data-cylon`.
-A read-only plan there on 7 October showed 18 to add, 0 to change, 0 to destroy.
-
-Deploy the same module with the cylon override, in its own workspace (the default workspace holds
-the cosmicai deployment):
-
-```bash
-cd target/aws/scripts/terraform-cosmic-ai
-terraform workspace new cylon        # later: terraform workspace select cylon
-terraform plan  -var-file=cylon.tfvars
-terraform apply -var-file=cylon.tfvars
-```
-
-Do not apply the main `terraform/` module at the same time: it defines Cosmic AI resources with the
-same names.
-
-The campaign driver and aggregator defaults are the cylon account, so no bucket flags or
-`AWS_PROFILE` are needed:
-
-```bash
-export PYTHONPATH=$PWD/target/shared/scripts:$PYTHONPATH
-cd target/aws/scripts/experiment
-python cosmic_campaign_run.py --dry-run --series baseline --experiment pilot
-python cosmic_campaign_run.py --live --series baseline --experiment pilot --manifest pilot_cylon.jsonl
-```
-
-Summarize with `--bucket cosmicai-data-cylon` in the step 6 aggregator command.

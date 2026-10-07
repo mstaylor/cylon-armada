@@ -127,22 +127,29 @@ def write_csv(rows, path):
         writer.writerows(rows)
 
 
-def main(argv=None):
+def build_parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--manifest", required=True)
-    p.add_argument("--bucket", required=True)
-    p.add_argument("--measured-runs", type=int, required=True,
-                   help="expected measured runs per scaling and baseline configuration")
-    p.add_argument("--batch-measured-runs", type=int, required=True,
-                   help="expected measured runs per batch sweep configuration")
-    p.add_argument("--cold-init-threshold-s", type=float, required=True,
-                   help="a rank whose init_s exceeds this counts as a cold start")
     p.add_argument("--out", required=True)
+    p.add_argument("--bucket", default="cosmicai-data-cylon",
+                   help="data bucket holding the results (cosmicai: cosmicai)")
+    p.add_argument("--profile", default="cylon",
+                   help="AWS CLI profile for the target account (cosmicai: cosmicai-admin)")
+    p.add_argument("--measured-runs", type=int, default=3,
+                   help="expected measured runs per scaling and baseline configuration")
+    p.add_argument("--batch-measured-runs", type=int, default=4,
+                   help="expected measured runs per batch sweep configuration")
+    p.add_argument("--cold-init-threshold-s", type=float, default=10.0,
+                   help="a rank whose init_s exceeds this counts as a cold start")
     p.add_argument("--region", default="us-east-1")
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
     import boto3
 
-    s3 = boto3.client("s3", region_name=args.region)
+    s3 = boto3.Session(profile_name=args.profile).client("s3", region_name=args.region)
     with open(args.manifest) as handle:
         rows = [json.loads(line) for line in handle]
     expected = {"scaling": args.measured_runs, "baseline": args.measured_runs,
