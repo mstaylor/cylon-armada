@@ -14,6 +14,7 @@ Experiments: `docs/superpowers/specs/2026-10-06-cosmicai-agentic-campaign-design
 | Terraform | `target/aws/scripts/terraform-cosmic-ai/`. Zero config: the cosmicai account is the default, so a plain `terraform plan` needs no inputs. Last plan: 18 to add, 0 to change, 0 to destroy |
 | Data | Bucket `cosmicai` has the 10, 25, 50, 75 and 100 MB partitions and the `Anomaly Detection/` folder |
 | Executor image | **Not current.** ECR `cosmic-ai-executor:latest` is the 1 October image (`sha256:5d477d77...`). The current image is `sha256:51341c34...` |
+| Lambda memory | **Capped at 3,008 MB** per function (new-account limit). The executor needs 10,240 MB, the original campaign's setting (it uses up to 7 GB on 100 MB partitions). Lifting it needs an AWS Support case, possibly through CloudBank. Until then the apply creates everything except the executor |
 | Lambda concurrency | **1,000** (raised 7 October; the campaign needs at most 517). A separate request for 11,000 is still open as a support case and is not needed |
 
 ## 1. Set up the admin profile on the host
@@ -205,3 +206,34 @@ aws lambda get-account-settings --profile cosmicai-admin --region us-east-1 \
 - One campaign driver at a time per account: Arm A executions share `payload.json` at the bucket root.
 - CloudBank: do not grant access to anyone outside the ACCESS allocation process.
 - Nothing in this runbook stages or commits code.
+## Alternative: run in the cylon account while the memory cap stands
+
+The cosmicai account rejects Lambda functions above 3,008 MB until AWS lifts the new-account limit.
+The cylon account (448324707516) has no such cap, a concurrency limit of 11,000, the current image
+(`cylon-armada:cosmic-ai-executor`, `sha256:51341c34...`) and the data in `cosmicai-data-cylon`.
+A read-only plan there on 7 October showed 18 to add, 0 to change, 0 to destroy.
+
+Deploy the same module with the cylon override, in its own workspace (the default workspace holds
+the cosmicai deployment):
+
+```bash
+cd target/aws/scripts/terraform-cosmic-ai
+terraform workspace new cylon        # later: terraform workspace select cylon
+terraform plan  -var-file=cylon.tfvars
+terraform apply -var-file=cylon.tfvars
+```
+
+Do not apply the main `terraform/` module at the same time: it defines Cosmic AI resources with the
+same names.
+
+The campaign driver and aggregator defaults are the cylon account, so no bucket flags or
+`AWS_PROFILE` are needed:
+
+```bash
+export PYTHONPATH=$PWD/target/shared/scripts:$PYTHONPATH
+cd target/aws/scripts/experiment
+python cosmic_campaign_run.py --dry-run --series baseline --experiment pilot
+python cosmic_campaign_run.py --live --series baseline --experiment pilot --manifest pilot_cylon.jsonl
+```
+
+Summarize with `--bucket cosmicai-data-cylon` in the step 6 aggregator command.

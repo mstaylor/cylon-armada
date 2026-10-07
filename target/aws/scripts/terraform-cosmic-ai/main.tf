@@ -301,5 +301,6 @@ resource "aws_sfn_state_machine" "workflow" {
     level                  = var.sfn_log_level
   }
 
-  tags = local.common_tags
+  tags       = local.common_tags
+  depends_on = [aws_iam_role_policy.step_functions_policy, aws_cloudwatch_log_resource_policy.sfn_workflow]
 }

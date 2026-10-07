@@ -98,3 +98,10 @@ def test_a_plain_plan_targets_the_cosmicai_account_with_no_inputs():
 def test_the_cylon_account_is_an_override_file():
     body = open(os.path.join(_MODULE, "cylon.tfvars")).read()
     assert "448324707516" in body and "cosmicai-data-cylon" in body
+
+def test_state_machines_wait_for_the_role_policy_that_grants_log_delivery():
+    """Created alongside the policy, a state machine fails with 'The state machine IAM Role is not
+    authorized to access the Log Destination' because IAM has not applied the policy yet."""
+    for name in ("workflow", "fmi_workflow"):
+        block = _block("resource", "aws_sfn_state_machine", name)
+        assert re.search(r"depends_on\s*=\s*\[[^\]]*aws_iam_role_policy\.step_functions_policy", block), name
