@@ -11,7 +11,7 @@ Experiments: `docs/superpowers/specs/2026-10-06-cosmicai-agentic-campaign-design
 | Item | State |
 |---|---|
 | Admin access | `qad5gv` role has AdministratorAccess; its trust policy lets the IAM user `qad5gv` assume it |
-| Terraform | `target/aws/scripts/terraform-cosmic-ai/`, workspace `cosmicai`, `cosmicai.tfvars`. Last plan: 18 to add, 0 to change, 0 to destroy |
+| Terraform | `target/aws/scripts/terraform-cosmic-ai/`. Zero config: the cosmicai account is the default, so a plain `terraform plan` needs no inputs. Last plan: 18 to add, 0 to change, 0 to destroy |
 | Data | Bucket `cosmicai` has the 10, 25, 50, 75 and 100 MB partitions and the `Anomaly Detection/` folder |
 | Executor image | **Not current.** ECR `cosmic-ai-executor:latest` is the 1 October image (`sha256:5d477d77...`). The current image is `sha256:51341c34...` |
 | Lambda concurrency | **1,000** (raised 7 October; the campaign needs at most 517). A separate request for 11,000 is still open as a support case and is not needed |
@@ -91,8 +91,7 @@ From the cylon-armada repository root on the host, with the current working tree
 ```bash
 cd target/aws/scripts/terraform-cosmic-ai
 terraform init
-terraform workspace select cosmicai || terraform workspace new cosmicai
-terraform plan -var-file=cosmicai.tfvars
+terraform plan
 ```
 
 Check the plan before applying:
@@ -105,11 +104,12 @@ Check the plan before applying:
 Then:
 
 ```bash
-terraform apply -var-file=cosmicai.tfvars
+terraform apply
 ```
 
-Do not use `cylon.tfvars` yet: in the cylon account, the main `terraform/` module still defines
-Cosmic AI resources with the same names.
+The cylon account is an override (`terraform workspace new cylon`, then `-var-file=cylon.tfvars`),
+kept in its own workspace so its state never mixes with cosmicai's. Do not use it yet: in the cylon
+account, the main `terraform/` module still defines Cosmic AI resources with the same names.
 
 ## 5. Check the deployment
 

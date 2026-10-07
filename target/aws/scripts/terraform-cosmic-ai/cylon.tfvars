@@ -1,0 +1,6 @@
+aws_profile         = "default"
+account_id          = "448324707516"
+data_bucket_name    = "cosmicai-data-cylon"
+ecr_repository_name = "cylon-armada"
+executor_image_tag  = "cosmic-ai-executor"
+rendezvous_host     = "cylon-rendezvous.aws-cylondata.com"
