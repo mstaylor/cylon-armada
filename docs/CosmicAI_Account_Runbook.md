@@ -14,7 +14,7 @@ Experiments: `docs/superpowers/specs/2026-10-06-cosmicai-agentic-campaign-design
 | Terraform | `target/aws/scripts/terraform-cosmic-ai/`, workspace `cosmicai`, `cosmicai.tfvars`. Last plan: 18 to add, 0 to change, 0 to destroy |
 | Data | Bucket `cosmicai` has the 10, 25, 50, 75 and 100 MB partitions and the `Anomaly Detection/` folder |
 | Executor image | **Not current.** ECR `cosmic-ai-executor:latest` is the 1 October image (`sha256:5d477d77...`). The current image is `sha256:51341c34...` |
-| Lambda concurrency | **10.** Increase to 11,000 requested 6 October (request id `8b00390eb57d42b3838f184a01897de9E8DIHMhH`), pending. Until approved, run nothing above 10 workers |
+| Lambda concurrency | **1,000** (raised 7 October; the campaign needs at most 517). A separate request for 11,000 is still open as a support case and is not needed |
 
 ## 1. Set up the admin profile on the host
 
@@ -123,7 +123,7 @@ aws lambda get-function --function-name cylon-armada-cosmic-ai-executor --profil
 Expected: `cylon-armada-cosmic-ai-workflow` and `cylon-armada-cosmic-ai-fmi-workflow`; executor at
 10240 MB on `@sha256:51341c34...`.
 
-## 6. First runs within the 10-worker limit
+## 6. First runs: 1 and 2 workers
 
 The campaign driver and aggregator run with the cylon-armada Python code. From the repository root:
 
@@ -178,19 +178,27 @@ python -m results.cosmic_lambda_results --manifest target/aws/scripts/experiment
 Expected: every row `complete`, with Arm A and Arm B rows separate and a `cold_start` row for each
 configuration.
 
-## 7. Check the concurrency increase
+## 7. Ramp, then the full campaign
+
+The concurrency limit (1,000) covers the largest configuration (517 workers). After the pilot rows
+are complete, ramp to 41 workers, then run the full campaign. Dry run before each to see the
+execution count and cost estimate:
 
 ```bash
-aws service-quotas list-requested-service-quota-change-history-by-quota --service-code lambda \
-  --quota-code L-B99A9384 --profile cosmicai-admin --region us-east-1 \
-  --query 'RequestedQuotas[].[DesiredValue,Status]' --output text
+python cosmic_campaign_run.py --dry-run --series scaling --max-workers 41 --bucket cosmicai --data-bucket cosmicai
+python cosmic_campaign_run.py --live --series scaling --max-workers 41 --experiment pilot \
+  --bucket cosmicai --data-bucket cosmicai --manifest pilot_cosmicai.jsonl
+python cosmic_campaign_run.py --dry-run --bucket cosmicai --data-bucket cosmicai
+python cosmic_campaign_run.py --live --experiment exp1 --bucket cosmicai --data-bucket cosmicai \
+  --manifest exp1_cosmicai.jsonl
+```
+
+Check the limit at any time:
+
+```bash
 aws lambda get-account-settings --profile cosmicai-admin --region us-east-1 \
   --query AccountLimit.ConcurrentExecutions
 ```
-
-When it shows `APPROVED` and a limit of 600 or more, the next steps are the ramp
-(`--series scaling --max-workers 41`) and then the full campaign. Run a dry run before each to see
-the execution count and cost estimate.
 
 ## Reminders
 

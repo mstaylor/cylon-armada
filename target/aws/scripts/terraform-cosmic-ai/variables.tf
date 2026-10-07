@@ -5,13 +5,15 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  description = "AWS CLI profile; set per account in <account>.tfvars"
+  description = "AWS CLI profile; the cosmicai account by default, cylon.tfvars overrides it"
   type        = string
+  default     = "cosmicai-admin"
 }
 
 variable "account_id" {
   description = "Account the plan must run against; the plan fails if the credentials belong to another"
   type        = string
+  default     = "881908115028"
 }
 
 variable "project_name" {
@@ -23,16 +25,19 @@ variable "project_name" {
 variable "data_bucket_name" {
   description = "Bucket holding the partitions, the Anomaly Detection folder, payloads and results"
   type        = string
+  default     = "cosmicai"
 }
 
 variable "ecr_repository_name" {
   description = "ECR repository holding the executor image"
   type        = string
+  default     = "cosmic-ai-executor"
 }
 
 variable "executor_image_tag" {
   description = "Executor image tag; resolved to a digest at plan time so a push and an apply redeploy the executor"
   type        = string
+  default     = "latest"
 }
 
 variable "model_key" {
@@ -160,6 +165,7 @@ variable "fmi_max_timeout" {
 variable "rendezvous_host" {
   description = "TCPunch rendezvous server host for Arm B (the user's own deployment, reached over the public internet)"
   type        = string
+  default     = "cylon-rendezvous.aws-cylondata.com"
 }
 
 variable "rendezvous_port" {
