@@ -164,13 +164,19 @@ def test_real_fmibridge_at_world_size_one_is_unavailable_with_no_context():
 
 
 @pytest.mark.parametrize("env,expected", [
-    ({}, {"code_fetch_s": None, "init_s": None}),
-    ({"LAMBDA_ENTRY_TS": "100.0"}, {"code_fetch_s": None, "init_s": 10.0}),
-    ({"LAMBDA_ENTRY_TS": "100.0", "CODE_FETCH_END_TS": "104.0"}, {"code_fetch_s": 4.0, "init_s": 6.0}),
+    ({}, {"code_fetch_s": None, "init_s": None, "cold_start": None}),
+    ({"LAMBDA_ENTRY_TS": "100.0"}, {"code_fetch_s": None, "init_s": 10.0, "cold_start": None}),
+    ({"LAMBDA_ENTRY_TS": "100.0", "CODE_FETCH_END_TS": "104.0"},
+     {"code_fetch_s": 4.0, "init_s": 6.0, "cold_start": None}),
+    ({"LAMBDA_ENTRY_TS": "100.0", "CODE_FETCH_END_TS": "104.0", "CONTAINER_COLD_START": "1"},
+     {"code_fetch_s": 4.0, "init_s": 6.0, "cold_start": 1}),
+    ({"LAMBDA_ENTRY_TS": "100.0", "CODE_FETCH_END_TS": "104.0", "CONTAINER_COLD_START": "0"},
+     {"code_fetch_s": 4.0, "init_s": 6.0, "cold_start": 0}),
 ])
 def test_startup_timings_split_code_fetch_out_of_init(monkeypatch, env, expected):
     monkeypatch.delenv("LAMBDA_ENTRY_TS", raising=False)
     monkeypatch.delenv("CODE_FETCH_END_TS", raising=False)
+    monkeypatch.delenv("CONTAINER_COLD_START", raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     assert inference.startup_timings(110.0) == expected
@@ -415,7 +421,8 @@ def _combine(monkeypatch, world_size):
     data_map = {str(r): f"10MB/{r + 1}.pt" for r in range(world_size)}
     partition_map = inference_FMI.encode_data_map(data_map, world_size, "10MB")
     gathered = [inference_FMI.row_table(r, inference_FMI.GATHERED_FIELDS,
-                                        {"num_samples": 511, "num_batches": 1, "inference_s": 1.5})
+                                        {"num_samples": 511, "num_batches": 1, "inference_s": 1.5,
+                                         "cold_start": 1})
                 for r in range(world_size)]
     trailing = [inference_FMI.row_table(r, inference_FMI.TRAILING_FIELDS,
                                         {"publish_s": 0.1, "total_s": 7.0})
@@ -435,6 +442,7 @@ def test_combined_counts_are_integers_like_arm_a(monkeypatch):
     for record in records:
         assert record["num_samples"] == 511 and isinstance(record["num_samples"], int)
         assert isinstance(record["num_batches"], int)
+        assert record["cold_start"] == 1 and isinstance(record["cold_start"], int)
         assert isinstance(record["inference_s"], float)
 
 

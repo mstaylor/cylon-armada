@@ -1,0 +1,10 @@
+*
+!cpp/CMakeLists.txt
+!cpp/src
+!python/setup.py
+!python/cylon_armada
+!docker/cosmic-ai-lambda/lambda_entry3.py
+!docker/cosmic-ai-lambda/fmi.json
+python/cylon_armada/**/__pycache__
+python/cylon_armada/*.so
+python/cylon_armada/*.cpp

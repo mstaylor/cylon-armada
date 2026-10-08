@@ -9,6 +9,16 @@ import os
 
 import logging
 
+_invocations_in_container = 0
+
+
+def mark_container_invocation():
+    """Tell the inference script whether this is the container's first invocation (a cold start)."""
+    global _invocations_in_container
+    _invocations_in_container += 1
+    os.environ['CONTAINER_COLD_START'] = '1' if _invocations_in_container == 1 else '0'
+
+
 def environ_or_required(key, required: bool = True):
 
     return  (
@@ -91,6 +101,8 @@ def handler(event, context):
 
     for key in event.keys():
         os.environ[key] = f"{event[key]}"
+
+    mark_container_invocation()
 
     os.environ['LAMBDA_ENTRY_TS'] = str(handler_entry_ts)
 

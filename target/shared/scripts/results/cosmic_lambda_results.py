@@ -54,6 +54,9 @@ def load_execution(s3, bucket, result_path, workers, started_at=None):
 
 
 def _cold_worker_fraction(records, cold_init_threshold_s):
+    flags = [r["cold_start"] for r in records if r.get("cold_start") is not None]
+    if flags:
+        return sum(1 for f in flags if f) / len(flags)
     if cold_init_threshold_s is None:
         return None
     inits = [r["init_s"] for r in records if r.get("init_s") is not None]

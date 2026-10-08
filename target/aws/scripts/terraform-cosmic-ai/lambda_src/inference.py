@@ -134,13 +134,17 @@ STAGE_FIELDS = (
 def startup_timings(process_start_ts):
     lambda_entry_ts = os.environ.get('LAMBDA_ENTRY_TS')
     code_fetch_end_ts = os.environ.get('CODE_FETCH_END_TS')
+    cold_start = os.environ.get('CONTAINER_COLD_START')
+    cold_start = int(cold_start) if cold_start is not None else None
     if lambda_entry_ts is None:
-        return {'code_fetch_s': None, 'init_s': None}
+        return {'code_fetch_s': None, 'init_s': None, 'cold_start': cold_start}
     if code_fetch_end_ts is None:
-        return {'code_fetch_s': None, 'init_s': process_start_ts - float(lambda_entry_ts)}
+        return {'code_fetch_s': None, 'init_s': process_start_ts - float(lambda_entry_ts),
+                'cold_start': cold_start}
     return {
         'code_fetch_s': float(code_fetch_end_ts) - float(lambda_entry_ts),
         'init_s': process_start_ts - float(code_fetch_end_ts),
+        'cold_start': cold_start,
     }
 
 
@@ -243,6 +247,7 @@ def inference(
     stage_timings = dict(stage_timings or {})
     process_start_ts = stage_timings.pop('process_start_ts', None)
     execution_info['code_fetch_s'] = stage_timings.get('code_fetch_s')
+    execution_info['cold_start'] = stage_timings.get('cold_start')
     execution_info['init_s'] = stage_timings.get('init_s')
     execution_info['payload_fetch_s'] = stage_timings.get('payload_fetch_s')
     execution_info['scatter_s'] = stage_timings.get('scatter_s')

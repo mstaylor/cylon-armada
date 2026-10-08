@@ -172,3 +172,13 @@ def test_collect_s_is_comparable_between_arm_a_and_arm_b():
     [b] = summarize(rows_b, arm({"aggregate_s": 0.1, "trailing_gather_s": 0.4}), measured_runs=1)
     assert a["collect_s_mean"] == pytest.approx(0.3 + 2.0)
     assert b["collect_s_mean"] == pytest.approx(0.3 + 0.4 + 0.1)
+
+
+def test_cold_worker_fraction_prefers_the_containers_own_cold_start_flag():
+    """init_s misses cold containers once the image is cached; the executor's flag does not."""
+    def loader(row):
+        records = [{**r, "init_s": 2.0, "cold_start": c} for r, c in zip(_arm_a_records(2), (1, 0))]
+        return {"records": records, "metrics": {"aggregate_s": 0.5, "ranks_aggregated": 2}}
+
+    [cell] = summarize([_row("measured", 1, 10)], loader, measured_runs=1, cold_init_threshold_s=10)
+    assert cell["cold_worker_fraction_mean"] == 0.5

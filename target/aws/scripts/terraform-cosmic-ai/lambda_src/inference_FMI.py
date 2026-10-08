@@ -23,6 +23,7 @@ PAYLOAD_ROOT = 0
 GATHERED_FIELDS = tuple(f for f in STAGE_FIELDS if f not in ('publish_s', 'total_s')) + (
     'num_samples',
     'num_batches',
+    'cold_start',
     'total_cpu_time (seconds)',
     'total_cpu_memory (MB)',
     'execution_time (seconds/batch)',
@@ -32,7 +33,7 @@ GATHERED_FIELDS = tuple(f for f in STAGE_FIELDS if f not in ('publish_s', 'total
 
 TRAILING_FIELDS = ('publish_s', 'total_s')
 
-INTEGER_FIELDS = ('num_samples', 'num_batches')
+INTEGER_FIELDS = ('num_samples', 'num_batches', 'cold_start')
 
 PARTITION_MAP_SCHEMA = pa.schema([('rank', pa.int32()), ('partition_index', pa.int64())])
 
