@@ -55,7 +55,7 @@ def lambda_handler(event, context):
     file_limit = int(event['file_limit'])
     world_size = int(event.get('world_size', file_limit))
     event['world_size'] = world_size
-    comm_name = event.get('comm_name') or f'cosmic-fmi-{uuid.uuid4().hex}'
+    comm_name = event.get('comm_name') or f'cosmic-fmi-{uuid.uuid4().hex[:16]}'
     event['comm_name'] = comm_name
 
     filenames = get_file_list(bucket=event['data_bucket'], prefix=event['data_prefix'])

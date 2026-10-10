@@ -33,6 +33,18 @@ FMI_CHANNEL_TYPES = frozenset({"direct", "direct-redis", "redis", "s3"})
 
 FMI_CHANNEL_ALIASES = {"tcpunch": "direct"}
 
+TCPUNCH_MAX_PAIRING_NAME_BYTES = 99
+
+
+class PairingNameTooLong(ValueError):
+    pass
+
+
+def longest_pairing_name(comm_name, world_size):
+    """The longest name cylon's direct channel sends TCPunch for this run:
+    Communicator prefixes the namespace (the bridge passes comm_name) with ':'."""
+    return f"{comm_name}:{comm_name}_fmi_pair{world_size - 2}_{world_size - 1}NONBLOCKING"
+
 
 def _import_fmi():
     """Lazy-import pycylon FMI — only available in Cylon Lambda containers.
@@ -126,6 +138,15 @@ class FMIBridge:
         if self._FMIConfig is None or self.world_size <= 1:
             return
 
+        if self.channel_type == "direct":
+            longest = longest_pairing_name(comm_name, self.world_size)
+            if len(longest.encode()) > TCPUNCH_MAX_PAIRING_NAME_BYTES:
+                raise PairingNameTooLong(
+                    f"comm_name {comm_name!r} gives {len(longest.encode())}-byte pairing names at "
+                    f"world_size={self.world_size} (rank={self.rank}); TCPunch cuts them to "
+                    f"{TCPUNCH_MAX_PAIRING_NAME_BYTES}, which makes distinct pairs collide"
+                )
+
         # Read by Direct::init() in cylon's C++ FMI channel, which otherwise
         # eagerly connects to every peer — N(N-1)/2 rendezvous pairings. Must be
         # set before the communicator is constructed, since that is when the
@@ -136,6 +157,12 @@ class FMIBridge:
             os.environ["FMI_REQUIRED_PEERS"] = required_peers
         else:
             os.environ.pop("FMI_REQUIRED_PEERS", None)
+
+        # TCPunch's client keeps its hole-punch state in process globals, so
+        # concurrent pair() calls cross-wire sockets and hang once a rank has
+        # more than one peer; the direct channel must pair one peer at a time.
+        if self.channel_type == "direct":
+            os.environ["FMI_ESTABLISH_PARALLELISM"] = "1"
 
         port = int(listen_port) if self.channel_type == "direct-redis" else int(rendezvous_port)
 

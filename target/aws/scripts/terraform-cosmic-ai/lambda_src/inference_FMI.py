@@ -8,6 +8,7 @@ import time
 
 import pyarrow as pa
 
+from armada.peer_sets import collective_peer_map, format_peer_map
 from communicator.fmi_bridge import FMIBridge
 from inference import (
     STAGE_FIELDS,
@@ -130,6 +131,10 @@ def timed_barrier(bridge):
     return time.time() - t_start
 
 
+def required_peer_map(world_size):
+    return format_peer_map(collective_peer_map(world_size, tree=True, gather=True, roots=(PAYLOAD_ROOT,)))
+
+
 def connect(args):
     t_start = time.time()
     bridge = FMIBridge(
@@ -141,6 +146,7 @@ def connect(args):
         comm_name=args.comm_name,
         maxtimeout=args.fmi_max_timeout_ms,
         nonblocking=args.fmi_options != 'blocking',
+        required_peers=required_peer_map(args.world_size),
     )
     comm_init_s = time.time() - t_start
     if args.world_size > 1 and not bridge.available:
@@ -155,11 +161,14 @@ def run_rank(args, process_start_ts):
     stage_timings = startup_timings(process_start_ts)
 
     bridge, stage_timings['comm_init_s'] = connect(args)
+    logging.info(f'Rank: {rank}. connected in {stage_timings["comm_init_s"]:.2f}s')
     try:
         barrier_s = timed_barrier(bridge)
+        logging.info(f'Rank: {rank}. first barrier done')
 
         t_payload_fetch_start = time.time()
         partition_map = broadcast_partition_map(bridge, rank, world_size, args)
+        logging.info(f'Rank: {rank}. partition map received')
         stage_timings['payload_fetch_s'] = time.time() - t_payload_fetch_start
         args.data_path = decode_rank_paths(partition_map, rank, args.data_prefix)
 
@@ -170,6 +179,7 @@ def run_rank(args, process_start_ts):
         )
 
         barrier_s += timed_barrier(bridge)
+        logging.info(f'Rank: {rank}. second barrier done')
         stage_timings['barrier_s'] = barrier_s
         stage_timings['inference_s'] = execution_info['inference_s']
         record = {**execution_info, **stage_timings}
@@ -177,6 +187,7 @@ def run_rank(args, process_start_ts):
         t_publish_start = time.time()
         gathered = gather_table(bridge, row_table(rank, GATHERED_FIELDS, record), PAYLOAD_ROOT)
         publish_s = time.time() - t_publish_start
+        logging.info(f'Rank: {rank}. stage gather done')
         total_s = time.time() - process_start_ts
 
         t_trailing_start = time.time()
@@ -262,7 +273,7 @@ def parse_args():
 
 if __name__ == '__main__':
     process_start_ts = time.time()
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, force=True)
     args = parse_args()
     try:
         run_rank(args, process_start_ts)

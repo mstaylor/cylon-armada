@@ -42,6 +42,17 @@ class TestEmbeddingService:
         assert metadata["dimensions"] == dimensions
 
     @patch('context.embedding.boto3')
+    def test_embedding_cache_can_be_turned_off_even_when_redis_is_configured(self, mock_boto3, monkeypatch):
+        import redis
+        from context.embedding import EmbeddingService
+
+        monkeypatch.setenv("REDIS_HOST", "redis.example")
+        connect = MagicMock()
+        monkeypatch.setattr(redis, "Redis", connect)
+        service = EmbeddingService(config=BedrockConfig(embedding_dimensions=256), cache_embeddings=False)
+        assert service._redis is None and not connect.called
+
+    @patch('context.embedding.boto3')
     def test_embed_returns_metadata(self, mock_boto3):
         """Metadata should include model_id, token_count, latency_ms, dimensions."""
         from context.embedding import EmbeddingService

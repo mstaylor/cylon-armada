@@ -61,6 +61,7 @@ WORKER_SCRIPT = textwrap.dedent("""
         listen_port=int(os.environ["FMI_LISTEN_PORT"]),
         redis_host=os.environ["REDIS_HOST"], redis_port=int(os.environ["REDIS_PORT"]),
         comm_name=os.environ["COMM_NAME"], maxtimeout=20000, advertise_host="127.0.0.1",
+        required_peers=inference_FMI.required_peer_map(world_size),
     )
     rank = bridge.rank
     data_map = json.loads(os.environ["DATA_MAP"])
@@ -146,7 +147,7 @@ def _run_world(world_size, data_map, tmp_path):
 
 @pytest.mark.skipif(not _redis_available(), reason="host redis not reachable")
 @pytest.mark.skipif(not _pycylon_fmi_available(), reason="pycylon FMI native stack not importable")
-@pytest.mark.parametrize("world_size", [2, 3])
+@pytest.mark.parametrize("world_size", [2, 3, 5, 11])
 def test_partition_map_broadcast_and_stage_gather_over_real_fmi(world_size, tmp_path):
     data_map = {str(r): f"10MB/{r + 1}.pt" for r in range(world_size)}
     data_map["0"] = ["10MB/1.pt", "10MB/10.pt"]
@@ -158,7 +159,7 @@ def test_partition_map_broadcast_and_stage_gather_over_real_fmi(world_size, tmp_
         assert results[rank]["paths"] == data_map[str(rank)]
         assert results[rank]["gathered"] == (world_size if rank == 0 else 0)
     rows = results[0]["rows"]
-    assert sorted(rows) == [str(r) for r in range(world_size)]
+    assert sorted(rows, key=int) == [str(r) for r in range(world_size)]
     for rank in range(world_size):
         assert rows[str(rank)]["init_s"] == float(rank)
         assert rows[str(rank)]["code_fetch_s"] is None

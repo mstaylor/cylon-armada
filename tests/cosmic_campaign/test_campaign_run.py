@@ -224,3 +224,13 @@ def test_a_succeeded_execution_whose_summarizer_failed_is_not_recorded_as_succee
                           sleep=lambda s: None)
     assert {r["status"] for r in rows} == {"SUMMARY_FAILED"}
     assert m.completed_slots(str(tmp_path / "m.jsonl")) == set()
+
+
+def test_stop_on_failure_halts_after_the_first_unsuccessful_execution(tmp_path):
+    m = _driver()
+    planned = _planned(m)
+    sfn = _FakeSfn({planned[1].name: "FAILED"})
+    rows = m.run_campaign(planned, sfn, "arn:sm", str(tmp_path / "m.jsonl"), 0, 10,
+                          sleep=lambda s: None, stop_on_failure=True)
+    assert [r["status"] for r in rows] == ["SUCCEEDED", "FAILED"]
+    assert sfn.started == [p.name for p in planned[:2]]

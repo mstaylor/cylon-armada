@@ -16,6 +16,14 @@ locals {
       source = "${path.module}/../../../shared/scripts/communicator/fmi_bridge.py"
       key    = "${var.script_prefix}/communicator/fmi_bridge.py"
     }
+    armada_package = {
+      source = "${path.module}/../../../shared/scripts/armada/__init__.py"
+      key    = "${var.script_prefix}/armada/__init__.py"
+    }
+    peer_sets = {
+      source = "${path.module}/../../../shared/scripts/armada/peer_sets.py"
+      key    = "${var.script_prefix}/armada/peer_sets.py"
+    }
   }
 }
 

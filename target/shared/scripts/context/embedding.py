@@ -37,6 +37,7 @@ class EmbeddingService:
         self,
         config: Optional[BedrockConfig] = None,
         endpoint_url: Optional[str] = None,
+        cache_embeddings: bool = True,
     ):
         if config is None:
             config = BedrockConfig.resolve()
@@ -61,7 +62,7 @@ class EmbeddingService:
         # identical task descriptions across sweep runs.
         self._redis = None
         redis_host = os.environ.get("REDIS_HOST", "")
-        if redis_host:
+        if redis_host and cache_embeddings:
             try:
                 import redis as _redis
                 redis_port = int(os.environ.get("REDIS_PORT", 6379))

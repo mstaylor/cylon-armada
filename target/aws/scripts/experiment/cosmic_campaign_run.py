@@ -69,6 +69,8 @@ def build_parser():
     p.add_argument("--object-type", default="folder")
     p.add_argument("--result-prefix", default="cylon-armada-track1")
     p.add_argument("--region", default="us-east-1")
+    p.add_argument("--stop-on-failure", action="store_true",
+                   help="stop at the first execution that does not succeed")
     p.add_argument("--profile", default="cylon",
                    help="AWS CLI profile for the target account (cosmicai: cosmicai-admin)")
     p.add_argument("--manifest", default="cosmic_campaign_manifest.jsonl")
@@ -206,7 +208,7 @@ def _summarized_status(described):
 
 
 def run_campaign(planned, sfn, state_machine_arn, manifest_path, poll_s, timeout_s, sleep=time.sleep,
-                 idle_checks=6):
+                 idle_checks=6, stop_on_failure=False):
     done = completed_slots(manifest_path)
     finished = set()
     rows = []
@@ -233,6 +235,9 @@ def run_campaign(planned, sfn, state_machine_arn, manifest_path, poll_s, timeout
             handle.write(json.dumps(row) + "\n")
         logger.info("%s %s %s", p.name, status, row["duration_s"])
         rows.append(row)
+        if stop_on_failure and status != "SUCCEEDED":
+            logger.error("stopping: %s ended %s; rerun the same command to resume after fixing it", p.name, status)
+            break
     return rows
 
 
@@ -255,7 +260,8 @@ def main(argv=None):
 
     sfn = boto3.Session(profile_name=args.profile).client("stepfunctions", region_name=args.region)
     arn = _state_machine_arn(sfn, STATE_MACHINES[args.arm])
-    rows = run_campaign(planned, sfn, arn, args.manifest, args.poll_s, args.execution_timeout_s)
+    rows = run_campaign(planned, sfn, arn, args.manifest, args.poll_s, args.execution_timeout_s,
+                        stop_on_failure=args.stop_on_failure)
     failed = [r for r in rows if r["status"] != "SUCCEEDED"]
     logger.info("%d executions run, %d not SUCCEEDED", len(rows), len(failed))
     return 1 if failed else 0

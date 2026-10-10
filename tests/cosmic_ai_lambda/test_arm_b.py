@@ -52,12 +52,14 @@ class _FakeBridge:
     instances = []
 
     def __init__(self, world_size, rank, channel_type, rendezvous_host, rendezvous_port,
-                 comm_name, maxtimeout, nonblocking, assigned_rank=None, initialises=True):
+                 comm_name, maxtimeout, nonblocking, required_peers=None, assigned_rank=None,
+                 initialises=True):
         self.world_size = world_size
         self.rank = rank if assigned_rank is None else assigned_rank
         self.settings = dict(channel_type=channel_type, rendezvous_host=rendezvous_host,
                              rendezvous_port=rendezvous_port, comm_name=comm_name,
                              maxtimeout=maxtimeout, nonblocking=nonblocking)
+        self.required_peers = required_peers
         self.available = world_size > 1 and initialises
         self.context = CylonContext(config=None, distributed=False) if self.available else None
         self.finalized = False
@@ -291,6 +293,31 @@ def test_bridge_is_built_from_execution_settings_and_finalized(monkeypatch):
         assert bridge.finalized
 
 
+def _parse_peer_map(text):
+    return {int(rank): {int(p) for p in peers.split(",") if p}
+            for rank, peers in (row.split(":") for row in text.split(";"))}
+
+
+@pytest.mark.parametrize("world_size", [2, 41, 517])
+def test_peer_map_covers_every_rank_and_the_root_star_without_the_full_mesh(world_size):
+    rows = _parse_peer_map(inference_FMI.required_peer_map(world_size))
+    assert set(rows) == set(range(world_size))
+    for rank, peers in rows.items():
+        assert rank not in peers
+        assert all(rank in rows[p] for p in peers)
+        if rank != inference_FMI.PAYLOAD_ROOT:
+            assert inference_FMI.PAYLOAD_ROOT in peers
+    edges = sum(len(peers) for peers in rows.values()) // 2
+    assert world_size == 2 or edges < world_size * (world_size - 1) // 4
+
+
+def test_bridge_connects_only_the_peers_the_collectives_use(monkeypatch):
+    _FakeBridge.instances.clear()
+    _, _, errors = _run_world(3, {"0": "10MB/1.pt", "1": "10MB/2.pt", "2": "10MB/3.pt"}, monkeypatch, "t-peers")
+    assert not errors, errors
+    assert {b.required_peers for b in _FakeBridge.instances} == {inference_FMI.required_peer_map(3)}
+
+
 @pytest.mark.parametrize("bridge_kwargs", [{"initialises": False}, {"assigned_rank": 5}])
 def test_rank_fails_loudly_when_the_communicator_is_unusable(monkeypatch, bridge_kwargs):
     broken = lambda **kw: _FakeBridge(**kw, **bridge_kwargs)
@@ -324,6 +351,21 @@ def test_initializer_items_carry_fmi_settings_and_no_data_path(monkeypatch):
     assert items[0]["FMI_COMM_NAME"] != other[0]["FMI_COMM_NAME"]
     assert len({item["FMI_COMM_NAME"] for item in items}) == 1
     assert items[0]["FMI_CHANNEL_TYPE"] == "direct" and items[0]["FMI_OPTIONS"] == "nonblocking"
+
+
+def test_initializer_comm_name_keeps_pairing_names_whole_at_517_workers(monkeypatch):
+    from communicator.fmi_bridge import TCPUNCH_MAX_PAIRING_NAME_BYTES, longest_pairing_name
+
+    s3 = _FakeS3()
+    monkeypatch.setattr(initializer_FMI, "s3_client", s3)
+    monkeypatch.setattr(initializer_FMI, "get_file_list", lambda bucket, prefix: _files("10MB", 517))
+    event = {**BASE_EVENT, "file_limit": "517", "world_size": 517, "fmi_channel_type": "direct",
+             "fmi_options": "nonblocking", "fmi_max_timeout": 300000, "rendezvous_host": "rdv",
+             "rendezvous_port": 10000}
+    response = initializer_FMI.lambda_handler(event, None)
+
+    comm_name = json.loads(s3.objects[("bkt", response["body"]["S3_KEY"])])[0]["FMI_COMM_NAME"]
+    assert len(longest_pairing_name(comm_name, 517).encode()) <= TCPUNCH_MAX_PAIRING_NAME_BYTES
 
 
 FMI_ENVIRONMENT = {

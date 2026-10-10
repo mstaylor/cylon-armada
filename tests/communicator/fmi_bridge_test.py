@@ -199,3 +199,73 @@ class TestListenPortIsSeparateFromRendezvousPort:
         assert port_rank0 == 50100
         assert port_rank1 == 50101
         assert port_rank0 != port_rank1
+
+
+class TestTcpunchPairingIsSerial:
+    """The TCPunch client keeps its hole-punch state in process globals, so the
+    direct channel must establish connections one at a time; direct-redis keeps
+    whatever parallelism the environment asks for."""
+
+    @staticmethod
+    def _parallelism_seen_by_communicator(mock_import_fmi, channel_type):
+        from communicator.fmi_bridge import FMIBridge
+
+        seen = {}
+        cylon_env = MagicMock(side_effect=lambda **kw: seen.setdefault(
+            "parallelism", os.environ.get("FMI_ESTABLISH_PARALLELISM")) and MagicMock())
+        mock_import_fmi.return_value = (MagicMock(), cylon_env, MagicMock())
+        FMIBridge(world_size=11, rank=0, channel_type=channel_type)
+        return seen["parallelism"]
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_direct_channel_pairs_one_peer_at_a_time(self, mock_import_fmi, monkeypatch):
+        monkeypatch.setenv("FMI_ESTABLISH_PARALLELISM", "8")
+        assert self._parallelism_seen_by_communicator(mock_import_fmi, "direct") == "1"
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_direct_redis_channel_keeps_the_configured_parallelism(self, mock_import_fmi, monkeypatch):
+        monkeypatch.setenv("FMI_ESTABLISH_PARALLELISM", "8")
+        assert self._parallelism_seen_by_communicator(mock_import_fmi, "direct-redis") == "8"
+
+
+class TestTcpunchPairingNamesFit:
+    """TCPunch cuts pairing names to 99 bytes, and the direct channel names a pair
+    '<comm>:<comm>_fmi_pair<lo>_<hi><MODE>'. A cut name makes rank 10's 'pair0_10'
+    arrive as rank 1's 'pair0_1', so the bridge must refuse a comm_name that long."""
+
+    LONG_COMM_NAME = "cosmic-fmi-" + "f" * 32
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_direct_channel_rejects_a_comm_name_whose_pairing_names_would_be_cut(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge, PairingNameTooLong
+
+        mock_fmi_config = MagicMock()
+        mock_import_fmi.return_value = (mock_fmi_config, MagicMock(), MagicMock())
+
+        try:
+            FMIBridge(world_size=11, rank=0, channel_type="direct", comm_name=self.LONG_COMM_NAME)
+        except PairingNameTooLong as e:
+            assert self.LONG_COMM_NAME in str(e)
+        else:
+            raise AssertionError("a comm_name that truncates pairing names was accepted")
+        mock_fmi_config.assert_not_called()
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_direct_channel_accepts_a_short_comm_name_at_517_workers(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge
+
+        mock_fmi_config = MagicMock()
+        mock_import_fmi.return_value = (mock_fmi_config, MagicMock(), MagicMock())
+
+        FMIBridge(world_size=517, rank=0, channel_type="direct", comm_name="cosmic-fmi-" + "f" * 16)
+        mock_fmi_config.assert_called_once()
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_direct_redis_channel_does_not_pair_through_tcpunch(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge
+
+        mock_fmi_config = MagicMock()
+        mock_import_fmi.return_value = (mock_fmi_config, MagicMock(), MagicMock())
+
+        FMIBridge(world_size=11, rank=0, channel_type="direct-redis", comm_name=self.LONG_COMM_NAME)
+        mock_fmi_config.assert_called_once()
