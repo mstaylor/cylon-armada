@@ -158,12 +158,6 @@ class FMIBridge:
         else:
             os.environ.pop("FMI_REQUIRED_PEERS", None)
 
-        # TCPunch's client keeps its hole-punch state in process globals, so
-        # concurrent pair() calls cross-wire sockets and hang once a rank has
-        # more than one peer; the direct channel must pair one peer at a time.
-        if self.channel_type == "direct":
-            os.environ["FMI_ESTABLISH_PARALLELISM"] = "1"
-
         port = int(listen_port) if self.channel_type == "direct-redis" else int(rendezvous_port)
 
         try:

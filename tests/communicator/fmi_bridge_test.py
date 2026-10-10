@@ -4,6 +4,8 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'target', 'shared', 'scripts'))
 
 
@@ -201,31 +203,22 @@ class TestListenPortIsSeparateFromRendezvousPort:
         assert port_rank0 != port_rank1
 
 
-class TestTcpunchPairingIsSerial:
-    """The TCPunch client keeps its hole-punch state in process globals, so the
-    direct channel must establish connections one at a time; direct-redis keeps
-    whatever parallelism the environment asks for."""
+class TestEstablishParallelismIsLeftToTheEnvironment:
+    """TCPunch's pair() is safe to call concurrently, so the bridge passes whatever
+    connection-establishment parallelism the environment configures to cylon."""
 
-    @staticmethod
-    def _parallelism_seen_by_communicator(mock_import_fmi, channel_type):
+    @pytest.mark.parametrize("channel_type", ["direct", "direct-redis"])
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_communicator_sees_the_configured_parallelism(self, mock_import_fmi, monkeypatch, channel_type):
         from communicator.fmi_bridge import FMIBridge
 
+        monkeypatch.setenv("FMI_ESTABLISH_PARALLELISM", "8")
         seen = {}
         cylon_env = MagicMock(side_effect=lambda **kw: seen.setdefault(
             "parallelism", os.environ.get("FMI_ESTABLISH_PARALLELISM")) and MagicMock())
         mock_import_fmi.return_value = (MagicMock(), cylon_env, MagicMock())
         FMIBridge(world_size=11, rank=0, channel_type=channel_type)
-        return seen["parallelism"]
-
-    @patch('communicator.fmi_bridge._import_fmi')
-    def test_direct_channel_pairs_one_peer_at_a_time(self, mock_import_fmi, monkeypatch):
-        monkeypatch.setenv("FMI_ESTABLISH_PARALLELISM", "8")
-        assert self._parallelism_seen_by_communicator(mock_import_fmi, "direct") == "1"
-
-    @patch('communicator.fmi_bridge._import_fmi')
-    def test_direct_redis_channel_keeps_the_configured_parallelism(self, mock_import_fmi, monkeypatch):
-        monkeypatch.setenv("FMI_ESTABLISH_PARALLELISM", "8")
-        assert self._parallelism_seen_by_communicator(mock_import_fmi, "direct-redis") == "8"
+        assert seen["parallelism"] == "8"
 
 
 class TestTcpunchPairingNamesFit:
