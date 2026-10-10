@@ -41,6 +41,8 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-L
     echo "conda activate cylon_dev" >> ~/.bashrc && \
     echo "export LD_LIBRARY_PATH=$CYLON_PREFIX"/lib >> ~/.bashrc
 
+ADD https://google.com cache_bust
+
 ARG CYLON_FMI_BRANCH_REF=39c14b7df9a0c3eb260b85c155650ec176f3aab3
 
 WORKDIR $CYLON_HOME
