@@ -98,10 +98,12 @@ RUN rm -rf /boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2
 RUN apt-get install zlib1g-dev libssl-dev -y
 
 
+ARG AWS_SDK_CPP_REF=1.11.909
+
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
-    git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp.git && cd aws-sdk-cpp && mkdir build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY="s3" -DBUILD_SHARED_LIBS="off" .. && make -j6 install && cd ../.. && rm -rf aws-sdk-cpp
+    git clone --depth 1 --branch ${AWS_SDK_CPP_REF} --recurse-submodules --shallow-submodules https://github.com/aws/aws-sdk-cpp.git && cd aws-sdk-cpp && mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY="s3" -DBUILD_SHARED_LIBS="off" -DENABLE_TESTING=OFF -DAUTORUN_UNIT_TESTS=OFF .. && make -j6 install && cd ../.. && rm -rf aws-sdk-cpp
 
 
 #REDIS install
