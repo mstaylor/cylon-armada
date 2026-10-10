@@ -41,20 +41,13 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-L
     echo "conda activate cylon_dev" >> ~/.bashrc && \
     echo "export LD_LIBRARY_PATH=$CYLON_PREFIX"/lib >> ~/.bashrc
 
-ADD https://google.com cache_bust
-
-ARG CYLON_FMI_BRANCH_REF=39c14b7df9a0c3eb260b85c155650ec176f3aab3
-
 WORKDIR $CYLON_HOME
-
-
-RUN git clone https://github.com/mstaylor/cylon.git $CYLON_HOME
-
-RUN cd $CYLON_HOME && git checkout -b fmi-ds5110-support ${CYLON_FMI_BRANCH_REF}
 
 SHELL ["/bin/bash", "--login", "-c"]
 
-RUN conda env create -f $CYLON_HOME/conda/environments/fmi.yml
+ADD https://raw.githubusercontent.com/mstaylor/cylon/main/conda/environments/fmi.yml /tmp/fmi.yml
+
+RUN conda env create -f /tmp/fmi.yml && rm /tmp/fmi.yml
 
 #RUN echo "conda activate cylon_dev" >> ~/.bashrc
 #ENV PATH /opt/conda/envs/cylon_dev/bin:$PATH
@@ -82,7 +75,6 @@ RUN apt-get update &&  apt-get install autoconf -y &&  apt-get install libtool -
 #Note: Includes support for overriding device eth address
 
 #boost
-#ADD https://google.com cache_bust
 
 RUN wget https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
     tar --bzip2 -xf boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2
@@ -113,35 +105,13 @@ RUN git clone https://github.com/redis/hiredis.git /hiredis && \
     make install
 
 
-#fmi install
-#ADD https://google.com cache_bust
-
-ARG FMI_REF=94ccfa1946fe4b02976a3ae64f49d04c343067da
-
-RUN git clone https://github.com/mstaylor/fmi.git /fmi && cd /fmi && git checkout ${FMI_REF}
-
-RUN cd /fmi && \
-    cd python && \
-    mkdir build && \
-    cd build && \
-    cmake .. && \
-    make
-
-RUN cd $CYLON_HOME
-
-
 EXPOSE $EXPOSE_ENV
 
 #ENTRYPOINT ["/cylon/aws/scripts/runCylon.sh"]
 
-ENV PYTHONPATH="/fmi/python/build:$CYLON_HOME/aws/scripts:$PYTHONPATH"
+ENV PYTHONPATH="$CYLON_HOME/aws/scripts:$PYTHONPATH"
 
-ENV LD_LIBRARY_PATH="/fmi/python/build:/opt/conda/envs/cylon_dev/lib:${LD_LIBRARY_PATH}"
-
-RUN chmod 0755 /cylon/aws/scripts/runCyloninLambda.sh
-
-#RUN chmod 0755 /natchecker/client/natcheck
-#ADD https://google.com cache_bust
+ENV LD_LIBRARY_PATH="/opt/conda/envs/cylon_dev/lib:${LD_LIBRARY_PATH}"
 
 ARG ARROW_VERSION=16.1.0
 
@@ -171,20 +141,19 @@ RUN git clone https://github.com/sewenew/redis-plus-plus.git /redis-plus-plus &&
     cmake -DREDIS_PLUS_PLUS_CXX_STANDARD=11 .. && make && make install && \
     rm -rf /redis-plus-plus
 
-ARG CYLON_MAIN_REF=3526bfbabd8659144b68a9ea274d2d59834e897f
-ENV CYLON_MAIN_HOME=/cylon-main
-ENV CYLON_MAIN_PREFIX=/cylon-main/install
+ADD https://api.github.com/repos/mstaylor/cylon/git/refs/heads/main /tmp/cylon-main-head.json
 
-RUN git clone https://github.com/mstaylor/cylon.git $CYLON_MAIN_HOME && \
-    cd $CYLON_MAIN_HOME && git checkout ${CYLON_MAIN_REF} && rm -rf .git
+RUN git clone --depth 1 --branch main https://github.com/mstaylor/cylon.git /tmp/cylon-src && \
+    cp -a /tmp/cylon-src/. $CYLON_HOME/ && rm -rf /tmp/cylon-src $CYLON_HOME/.git /tmp/cylon-main-head.json && \
+    chmod 0755 $CYLON_HOME/aws/scripts/runCyloninLambda.sh
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
-    cd $CYLON_MAIN_HOME && \
+    cd $CYLON_HOME && \
     python build.py \
         -cmake-flags="-DCYLON_USE_REDIS=1 -DCYLON_FMI=1 -DCYLON_SIMD=1 -DCMAKE_PREFIX_PATH=$CONDA_PREFIX" \
-        -ipath="$CYLON_MAIN_PREFIX" --cpp --python && \
-    rm -rf $CYLON_MAIN_HOME/build $CYLON_MAIN_HOME/python/pycylon/build
+        -ipath="$CYLON_PREFIX" --cpp --python && \
+    rm -rf $CYLON_HOME/build $CYLON_HOME/python/pycylon/build
 
 ENV CYLON_ARMADA_HOME=/cylon-armada
 ENV CYLON_ARMADA_PREFIX=/cylon-armada/install
@@ -195,7 +164,7 @@ COPY cpp/src $CYLON_ARMADA_HOME/cpp/src
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
     mkdir -p /tmp/cylon-armada-build && cd /tmp/cylon-armada-build && \
-    cmake -DCYLON_PREFIX=$CYLON_MAIN_PREFIX \
+    cmake -DCYLON_PREFIX=$CYLON_PREFIX \
           -DCYLON_USE_REDIS=1 \
           -DCYLON_FMI=1 \
           -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
@@ -213,17 +182,17 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
     cd $CYLON_ARMADA_HOME/python && \
     rm -rf build cylon_armada/*.cpp cylon_armada/*.so cylon_armada/__pycache__ && \
-    LD_LIBRARY_PATH=$CYLON_MAIN_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib:/usr/local/lib:$LD_LIBRARY_PATH \
-    CYLON_PREFIX=$CYLON_MAIN_PREFIX \
+    LD_LIBRARY_PATH=$CYLON_PREFIX/lib:$CYLON_ARMADA_PREFIX/lib:/usr/local/lib:$LD_LIBRARY_PATH \
+    CYLON_PREFIX=$CYLON_PREFIX \
     CYLON_ARMADA_PREFIX=$CYLON_ARMADA_PREFIX \
-    CYLON_HOME=$CYLON_MAIN_HOME \
+    CYLON_HOME=$CYLON_HOME \
     CYLON_REDIS=1 \
     CYLON_FMI=1 \
     python setup.py build_ext --inplace && \
     rm -rf build
 
 ENV PYTHONPATH="${CYLON_ARMADA_HOME}/python:${PYTHONPATH}"
-ENV LD_LIBRARY_PATH="${CYLON_MAIN_PREFIX}/lib:${CYLON_ARMADA_PREFIX}/lib:/usr/local/lib:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="${CYLON_PREFIX}/lib:${CYLON_ARMADA_PREFIX}/lib:/usr/local/lib:${LD_LIBRARY_PATH}"
 
 COPY docker/cosmic-ai-lambda/lambda_entry3.py $CYLON_HOME
 COPY docker/cosmic-ai-lambda/fmi.json $CYLON_HOME

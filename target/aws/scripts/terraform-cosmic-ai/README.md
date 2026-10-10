@@ -100,7 +100,7 @@ Added to `inference.py`, `lambda_entry3.py`, and `summarizer.py`:
    docker build --platform=linux/amd64 \
      -t cosmic-ai-executor \
      -f docker/cosmic-ai-lambda/Dockerfile \
-     docker/cosmic-ai-lambda
+     .
 
    aws ecr get-login-password --profile cosmicai --region us-east-1 | \
      docker login --username AWS --password-stdin 881908115028.dkr.ecr.us-east-1.amazonaws.com
