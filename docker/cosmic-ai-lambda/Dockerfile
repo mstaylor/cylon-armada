@@ -141,6 +141,8 @@ RUN git clone https://github.com/sewenew/redis-plus-plus.git /redis-plus-plus &&
     cmake -DREDIS_PLUS_PLUS_CXX_STANDARD=11 .. && make && make install && \
     rm -rf /redis-plus-plus
 
+ADD https://google.com cache_bust
+
 ADD https://api.github.com/repos/mstaylor/cylon/git/refs/heads/main /tmp/cylon-main-head.json
 
 RUN git clone --depth 1 --branch main https://github.com/mstaylor/cylon.git /tmp/cylon-src && \
