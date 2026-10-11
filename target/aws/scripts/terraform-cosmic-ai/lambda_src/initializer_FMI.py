@@ -26,6 +26,7 @@ ENVIRONMENT_FIELDS = {
     'fmi_holepunch_connect_timeout_ms': 'FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS',
     'fmi_tcpunch_max_tries': 'FMI_TCPUNCH_MAX_TRIES',
     'cylon_log_level': 'CYLON_LOG_LEVEL',
+    'fmi_establish_parallelism': 'FMI_ESTABLISH_PARALLELISM',
 }
 
 
@@ -107,6 +108,7 @@ def lambda_handler(event, context):
             'FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS': str(event['fmi_holepunch_connect_timeout_ms']),
             'FMI_TCPUNCH_MAX_TRIES': str(event['fmi_tcpunch_max_tries']),
             'CYLON_LOG_LEVEL': str(event['cylon_log_level']),
+            'FMI_ESTABLISH_PARALLELISM': str(event['fmi_establish_parallelism']),
         }
         for rank in range(world_size)
     ]

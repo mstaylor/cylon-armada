@@ -197,6 +197,17 @@ variable "fmi_tcpunch_max_tries" {
   default     = 6
 }
 
+variable "fmi_establish_parallelism" {
+  description = "Connections cylon's direct channel establishes at once per rank; rank 0 pairs with every rank for the gather, so this bounds its setup time"
+  type        = number
+  default     = 64
+
+  validation {
+    condition     = var.fmi_establish_parallelism >= 1
+    error_message = "fmi_establish_parallelism must be at least 1."
+  }
+}
+
 variable "cylon_log_level" {
   description = "CYLON_LOG_LEVEL for the Arm B ranks (glog: 0 INFO, 1 WARNING, 2 ERROR); pycylon disables glog when unset"
   type        = number

@@ -59,7 +59,8 @@ def test_arm_b_is_deployed_with_throttle_only_retries_and_fmi_environment():
     assert _default("fmi_executor_retry_errors").startswith('["Lambda.TooManyRequestsException"]')
     fmi_init = _block("resource", "aws_lambda_function", "fmi_init")
     for name in ("FMI_CHANNEL_TYPE", "FMI_OPTIONS", "FMI_MAX_TIMEOUT", "RENDEZVOUS_HOST", "RENDEZVOUS_PORT",
-                 "ABORT_POLL_S", "FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS", "FMI_TCPUNCH_MAX_TRIES", "CYLON_LOG_LEVEL"):
+                 "ABORT_POLL_S", "FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS", "FMI_TCPUNCH_MAX_TRIES", "CYLON_LOG_LEVEL",
+                 "FMI_ESTABLISH_PARALLELISM"):
         assert name in fmi_init, name
 
 

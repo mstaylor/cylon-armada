@@ -108,3 +108,35 @@ def test_sweep_requests_are_refused(tmp_path):
     m = _exp2()
     with pytest.raises(SystemExit, match="sweep"):
         m.cmd_requests(["--kind", "sweep", "--out", str(tmp_path / "r.json")])
+
+
+def test_execute_retries_and_writes_abort_markers_like_experiment_1(monkeypatch, tmp_path):
+    import json
+    import sys
+    import types
+
+    m = _exp2()
+    args = ["--arm", "B", "--series", "scaling", "--max-workers", "11", "--max-attempts", "3"]
+    planned = m.driver.plan_campaign(m._campaign_args(["--dry-run", *args]))
+    merged = tmp_path / "plans_merged.json"
+    merged.write_text(json.dumps({"inputs": [p.sfn_input for p in planned], "records": []}))
+
+    clients = {}
+
+    class _Session:
+        def __init__(self, profile_name):
+            pass
+
+        def client(self, name, region_name):
+            clients[name] = object()
+            return clients[name]
+
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(Session=_Session))
+    monkeypatch.setattr(m.driver, "_state_machine_arn", lambda sfn, name: "arn:sm")
+    seen = {}
+    monkeypatch.setattr(m.driver, "run_campaign", lambda *a, **kw: seen.update(kw) or [])
+
+    m.cmd_execute(["--merged", str(merged), "--live", "--manifest", str(tmp_path / "m.jsonl"), *args])
+
+    assert seen["max_attempts"] == 3
+    assert seen["s3"] is clients["s3"]

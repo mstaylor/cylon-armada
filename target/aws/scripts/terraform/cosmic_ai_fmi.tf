@@ -77,6 +77,7 @@ resource "aws_lambda_function" "cosmic_ai_fmi_init" {
       FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS = tostring(var.fmi_holepunch_connect_timeout_ms)
       FMI_TCPUNCH_MAX_TRIES            = tostring(var.fmi_tcpunch_max_tries)
       CYLON_LOG_LEVEL                  = tostring(var.cosmic_ai_cylon_log_level)
+      FMI_ESTABLISH_PARALLELISM        = tostring(var.cosmic_ai_fmi_establish_parallelism)
     }
   }
 

@@ -328,7 +328,7 @@ def test_rank_fails_loudly_when_the_communicator_is_unusable(monkeypatch, bridge
 
 ABORT_AND_PAIRING_EVENT_FIELDS = {
     "abort_key": "res/abort-run.json", "abort_poll_s": 5, "fmi_holepunch_connect_timeout_ms": 120000,
-    "fmi_tcpunch_max_tries": 6, "cylon_log_level": 1,
+    "fmi_tcpunch_max_tries": 6, "cylon_log_level": 1, "fmi_establish_parallelism": 64,
 }
 
 
@@ -379,7 +379,7 @@ FMI_ENVIRONMENT = {
     "FMI_CHANNEL_TYPE": "direct", "FMI_OPTIONS": "nonblocking", "FMI_MAX_TIMEOUT": "300000",
     "RENDEZVOUS_HOST": "rdv.env", "RENDEZVOUS_PORT": "10000",
     "ABORT_POLL_S": "5", "FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS": "120000", "FMI_TCPUNCH_MAX_TRIES": "6",
-    "CYLON_LOG_LEVEL": "1",
+    "CYLON_LOG_LEVEL": "1", "FMI_ESTABLISH_PARALLELISM": "64",
 }
 
 BASE_EVENT = {
@@ -438,6 +438,7 @@ def test_initializer_forwards_abort_and_pairing_settings_to_every_rank(monkeypat
     assert item["FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS"] == "120000"
     assert item["FMI_TCPUNCH_MAX_TRIES"] == "6"
     assert item["CYLON_LOG_LEVEL"] == "1"
+    assert item["FMI_ESTABLISH_PARALLELISM"] == "64"
 
 
 def test_initializer_rejects_a_run_without_an_abort_key(monkeypatch):

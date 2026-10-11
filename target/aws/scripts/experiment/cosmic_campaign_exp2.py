@@ -158,10 +158,12 @@ def cmd_execute(argv):
         return 0
     import boto3
 
-    sfn = boto3.Session(profile_name=args.profile).client("stepfunctions", region_name=args.region)
+    session = boto3.Session(profile_name=args.profile)
+    sfn = session.client("stepfunctions", region_name=args.region)
     arn = driver._state_machine_arn(sfn, driver.STATE_MACHINES[args.arm])
     rows = driver.run_campaign(planned, sfn, arn, args.manifest, args.poll_s, args.execution_timeout_s,
-                               stop_on_failure=args.stop_on_failure)
+                               stop_on_failure=args.stop_on_failure, max_attempts=args.max_attempts,
+                               s3=session.client("s3", region_name=args.region))
     return 1 if any(r["status"] != "SUCCEEDED" for r in rows) else 0
 
 
