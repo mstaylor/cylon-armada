@@ -108,3 +108,25 @@ def test_rendering_works_before_both_arms_share_a_scaling_configuration(tmp_path
     summary = summary[~((summary.arm == "B") & (summary.series == "scaling"))]
     paths = render_all(summary, _published(), str(tmp_path), str(tmp_path / "out"), "png", 72)
     assert all((tmp_path / "out" / p).exists() for p in paths)
+
+
+def _pair_latency():
+    rows = [("accept_timeout_1s", t, s, 1000.0 if t % 2 else 2.0) for t in range(4) for s in (0, 1)]
+    rows += [("accept_timeout_50ms", t, s, 50.0) for t in range(4) for s in (0, 1)]
+    return pd.DataFrame(rows, columns=["variant", "trial", "side", "pair_ms"])
+
+
+def test_pair_latency_summary_excludes_failed_pairings_and_reports_the_speedup():
+    from results.chart_cosmic_comparison import pair_latency_summary
+    frame = pd.concat([_pair_latency(), pd.DataFrame([("accept_timeout_50ms", 9, 0, -1.0)],
+                                                     columns=["variant", "trial", "side", "pair_ms"])])
+    summary = pair_latency_summary(frame).set_index("variant")
+    assert summary.loc["accept_timeout_50ms", "n"] == 8
+    assert summary.loc["accept_timeout_1s", "mean_ms"] == pytest.approx(501.0)
+    assert summary.loc["accept_timeout_50ms", "speedup_vs_1s"] == pytest.approx(501.0 / 50.0)
+
+
+def test_pair_latency_chart_is_written(tmp_path):
+    from results.chart_cosmic_comparison import chart_pair_latency
+    name = chart_pair_latency(_pair_latency(), str(tmp_path), "png", 72)
+    assert (tmp_path / name).exists()

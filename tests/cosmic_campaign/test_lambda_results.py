@@ -228,3 +228,12 @@ def test_sample_coverage_flags_a_partition_the_reference_never_processed():
     counts = {("exp1", "A"): [5113], ("exp2", "B"): [5113, 5000]}
     report = compare_samples(partition_samples(rows, _samples_loader(counts)), reference=("exp1", "A"))
     assert [(m["data_path"], m["reference_samples"]) for m in report["mismatches"]] == [("100MB/1.pt", None)]
+
+
+def test_abort_markers_under_the_result_path_are_not_counted_as_ranks():
+    records = [{**r, "data_path": f"25MB/{i}.pt"} for i, r in enumerate(_arm_a_records(2))]
+    markers = [{"source": "campaign_driver", "execution": "x", "status": "FAILED"}]
+    s3 = _FakeS3({("b", "p/combined_data.json"): records + markers,
+                  ("b", "p/aggregate_metrics.json"): {"aggregate_s": 0.5, "ranks_aggregated": 3}})
+    loaded = load_execution(s3, "b", "p", workers=2)
+    assert len(loaded["records"]) == 2

@@ -180,13 +180,54 @@ def chart_planning(table, output_dir, chart_format, dpi):
     return _save(fig, output_dir, "exp2_planning", chart_format, dpi)
 
 
+PAIR_LATENCY_VARIANTS = {"accept_timeout_1s": ("Listener accept timeout 1 s (current code)", "#d62728"),
+                         "accept_timeout_50ms": ("Listener accept timeout 50 ms", "#2ca02c")}
+
+
+def pair_latency_summary(frame):
+    """Per-variant TCPunch pair() latency from successful pairings, with the speedup over the 1 s timeout."""
+    ok = frame[frame.pair_ms >= 0]
+    summary = (ok.groupby("variant")["pair_ms"].agg(n="count", mean_ms="mean", std_ms="std", median_ms="median",
+                                                    min_ms="min", max_ms="max").reset_index())
+    baseline = summary.loc[summary.variant == "accept_timeout_1s", "mean_ms"]
+    if len(baseline):
+        summary["speedup_vs_1s"] = baseline.iloc[0] / summary.mean_ms
+    return summary
+
+
+def chart_pair_latency(frame, output_dir, chart_format, dpi):
+    summary = pair_latency_summary(frame)
+    variants = [v for v in PAIR_LATENCY_VARIANTS if v in set(summary.variant)]
+    ok = frame[frame.pair_ms >= 0]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), squeeze=False)
+    bars, points = axes[0]
+    for i, variant in enumerate(variants):
+        label, color = PAIR_LATENCY_VARIANTS[variant]
+        row = summary[summary.variant == variant].iloc[0]
+        bars.bar(i, row.mean_ms, yerr=row.std_ms if pd.notna(row.std_ms) else 0, capsize=CAPSIZE, color=color,
+                 edgecolor=BAR_EDGE, linewidth=BAR_LW, label=label)
+        values = ok[ok.variant == variant].pair_ms.tolist()
+        offsets = [((k % 9) - 4) * 0.03 for k in range(len(values))]
+        points.scatter([i + o for o in offsets], values, color=color, edgecolor=BAR_EDGE, linewidth=0.5, s=28)
+    for ax, ylabel in ((bars, "Mean pair() time (ms)"), (points, "pair() time per pairing (ms)")):
+        ax.set_xticks(list(range(len(variants))))
+        ax.set_xticklabels(["1 s" if v == "accept_timeout_1s" else "50 ms" for v in variants])
+        ax.set_xlabel("TCPunch listener accept timeout", fontsize=FONT_SIZE)
+        ax.set_ylabel(ylabel, fontsize=FONT_SIZE)
+    fig.suptitle("TCPunch pairing latency (local loopback, mean and sample std; right: every pairing)",
+                 fontsize=TITLE_SIZE)
+    handles, labels = bars.get_legend_handles_labels()
+    _legend_below(fig, handles, labels, ncol=len(variants), anchor=(0.5, -0.1))
+    return _save(fig, output_dir, "tcpunch_pair_latency", chart_format, dpi)
+
+
 def _write_csv(frame, output_dir, name):
     os.makedirs(output_dir, exist_ok=True)
     frame.to_csv(os.path.join(output_dir, name), index=False)
     return name
 
 
-def render_all(summary, published, plans_root, output_dir, chart_format, dpi):
+def render_all(summary, published, plans_root, output_dir, chart_format, dpi, pair_latency=None):
     arms = compare_arms(summary)
     experiments = compare_experiments(summary, arm="A")
     table = planning_table(plans_root)
@@ -201,6 +242,9 @@ def render_all(summary, published, plans_root, output_dir, chart_format, dpi):
         files.append(chart_agent_cost(experiments, "A", output_dir, chart_format, dpi))
     if len(table):
         files.append(chart_planning(table, output_dir, chart_format, dpi))
+    if pair_latency is not None and len(pair_latency):
+        files += [_write_csv(pair_latency_summary(pair_latency), output_dir, "tcpunch_pair_latency_summary.csv"),
+                  chart_pair_latency(pair_latency, output_dir, chart_format, dpi)]
     return files
 
 
@@ -209,12 +253,14 @@ def main(argv=None):
     p.add_argument("--summary", required=True)
     p.add_argument("--published", required=True)
     p.add_argument("--plans-root", required=True)
+    p.add_argument("--pair-latency", help="local TCPunch pair() latency CSV (variant, trial, side, pair_ms)")
     p.add_argument("--output", required=True)
     p.add_argument("--format", default="png")
     p.add_argument("--dpi", type=int, default=300)
     args = p.parse_args(argv)
+    pair_latency = pd.read_csv(args.pair_latency) if args.pair_latency else None
     for name in render_all(pd.read_csv(args.summary), pd.read_csv(args.published), args.plans_root,
-                           args.output, args.format, args.dpi):
+                           args.output, args.format, args.dpi, pair_latency=pair_latency):
         print(os.path.join(args.output, name))
 
 

@@ -188,7 +188,7 @@ variable "abort_poll_s" {
 variable "fmi_holepunch_connect_timeout_ms" {
   description = "Milliseconds cylon's direct channel waits for one TCPunch hole punch, during connection setup and on first use, before retrying it"
   type        = number
-  default     = 30000
+  default     = 10000
 }
 
 variable "fmi_tcpunch_max_tries" {

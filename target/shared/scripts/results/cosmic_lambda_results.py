@@ -39,10 +39,15 @@ def _read_json(s3, bucket, key, started_at):
     return json.loads(response["Body"].read())
 
 
+ABORT_MARKER_SOURCES = {"campaign_driver", "worker", "operator"}
+
+
 def load_execution(s3, bucket, result_path, workers, started_at=None):
-    records = _read_json(s3, bucket, f"{result_path}/combined_data.json", started_at)
+    combined = _read_json(s3, bucket, f"{result_path}/combined_data.json", started_at)
     metrics = _read_json(s3, bucket, f"{result_path}/aggregate_metrics.json", started_at)
-    if len(records) != workers or metrics.get("ranks_aggregated") != workers:
+    records = [r for r in combined if r.get("source") not in ABORT_MARKER_SOURCES]
+    markers = len(combined) - len(records)
+    if len(records) != workers or metrics.get("ranks_aggregated") not in (workers, workers + markers):
         raise IncompleteExecutionError(
             f"{result_path}: {len(records)} records, ranks_aggregated="
             f"{metrics.get('ranks_aggregated')}, expected {workers}")
