@@ -326,6 +326,12 @@ def test_rank_fails_loudly_when_the_communicator_is_unusable(monkeypatch, bridge
         inference_FMI.connect(_rank_args(0, 2, f"t-broken-{len(bridge_kwargs)}-{list(bridge_kwargs)[0]}"))
 
 
+ABORT_AND_PAIRING_EVENT_FIELDS = {
+    "abort_key": "res/abort-run.json", "abort_poll_s": 5, "fmi_holepunch_connect_timeout_ms": 120000,
+    "fmi_tcpunch_max_tries": 6, "cylon_log_level": 1,
+}
+
+
 def test_initializer_items_carry_fmi_settings_and_no_data_path(monkeypatch):
     s3 = _FakeS3()
     monkeypatch.setattr(initializer_FMI, "s3_client", s3)
@@ -335,6 +341,7 @@ def test_initializer_items_carry_fmi_settings_and_no_data_path(monkeypatch):
         "result_path": "res/run2", "file_limit": "2", "world_size": 2, "batch_size": 512,
         "data_bucket": "bkt", "data_prefix": "10MB", "fmi_channel_type": "direct", "fmi_options": "nonblocking",
         "fmi_max_timeout": 900000, "rendezvous_host": "rdv", "rendezvous_port": 10000,
+        **ABORT_AND_PAIRING_EVENT_FIELDS,
     }
     first = initializer_FMI.lambda_handler(dict(event), None)
     second = initializer_FMI.lambda_handler(dict(event), None)
@@ -361,7 +368,7 @@ def test_initializer_comm_name_keeps_pairing_names_whole_at_517_workers(monkeypa
     monkeypatch.setattr(initializer_FMI, "get_file_list", lambda bucket, prefix: _files("10MB", 517))
     event = {**BASE_EVENT, "file_limit": "517", "world_size": 517, "fmi_channel_type": "direct",
              "fmi_options": "nonblocking", "fmi_max_timeout": 300000, "rendezvous_host": "rdv",
-             "rendezvous_port": 10000}
+             "rendezvous_port": 10000, **ABORT_AND_PAIRING_EVENT_FIELDS}
     response = initializer_FMI.lambda_handler(event, None)
 
     comm_name = json.loads(s3.objects[("bkt", response["body"]["S3_KEY"])])[0]["FMI_COMM_NAME"]
@@ -371,12 +378,14 @@ def test_initializer_comm_name_keeps_pairing_names_whole_at_517_workers(monkeypa
 FMI_ENVIRONMENT = {
     "FMI_CHANNEL_TYPE": "direct", "FMI_OPTIONS": "nonblocking", "FMI_MAX_TIMEOUT": "300000",
     "RENDEZVOUS_HOST": "rdv.env", "RENDEZVOUS_PORT": "10000",
+    "ABORT_POLL_S": "5", "FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS": "120000", "FMI_TCPUNCH_MAX_TRIES": "6",
+    "CYLON_LOG_LEVEL": "1",
 }
 
 BASE_EVENT = {
     "bucket": "bkt", "object_type": "folder", "script": "/tmp/x.py", "S3_object_name": "Anomaly Detection",
     "result_path": "res/env", "file_limit": "1", "world_size": 1, "batch_size": 512,
-    "data_bucket": "bkt", "data_prefix": "10MB",
+    "data_bucket": "bkt", "data_prefix": "10MB", "abort_key": "res/env/abort-run1.json",
 }
 
 
@@ -415,6 +424,29 @@ def test_initializer_environment_takes_precedence_over_event(monkeypatch):
 
     assert item["RENDEZVOUS_HOST"] == "rdv.env"
     assert item["FMI_MAX_TIMEOUT"] == "300000"
+
+
+def test_initializer_forwards_abort_and_pairing_settings_to_every_rank(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
+    for name, value in FMI_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+
+    item = _initialize(monkeypatch, BASE_EVENT)[0]
+
+    assert item["ABORT_KEY"] == "res/env/abort-run1.json"
+    assert item["ABORT_POLL_S"] == "5"
+    assert item["FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS"] == "120000"
+    assert item["FMI_TCPUNCH_MAX_TRIES"] == "6"
+    assert item["CYLON_LOG_LEVEL"] == "1"
+
+
+def test_initializer_rejects_a_run_without_an_abort_key(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
+    for name, value in FMI_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+    event = {k: v for k, v in BASE_EVENT.items() if k != "abort_key"}
+    with pytest.raises(initializer_FMI.InvalidFMIEvent, match="abort_key"):
+        initializer_FMI.lambda_handler(event, None)
 
 
 def test_initializer_rejects_event_without_rendezvous(monkeypatch):

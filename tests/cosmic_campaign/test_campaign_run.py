@@ -226,6 +226,77 @@ def test_a_succeeded_execution_whose_summarizer_failed_is_not_recorded_as_succee
     assert m.completed_slots(str(tmp_path / "m.jsonl")) == set()
 
 
+class _FakeS3:
+    def __init__(self):
+        self.objects = {}
+
+    def put_object(self, Bucket, Key, Body, ContentType=None):
+        self.objects[(Bucket, Key)] = json.loads(Body)
+
+
+class _InputRecordingSfn(_FakeSfn):
+    def __init__(self, outcomes=None):
+        super().__init__(outcomes)
+        self.inputs = {}
+
+    def start_execution(self, stateMachineArn, name, input):
+        self.inputs[name] = json.loads(input)
+        return super().start_execution(stateMachineArn, name, input)
+
+
+def test_each_attempt_carries_its_own_abort_key_under_the_result_path(tmp_path):
+    m = _driver()
+    planned = _planned(m, "--arm", "B")
+    sfn = _InputRecordingSfn({planned[0].name: "FAILED"})
+    m.run_campaign(planned[:1], sfn, "arn:sm", str(tmp_path / "m.jsonl"), 0, 10,
+                   sleep=lambda s: None, max_attempts=2, s3=_FakeS3())
+    keys = [sfn.inputs[name]["abort_key"] for name in sfn.started]
+    assert len(set(keys)) == 2
+    assert all(k.startswith(planned[0].sfn_input["result_path"] + "/") for k in keys)
+
+
+def test_a_failed_attempt_writes_its_abort_marker_and_is_retried(tmp_path):
+    m = _driver()
+    planned = _planned(m, "--arm", "B")
+    sfn = _InputRecordingSfn({planned[0].name: "FAILED"})
+    s3 = _FakeS3()
+    rows = m.run_campaign(planned[:1], sfn, "arn:sm", str(tmp_path / "m.jsonl"), 0, 10,
+                          sleep=lambda s: None, max_attempts=3, s3=s3)
+    assert [r["status"] for r in rows] == ["FAILED", "SUCCEEDED"]
+    assert [r["attempt"] for r in rows] == [1, 2]
+    failed = sfn.inputs[sfn.started[0]]
+    assert (failed["bucket"], failed["abort_key"]) in s3.objects
+    succeeded = sfn.inputs[sfn.started[1]]
+    assert (succeeded["bucket"], succeeded["abort_key"]) not in s3.objects
+
+
+def test_a_slot_that_fails_every_attempt_stops_after_max_attempts(tmp_path):
+    m = _driver()
+    planned = _planned(m, "--arm", "B")
+
+    class _AlwaysFails(_InputRecordingSfn):
+        def describe_execution(self, executionArn):
+            return {**super().describe_execution(executionArn), "status": "FAILED"}
+
+    sfn = _AlwaysFails()
+    s3 = _FakeS3()
+    rows = m.run_campaign(planned, sfn, "arn:sm", str(tmp_path / "m.jsonl"), 0, 10,
+                          sleep=lambda s: None, max_attempts=3, s3=s3, stop_on_failure=True)
+    assert len(sfn.started) == 3
+    assert len(set(sfn.started)) == 3
+    assert [r["attempt"] for r in rows] == [1, 2, 3]
+    assert len(s3.objects) == 3
+
+
+def test_attempt_names_stay_valid_and_within_the_step_functions_limit():
+    m = _driver()
+    for p in m.plan_campaign(_args()):
+        name = m.attempt_name(p.name, 9)
+        assert len(name) <= 80
+        assert all(ch.isalnum() or ch in "-_" for ch in name), name
+    assert m.attempt_name("x", 1) == "x"
+
+
 def test_stop_on_failure_halts_after_the_first_unsuccessful_execution(tmp_path):
     m = _driver()
     planned = _planned(m)

@@ -70,7 +70,10 @@ def build_parser():
     p.add_argument("--result-prefix", default="cylon-armada-track1")
     p.add_argument("--region", default="us-east-1")
     p.add_argument("--stop-on-failure", action="store_true",
-                   help="stop at the first execution that does not succeed")
+                   help="stop at the first configuration that fails every attempt")
+    p.add_argument("--max-attempts", type=int, default=3,
+                   help="executions per run slot before it counts as failed; each failed attempt "
+                        "writes its abort marker so its workers stop before the retry starts")
     p.add_argument("--profile", default="cylon",
                    help="AWS CLI profile for the target account (cosmicai: cosmicai-admin)")
     p.add_argument("--manifest", default="cosmic_campaign_manifest.jsonl")
@@ -207,8 +210,23 @@ def _summarized_status(described):
     return "SUCCEEDED" if code in (None, 200) else "SUMMARY_FAILED"
 
 
+def attempt_name(name, attempt):
+    return name if attempt == 1 else f"{name}-a{attempt}"
+
+
+def abort_key(result_path, execution):
+    return f"{result_path}/abort-{execution}.json"
+
+
+def write_abort_marker(s3, sfn_input, execution, status):
+    s3.put_object(Bucket=sfn_input["bucket"], Key=sfn_input["abort_key"],
+                  Body=json.dumps({"source": "campaign_driver", "execution": execution,
+                                   "status": status, "time": time.time()}),
+                  ContentType="application/json")
+
+
 def run_campaign(planned, sfn, state_machine_arn, manifest_path, poll_s, timeout_s, sleep=time.sleep,
-                 idle_checks=6, stop_on_failure=False):
+                 idle_checks=6, stop_on_failure=False, max_attempts=1, s3=None):
     done = completed_slots(manifest_path)
     finished = set()
     rows = []
@@ -216,27 +234,35 @@ def run_campaign(planned, sfn, state_machine_arn, manifest_path, poll_s, timeout
         if run_key(p) in done:
             continue
         key = slot_key(p.slot)
-        _assert_idle(sfn, state_machine_arn, finished, poll_s, sleep, idle_checks)
-        arn = sfn.start_execution(stateMachineArn=state_machine_arn, name=p.name,
-                                  input=json.dumps(p.sfn_input))["executionArn"]
-        described = _wait(sfn, arn, poll_s, timeout_s, sleep)
-        if described["status"] in TERMINAL:
-            finished.add(p.name)
-        status = _summarized_status(described)
-        start, stop = described.get("startDate"), described.get("stopDate")
-        row = {"experiment": p.experiment, "arm": p.arm, "slot": list(key), "name": p.name, "arn": arn,
-               "status": status,
-               "phase": p.slot.phase, "workers": p.slot.configuration.workers,
-               "result_path": p.sfn_input["result_path"],
-               "start": start.isoformat() if start else None,
-               "stop": stop.isoformat() if stop else None,
-               "duration_s": (stop - start).total_seconds() if start and stop else None}
-        with open(manifest_path, "a") as handle:
-            handle.write(json.dumps(row) + "\n")
-        logger.info("%s %s %s", p.name, status, row["duration_s"])
-        rows.append(row)
+        for attempt in range(1, max_attempts + 1):
+            name = attempt_name(p.name, attempt)
+            sfn_input = {**p.sfn_input, "abort_key": abort_key(p.sfn_input["result_path"], name)}
+            _assert_idle(sfn, state_machine_arn, finished, poll_s, sleep, idle_checks)
+            arn = sfn.start_execution(stateMachineArn=state_machine_arn, name=name,
+                                      input=json.dumps(sfn_input))["executionArn"]
+            described = _wait(sfn, arn, poll_s, timeout_s, sleep)
+            if described["status"] in TERMINAL:
+                finished.add(name)
+            status = _summarized_status(described)
+            if status != "SUCCEEDED" and s3 is not None:
+                write_abort_marker(s3, sfn_input, name, status)
+            start, stop = described.get("startDate"), described.get("stopDate")
+            row = {"experiment": p.experiment, "arm": p.arm, "slot": list(key), "name": name, "arn": arn,
+                   "status": status, "attempt": attempt,
+                   "phase": p.slot.phase, "workers": p.slot.configuration.workers,
+                   "result_path": p.sfn_input["result_path"],
+                   "start": start.isoformat() if start else None,
+                   "stop": stop.isoformat() if stop else None,
+                   "duration_s": (stop - start).total_seconds() if start and stop else None}
+            with open(manifest_path, "a") as handle:
+                handle.write(json.dumps(row) + "\n")
+            logger.info("%s %s %s (attempt %d of %d)", name, status, row["duration_s"], attempt, max_attempts)
+            rows.append(row)
+            if status == "SUCCEEDED":
+                break
         if stop_on_failure and status != "SUCCEEDED":
-            logger.error("stopping: %s ended %s; rerun the same command to resume after fixing it", p.name, status)
+            logger.error("stopping: %s failed %d attempts; rerun the same command to resume after fixing it",
+                         p.name, max_attempts)
             break
     return rows
 
@@ -258,10 +284,12 @@ def main(argv=None):
         return 0
     import boto3
 
-    sfn = boto3.Session(profile_name=args.profile).client("stepfunctions", region_name=args.region)
+    session = boto3.Session(profile_name=args.profile)
+    sfn = session.client("stepfunctions", region_name=args.region)
     arn = _state_machine_arn(sfn, STATE_MACHINES[args.arm])
     rows = run_campaign(planned, sfn, arn, args.manifest, args.poll_s, args.execution_timeout_s,
-                        stop_on_failure=args.stop_on_failure)
+                        stop_on_failure=args.stop_on_failure, max_attempts=args.max_attempts,
+                        s3=session.client("s3", region_name=args.region))
     failed = [r for r in rows if r["status"] != "SUCCEEDED"]
     logger.info("%d executions run, %d not SUCCEEDED", len(rows), len(failed))
     return 1 if failed else 0

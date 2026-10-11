@@ -346,6 +346,35 @@ variable "cosmic_ai_fmi_options" {
   }
 }
 
+variable "cosmic_ai_abort_poll_s" {
+  description = "Seconds between each Arm B worker's checks for its run's S3 abort marker; a worker that sees it kills its inference process"
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.cosmic_ai_abort_poll_s > 0
+    error_message = "cosmic_ai_abort_poll_s must be positive."
+  }
+}
+
+variable "fmi_holepunch_connect_timeout_ms" {
+  description = "Milliseconds cylon's direct channel waits for one TCPunch hole punch before retrying it"
+  type        = number
+  default     = 120000
+}
+
+variable "fmi_tcpunch_max_tries" {
+  description = "Hole-punch attempts per peer before cylon's direct channel raises a timeout"
+  type        = number
+  default     = 6
+}
+
+variable "cosmic_ai_cylon_log_level" {
+  description = "CYLON_LOG_LEVEL for the Arm B ranks (glog: 0 INFO, 1 WARNING, 2 ERROR); pycylon disables glog when unset"
+  type        = number
+  default     = 1
+}
+
 variable "cosmic_ai_python_runtime" {
   description = "AWS Lambda Python runtime for the zip-packaged Cosmic AI init/summarize functions"
   type        = string

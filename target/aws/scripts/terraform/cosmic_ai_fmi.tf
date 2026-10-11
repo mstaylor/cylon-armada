@@ -72,6 +72,11 @@ resource "aws_lambda_function" "cosmic_ai_fmi_init" {
       FMI_MAX_TIMEOUT  = tostring(var.fmi_max_timeout)
       RENDEZVOUS_HOST  = var.rendezvous_host
       RENDEZVOUS_PORT  = tostring(var.rendezvous_port)
+
+      ABORT_POLL_S                     = tostring(var.cosmic_ai_abort_poll_s)
+      FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS = tostring(var.fmi_holepunch_connect_timeout_ms)
+      FMI_TCPUNCH_MAX_TRIES            = tostring(var.fmi_tcpunch_max_tries)
+      CYLON_LOG_LEVEL                  = tostring(var.cosmic_ai_cylon_log_level)
     }
   }
 

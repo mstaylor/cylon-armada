@@ -1,4 +1,5 @@
 import sys
+import json
 import time
 import argparse
 import subprocess
@@ -70,6 +71,53 @@ def get_file(file_name, bucket, prefix=None, use_folder=False):
         logging.error(e)
         return None
 
+class RunAborted(RuntimeError):
+    pass
+
+
+class MissingAbortPollInterval(ValueError):
+    pass
+
+
+def _run_context():
+    return (f"rank={os.environ.get('RANK')}, world_size={os.environ.get('WORLD_SIZE')}, "
+            f"result_path={os.environ.get('RESULT_PATH')}")
+
+
+def abort_marker_exists(s3_client, bucket, key):
+    try:
+        s3_client.head_object(Bucket=bucket, Key=key)
+        return True
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') not in ('404', 'NoSuchKey', 'NotFound'):
+            logging.warning(f"abort marker check for s3://{bucket}/{key} failed: {e}")
+        return False
+
+
+def write_abort_marker(s3_client, bucket, key, returncode):
+    s3_client.put_object(
+        Bucket=bucket, Key=key,
+        Body=json.dumps({'source': 'worker', 'rank': os.environ.get('RANK'),
+                         'returncode': returncode, 'time': time.time()}),
+        ContentType='application/json')
+
+
+def run_watching_for_abort(command, s3_client, bucket, key, poll_s):
+    process = subprocess.Popen(command, shell=False)
+    while True:
+        try:
+            returncode = process.wait(timeout=poll_s)
+            break
+        except subprocess.TimeoutExpired:
+            if abort_marker_exists(s3_client, bucket, key):
+                process.kill()
+                process.wait()
+                raise RunAborted(f"stopped by abort marker s3://{bucket}/{key} ({_run_context()})")
+    if returncode != 0:
+        write_abort_marker(s3_client, bucket, key, returncode)
+    return returncode
+
+
 def execute_script(data=None):
     usefolder = data['s3_object_type'] == 'folder'
     script = get_file(file_name=data['script'], bucket=data['s3_bucket'],
@@ -80,11 +128,17 @@ def execute_script(data=None):
         print(f"unable to retrieve file {data['script']} from AWS S3")
 
     scriptargs = data['args']
-    if scriptargs is not None:
-        cmd = scriptargs.split()
-        returncode = subprocess.call(['python'] + [data['script']] + cmd, shell=False)
+    command = ['python', data['script']] + (scriptargs.split() if scriptargs is not None else [])
+
+    abort_key = os.environ.get('ABORT_KEY')
+    if abort_key:
+        poll_s = os.environ.get('ABORT_POLL_S')
+        if not poll_s:
+            raise MissingAbortPollInterval(f"ABORT_KEY {abort_key} is set without ABORT_POLL_S ({_run_context()})")
+        returncode = run_watching_for_abort(command, boto3.client('s3'), data['s3_bucket'], abort_key,
+                                            float(poll_s))
     else:
-        returncode = subprocess.call(['python'] + [data['script']], shell=False)
+        returncode = subprocess.call(command, shell=False)
 
     if returncode != 0:
         raise RuntimeError(

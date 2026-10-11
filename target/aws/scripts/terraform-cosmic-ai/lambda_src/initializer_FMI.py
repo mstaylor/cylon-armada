@@ -13,7 +13,7 @@ s3_client = boto3.client('s3')
 
 EVENT_FIELDS = (
     'bucket', 'object_type', 'script', 'S3_object_name', 'result_path', 'file_limit',
-    'batch_size', 'data_bucket', 'data_prefix',
+    'batch_size', 'data_bucket', 'data_prefix', 'abort_key',
 )
 
 ENVIRONMENT_FIELDS = {
@@ -22,6 +22,10 @@ ENVIRONMENT_FIELDS = {
     'fmi_max_timeout': 'FMI_MAX_TIMEOUT',
     'rendezvous_host': 'RENDEZVOUS_HOST',
     'rendezvous_port': 'RENDEZVOUS_PORT',
+    'abort_poll_s': 'ABORT_POLL_S',
+    'fmi_holepunch_connect_timeout_ms': 'FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS',
+    'fmi_tcpunch_max_tries': 'FMI_TCPUNCH_MAX_TRIES',
+    'cylon_log_level': 'CYLON_LOG_LEVEL',
 }
 
 
@@ -98,6 +102,11 @@ def lambda_handler(event, context):
             'FMI_MAX_TIMEOUT': str(event['fmi_max_timeout']),
             'RENDEZVOUS_HOST': event['rendezvous_host'],
             'RENDEZVOUS_PORT': str(event['rendezvous_port']),
+            'ABORT_KEY': event['abort_key'],
+            'ABORT_POLL_S': str(event['abort_poll_s']),
+            'FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS': str(event['fmi_holepunch_connect_timeout_ms']),
+            'FMI_TCPUNCH_MAX_TRIES': str(event['fmi_tcpunch_max_tries']),
+            'CYLON_LOG_LEVEL': str(event['cylon_log_level']),
         }
         for rank in range(world_size)
     ]
