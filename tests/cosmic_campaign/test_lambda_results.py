@@ -182,3 +182,49 @@ def test_cold_worker_fraction_prefers_the_containers_own_cold_start_flag():
 
     [cell] = summarize([_row("measured", 1, 10)], loader, measured_runs=1, cold_init_threshold_s=10)
     assert cell["cold_worker_fraction_mean"] == 0.5
+
+
+def test_a_cold_start_that_succeeded_on_a_retry_is_complete():
+    rows = [_row("warmup", 0, 300.0, status="FAILED"), _row("warmup", 0, 40.0)]
+    cold = [r for r in summarize(rows, _loader(), measured_runs=3) if r["phase"] == "cold_start"][0]
+    assert (cold["n"], cold["complete"]) == (1, True)
+    assert cold["duration_s_mean"] == 40.0
+
+
+def test_a_measured_run_that_succeeded_on_a_retry_counts_once():
+    rows = [_row("measured", 1, 300.0, status="FAILED")] + [_row("measured", k, 10.0) for k in (1, 2, 3)]
+    measured = [r for r in summarize(rows, _loader(), measured_runs=3) if r["phase"] == "measured"][0]
+    assert (measured["n"], measured["complete"]) == (3, True)
+
+
+def _samples_loader(counts):
+    return lambda row: {"records": [{"data_path": f"100MB/{i}.pt", "num_samples": float(c)}
+                                    for i, c in enumerate(counts[row["experiment"], row["arm"]])],
+                        "metrics": {"ranks_aggregated": len(counts[row["experiment"], row["arm"]])}}
+
+
+def test_partition_samples_lists_every_partition_of_every_successful_execution():
+    from results.cosmic_lambda_results import partition_samples
+    rows = [_row("measured", 1, 10.0), _row("measured", 2, 10.0, status="FAILED")]
+    samples = partition_samples(rows, _samples_loader({("exp1", "A"): [5113, 5000]}))
+    assert [(s["run"], s["data_path"], s["num_samples"]) for s in samples] == [
+        ("measured1", "100MB/0.pt", 5113), ("measured1", "100MB/1.pt", 5000)]
+
+
+def test_sample_coverage_flags_a_partition_whose_count_differs_from_the_reference():
+    from results.cosmic_lambda_results import compare_samples, partition_samples
+    rows = [_row("measured", 1, 10.0), _row("measured", 1, 10.0, arm="B", experiment="exp2"),
+            _row("measured", 1, 10.0, arm="A", experiment="exp2")]
+    counts = {("exp1", "A"): [5113, 5000], ("exp2", "B"): [5113, 4999], ("exp2", "A"): [5113, 5000]}
+    report = compare_samples(partition_samples(rows, _samples_loader(counts)), reference=("exp1", "A"))
+    assert [(m["experiment"], m["arm"], m["data_path"], m["num_samples"], m["reference_samples"])
+            for m in report["mismatches"]] == [("exp2", "B", "100MB/1.pt", 4999, 5000)]
+    assert report["compared"] == 4
+
+
+def test_sample_coverage_flags_a_partition_the_reference_never_processed():
+    from results.cosmic_lambda_results import compare_samples, partition_samples
+    rows = [_row("measured", 1, 10.0), _row("measured", 1, 10.0, arm="B", experiment="exp2")]
+    counts = {("exp1", "A"): [5113], ("exp2", "B"): [5113, 5000]}
+    report = compare_samples(partition_samples(rows, _samples_loader(counts)), reference=("exp1", "A"))
+    assert [(m["data_path"], m["reference_samples"]) for m in report["mismatches"]] == [("100MB/1.pt", None)]

@@ -11,6 +11,18 @@ import os
 import logging
 
 _invocations_in_container = 0
+_previous_event_keys = set()
+
+
+def apply_event_environment(event):
+    """Expose this invocation's event as environment variables, removing the ones a previous
+    invocation in this warm container set and this event does not."""
+    global _previous_event_keys
+    for key in _previous_event_keys - set(event):
+        os.environ.pop(key, None)
+    for key, value in event.items():
+        os.environ[key] = f"{value}"
+    _previous_event_keys = set(event)
 
 
 def mark_container_invocation():
@@ -153,8 +165,7 @@ def handler(event, context):
 
     print("received: ", event)
 
-    for key in event.keys():
-        os.environ[key] = f"{event[key]}"
+    apply_event_environment(event)
 
     mark_container_invocation()
 

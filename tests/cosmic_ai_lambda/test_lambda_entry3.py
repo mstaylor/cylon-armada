@@ -99,3 +99,23 @@ def test_execute_script_with_an_abort_key_requires_a_poll_interval(monkeypatch, 
     with pytest.raises(entry.MissingAbortPollInterval):
         entry.execute_script({"s3_object_type": "file", "script": str(script), "s3_bucket": "b",
                               "s3_object_name": "o", "args": None})
+
+
+def _arm_event(**extra):
+    return {"S3_BUCKET": "b", "S3_OBJECT_NAME": "o", "SCRIPT": "/tmp/s.py", "S3_OBJECT_TYPE": "folder",
+            "RANK": "0", "WORLD_SIZE": "1", **extra}
+
+
+def test_a_warm_container_does_not_carry_one_invocations_event_into_the_next(monkeypatch):
+    for key in list(_arm_event(ABORT_KEY="", ABORT_POLL_S="", FMI_CHANNEL_TYPE="")) + [
+            "CONTAINER_COLD_START", "LAMBDA_ENTRY_TS"]:
+        monkeypatch.setenv(key, "")
+        monkeypatch.delenv(key)
+    entry = _load()
+    seen = []
+    monkeypatch.setattr(entry, "execute_script",
+                        lambda data: seen.append((os.environ.get("ABORT_KEY"), os.environ.get("FMI_CHANNEL_TYPE"))))
+    entry.handler(_arm_event(ABORT_KEY="run-b/abort.json", ABORT_POLL_S="5", FMI_CHANNEL_TYPE="direct"), None)
+    entry.handler(_arm_event(), None)
+    assert seen == [("run-b/abort.json", "direct"), (None, None)]
+    assert "ABORT_POLL_S" not in os.environ
