@@ -129,6 +129,22 @@ def summarize(manifest_rows, loader, measured_runs, cold_init_threshold_s=None):
 CONFIGURATION_FIELDS = ("series", "partition_mb", "data_gb", "batch_size", "workers")
 
 
+def execution_runs(manifest_rows, loader, cold_init_threshold_s=None):
+    """One row per validated execution, carrying its run group (the run index within its configuration)."""
+    runs = []
+    for row in manifest_rows:
+        if row["status"] != "SUCCEEDED":
+            continue
+        try:
+            metrics = _execution_metrics(row, loader(row), cold_init_threshold_s)
+        except IncompleteExecutionError:
+            continue
+        runs.append({"experiment": row["experiment"], "arm": row["arm"],
+                     **dict(zip(CONFIGURATION_FIELDS, row["slot"][:5])),
+                     "phase": REPORTED_PHASE[row["phase"]], "run": row["slot"][6], **metrics})
+    return runs
+
+
 def partition_samples(manifest_rows, loader):
     """One row per partition of every successful execution, with the samples its rank processed."""
     samples = []
@@ -179,6 +195,7 @@ def build_parser():
     p.add_argument("--samples-out",
                    help="also write each partition's sample count to this CSV and compare it with the "
                         "reference experiment and arm")
+    p.add_argument("--runs-out", help="also write one row per validated execution, with its run group, to this CSV")
     p.add_argument("--coverage-out", help="JSON coverage report path (default: beside --samples-out)")
     p.add_argument("--reference", nargs=2, default=["exp1", "A"], metavar=("EXPERIMENT", "ARM"))
     p.add_argument("--bucket", default="cosmicai-data-cylon",
@@ -218,6 +235,8 @@ def main(argv=None):
     write_csv(summary, args.out)
     incomplete = [r for r in summary if not r["complete"]]
     print(f"{len(summary)} rows, {len(incomplete)} incomplete")
+    if args.runs_out:
+        write_csv(execution_runs(rows, loader, cold_init_threshold_s=args.cold_init_threshold_s), args.runs_out)
     if args.samples_out:
         samples = partition_samples(rows, loader)
         write_csv(samples, args.samples_out)

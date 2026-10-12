@@ -4,40 +4,43 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "aws_profile" {
-  description = "AWS CLI profile; the cylon account by default, cosmicai.tfvars overrides it"
-  type        = string
-  default     = "cylon"
+variable "accounts" {
+  description = "Per-account settings keyed by Terraform workspace; the selected workspace picks the account (default means cylon). The plan fails if the credentials belong to another account"
+  type = map(object({
+    aws_profile         = string
+    account_id          = string
+    data_bucket_name    = string
+    ecr_repository_name = string
+    executor_image_tag  = string
+  }))
+  default = {
+    cylon = {
+      aws_profile         = "cylon"
+      account_id          = "448324707516"
+      data_bucket_name    = "cosmicai-data-cylon"
+      ecr_repository_name = "cylon-armada"
+      executor_image_tag  = "cosmic-ai-executor"
+    }
+    cosmicai = {
+      aws_profile         = "cosmicai-admin"
+      account_id          = "881908115028"
+      data_bucket_name    = "cosmicai"
+      ecr_repository_name = "cosmic-ai-executor"
+      executor_image_tag  = "latest"
+    }
+  }
 }
 
-variable "account_id" {
-  description = "Account the plan must run against; the plan fails if the credentials belong to another"
+variable "default_workspace_account" {
+  description = "Account the default workspace deploys to"
   type        = string
-  default     = "448324707516"
+  default     = "cylon"
 }
 
 variable "project_name" {
   description = "Prefix for every resource; matches the cylon account names so the campaign driver works in both"
   type        = string
   default     = "cylon-armada-cosmic-ai"
-}
-
-variable "data_bucket_name" {
-  description = "Bucket holding the partitions, the Anomaly Detection folder, payloads and results"
-  type        = string
-  default     = "cosmicai-data-cylon"
-}
-
-variable "ecr_repository_name" {
-  description = "ECR repository holding the executor image"
-  type        = string
-  default     = "cylon-armada"
-}
-
-variable "executor_image_tag" {
-  description = "Executor image tag; resolved to a digest at plan time so a push and an apply redeploy the executor"
-  type        = string
-  default     = "cosmic-ai-executor"
 }
 
 variable "model_key" {

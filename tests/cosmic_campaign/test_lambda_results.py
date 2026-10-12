@@ -67,6 +67,16 @@ def test_measured_statistics_exclude_the_cold_start_run_and_use_sample_std():
     assert cell["total_s_max_mean"] == 4.0
 
 
+def test_execution_runs_lists_each_validated_run_with_its_run_group():
+    from results.cosmic_lambda_results import execution_runs
+    rows = [_row("warmup", 0, 99.0), _row("measured", 1, 10), _row("measured", 2, 12, status="FAILED"),
+            _row("measured", 3, 14)]
+    runs = execution_runs(rows, _loader())
+    assert [(r["phase"], r["run"], r["duration_s"]) for r in runs] == [
+        ("cold_start", 0, 99.0), ("measured", 1, 10), ("measured", 3, 14)]
+    assert runs[1]["workers"] == 2 and runs[1]["total_s_max"] == 4.0
+
+
 def test_failed_and_incomplete_runs_lower_n_and_flag_the_cell():
     rows = [_row("measured", 1, 10), _row("measured", 2, 12, status="FAILED"),
             _row("measured", 3, 14), _row("measured", 4, 16)]

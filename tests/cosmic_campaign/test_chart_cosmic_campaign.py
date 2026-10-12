@@ -34,4 +34,6 @@ def test_measured_scaling_rows_are_joined_to_the_published_mean_and_ratio():
 
 def test_every_chart_is_written(tmp_path):
     paths = render_all(_summary(), _published(), str(tmp_path), "png", 72)
-    assert len(paths) == 4 and all((tmp_path / p).exists() for p in paths)
+    assert set(paths) == {"exp1_vs_published_25MB.png", "exp1_vs_published_100MB.png", "exp1_time_breakdown.png",
+                          "exp1_collect_scaling.png", "exp1_batch_sweep.png"}
+    assert all((tmp_path / p).exists() for p in paths)

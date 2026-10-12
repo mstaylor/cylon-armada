@@ -15,10 +15,12 @@ terraform {
 
 provider "aws" {
   region  = var.aws_region
-  profile = var.aws_profile
+  profile = local.account.aws_profile
 }
 
 locals {
+  account = var.accounts[terraform.workspace == "default" ? var.default_workspace_account : terraform.workspace]
+
   common_tags = {
     Project     = var.project_name
     Environment = "track1-lambda-dataplane"
@@ -34,7 +36,7 @@ locals {
 
   asl_vars = {
     AWS_REGION              = var.aws_region
-    ACCOUNT_ID              = var.account_id
+    ACCOUNT_ID              = local.account.account_id
     INIT_FUNCTION_NAME      = local.init_function_name
     EXECUTOR_FUNCTION_NAME  = local.executor_function_name
     SUMMARIZE_FUNCTION_NAME = local.summarize_function_name
@@ -47,18 +49,18 @@ locals {
 data "aws_caller_identity" "current" {}
 
 resource "terraform_data" "account_guard" {
-  input = var.account_id
+  input = local.account.account_id
 
   lifecycle {
     precondition {
-      condition     = data.aws_caller_identity.current.account_id == var.account_id
-      error_message = "The credentials belong to account ${data.aws_caller_identity.current.account_id}, but account_id is ${var.account_id}. Check aws_profile and the tfvars file."
+      condition     = data.aws_caller_identity.current.account_id == local.account.account_id
+      error_message = "The credentials belong to account ${data.aws_caller_identity.current.account_id}, but workspace ${terraform.workspace} deploys to ${local.account.account_id}. Check the ${local.account.aws_profile} profile."
     }
   }
 }
 
 data "aws_s3_bucket" "data" {
-  bucket = var.data_bucket_name
+  bucket = local.account.data_bucket_name
 }
 
 data "aws_s3_object" "model" {
@@ -67,12 +69,12 @@ data "aws_s3_object" "model" {
 }
 
 data "aws_ecr_repository" "executor" {
-  name = var.ecr_repository_name
+  name = local.account.ecr_repository_name
 }
 
 data "aws_ecr_image" "executor" {
   repository_name = data.aws_ecr_repository.executor.name
-  image_tag       = var.executor_image_tag
+  image_tag       = local.account.executor_image_tag
 }
 
 resource "aws_iam_role" "lambda_execution" {
@@ -244,16 +246,16 @@ resource "aws_iam_role_policy" "step_functions_policy" {
         Effect = "Allow"
         Action = ["states:StartExecution"]
         Resource = [
-          "arn:aws:states:${var.aws_region}:${var.account_id}:stateMachine:${local.workflow_name}",
-          "arn:aws:states:${var.aws_region}:${var.account_id}:stateMachine:${local.fmi_workflow_name}",
+          "arn:aws:states:${var.aws_region}:${local.account.account_id}:stateMachine:${local.workflow_name}",
+          "arn:aws:states:${var.aws_region}:${local.account.account_id}:stateMachine:${local.fmi_workflow_name}",
         ]
       },
       {
         Effect = "Allow"
         Action = ["states:DescribeExecution", "states:StopExecution"]
         Resource = [
-          "arn:aws:states:${var.aws_region}:${var.account_id}:execution:${local.workflow_name}:*",
-          "arn:aws:states:${var.aws_region}:${var.account_id}:execution:${local.fmi_workflow_name}:*",
+          "arn:aws:states:${var.aws_region}:${local.account.account_id}:execution:${local.workflow_name}:*",
+          "arn:aws:states:${var.aws_region}:${local.account.account_id}:execution:${local.fmi_workflow_name}:*",
         ]
       },
       {

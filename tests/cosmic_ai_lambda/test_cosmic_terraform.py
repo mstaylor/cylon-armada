@@ -80,7 +80,15 @@ def test_the_model_must_already_be_in_the_data_bucket():
 def test_plan_fails_when_credentials_belong_to_another_account():
     source = _source()
     assert 'data "aws_caller_identity" "current"' in source
-    assert re.search(r"data\.aws_caller_identity\.current\.account_id\s*==\s*var\.account_id", source)
+    assert re.search(r"data\.aws_caller_identity\.current\.account_id\s*==\s*local\.account\.account_id", source)
+
+
+def test_the_selected_workspace_chooses_the_account_without_a_var_file():
+    source = _source()
+    assert re.search(r"account\s*=\s*var\.accounts\[[^\]]*terraform\.workspace", source)
+    assert re.search(r"profile\s*=\s*local\.account\.aws_profile", source)
+    assert not re.search(r"var\.(aws_profile|account_id|data_bucket_name|ecr_repository_name|executor_image_tag)\b",
+                         source)
 
 
 def test_state_machines_wait_for_the_role_policy_that_grants_log_delivery():

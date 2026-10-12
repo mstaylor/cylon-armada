@@ -1,4 +1,5 @@
 import json
+import statistics
 
 import pandas as pd
 import pytest
@@ -48,6 +49,37 @@ def test_arms_are_compared_per_configuration_from_the_chosen_experiment():
     assert (row.a_mean_s, row.b_mean_s) == (54.0, 45.0)
     assert row.speedup == pytest.approx(54.0 / 45.0)
     assert (row.a_experiment, row.b_experiment) == ("exp2", "exp2")
+
+
+def _runs(a_durations, b_durations, experiment="exp2", series="scaling", workers=517, partition=25, data=12.6):
+    rows = [(experiment, arm, series, partition, data, 512, workers, "measured", run, duration)
+            for arm, durations in (("A", a_durations), ("B", b_durations))
+            for run, duration in enumerate(durations, start=1)]
+    return pd.DataFrame(rows, columns=["experiment", "arm", "series", "partition_mb", "data_gb", "batch_size",
+                                       "workers", "phase", "run", "duration_s"])
+
+
+def test_speedup_is_averaged_over_run_groups_with_the_sample_std_across_them():
+    joined = compare_arms(_summary(), experiment="exp2", runs=_runs([30.0, 33.0, 36.0], [20.0, 30.0, 24.0]))
+    row = joined[(joined.series == "scaling") & (joined.workers == 517)].iloc[0]
+    per_run = [30.0 / 20.0, 33.0 / 30.0, 36.0 / 24.0]
+    assert row.run_pairs == 3
+    assert row.run_speedup_mean == pytest.approx(statistics.mean(per_run))
+    assert row.run_speedup_std == pytest.approx(statistics.stdev(per_run))
+
+
+def test_each_arms_spread_is_reported_as_a_coefficient_of_variation():
+    joined = compare_arms(_summary(), experiment="exp2", runs=_runs([30.0, 33.0, 36.0], [20.0, 30.0, 24.0]))
+    row = joined[(joined.series == "scaling") & (joined.workers == 517)].iloc[0]
+    assert row.a_cv == pytest.approx(row.a_std_s / row.a_mean_s)
+    assert row.b_cv == pytest.approx(row.b_std_s / row.b_mean_s)
+
+
+def test_a_run_group_missing_from_one_arm_is_left_out_of_the_speedup():
+    joined = compare_arms(_summary(), experiment="exp2", runs=_runs([30.0, 33.0, 36.0], [20.0, 30.0]))
+    row = joined[(joined.series == "scaling") & (joined.workers == 517)].iloc[0]
+    assert row.run_pairs == 2
+    assert row.run_speedup_mean == pytest.approx(statistics.mean([30.0 / 20.0, 33.0 / 30.0]))
 
 
 def test_baselines_missing_from_the_chosen_experiment_come_from_another_one():
@@ -100,8 +132,11 @@ def test_every_chart_and_table_is_written(tmp_path):
     for mode in ("structural", "exact", "off"):
         _write_metrics(plans, "A", mode)
         _write_metrics(plans, "B", mode)
-    paths = render_all(_summary(), _published(), str(plans), str(tmp_path / "out"), "png", 72)
-    assert len(paths) >= 4 and all((tmp_path / "out" / p).exists() for p in paths)
+    paths = render_all(_summary(), _published(), str(plans), str(tmp_path / "out"), "png", 72,
+                       runs=_runs([30.0, 33.0, 36.0], [20.0, 30.0, 24.0]))
+    assert all((tmp_path / "out" / p).exists() for p in paths)
+    assert {"exp2_scaling_25MB.png", "exp2_scaling_100MB.png", "exp2_speedup.png", "exp2_planning_llm_calls.png",
+            "exp2_planning_wrong_plans.png"} <= set(paths)
 
 def test_rendering_works_before_both_arms_share_a_scaling_configuration(tmp_path):
     summary = _summary()

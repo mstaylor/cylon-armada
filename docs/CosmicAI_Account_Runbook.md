@@ -15,7 +15,7 @@ override, for when AWS lifts its 3,008 MB Lambda memory cap (sections 1 to 7 bel
 ```bash
 cd target/aws/scripts/terraform-cosmic-ai
 terraform init
-terraform plan        # expect 18 to add; executor 10240 MB, image 448324707516...cylon-armada@sha256:51341c34...
+terraform plan        # executor 10240 MB, image 448324707516...cylon-armada@sha256:8b8961b0...
 terraform apply
 ```
 
@@ -37,11 +37,13 @@ the cylon deployment.
 | Item | State |
 |---|---|
 | Admin access | `qad5gv` role has AdministratorAccess; its trust policy lets the IAM user `qad5gv` assume it |
-| Terraform | `target/aws/scripts/terraform-cosmic-ai/`. Zero config: the cosmicai account is the default, so a plain `terraform plan` needs no inputs. Last plan: 18 to add, 0 to change, 0 to destroy |
+| Terraform | `target/aws/scripts/terraform-cosmic-ai/`. Zero config: `terraform workspace select cosmicai`, then a plain `terraform plan` and `terraform apply`; the workspace chooses the account |
 | Data | Bucket `cosmicai` has the 10, 25, 50, 75 and 100 MB partitions and the `Anomaly Detection/` folder |
-| Executor image | **Not current.** ECR `cosmic-ai-executor:latest` is the 1 October image (`sha256:5d477d77...`). The current image is `sha256:51341c34...` |
-| Lambda memory | **Capped at 3,008 MB** per function (new-account limit). The executor needs 10,240 MB, the original campaign's setting (it uses up to 7 GB on 100 MB partitions). Lifting it needs an AWS Support case, possibly through CloudBank. Until then the apply creates everything except the executor |
-| Lambda concurrency | **1,000** (raised 7 October; the campaign needs at most 517). A separate request for 11,000 is still open as a support case and is not needed |
+| Executor image | **Not current** (checked 12 October). ECR `cosmic-ai-executor:latest` is the 6 October push (`sha256:51341c34...`), before the pairing, abort and warm-container fixes. The current image is the cylon account's `cylon-armada:cosmic-ai-executor`, `sha256:8b8961b0eb25b2644226517afb8bf50302dfaab9449baf60dcacf038acff2ba0`, pushed 11 October 19:00 with the TCPunch pairing fix |
+| Lambda memory | Was capped at 3,008 MB per function; AWS reports the cap lifted (12 October). There is no API that reports the cap, so the apply is the check: the executor is created at 10,240 MB only if the cap is gone (section 5) |
+| Lambda concurrency | **11,000** (checked 12 October); the campaign needs at most 517 |
+| Lambda functions and state machines | None deployed (checked 12 October) |
+| Rendezvous server | Arm B uses the public server `cylon-rendezvous.aws-cylondata.com:10000`, the same one as the cylon account; nothing to deploy in this account |
 
 ## 1. Set up the admin profile on the host
 
@@ -65,20 +67,17 @@ Expected: `arn:aws:sts::881908115028:assumed-role/qad5gv/...`
 
 ## 2. Push the current executor image
 
-The image was built on the host on 4 October as `cosmic-ai-executor:latest`. Check it is the right
-one first:
+Use the image the cylon account runs now, so both accounts execute the same code. Pull it by digest
+from the cylon account's ECR:
 
 ```bash
-docker image inspect cosmic-ai-executor:latest --format '{{.Id}}'
-```
-
-If the host no longer has it, pull it from the cylon account's ECR:
-
-```bash
-aws ecr get-login-password --region us-east-1 | \
+aws ecr get-login-password --region us-east-1 --profile cylon | \
   docker login --username AWS --password-stdin 448324707516.dkr.ecr.us-east-1.amazonaws.com
-docker pull --platform=linux/amd64 448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
-docker tag 448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor cosmic-ai-executor:latest
+docker pull --platform=linux/amd64 \
+  448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada@sha256:8b8961b0eb25b2644226517afb8bf50302dfaab9449baf60dcacf038acff2ba0
+docker tag \
+  448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada@sha256:8b8961b0eb25b2644226517afb8bf50302dfaab9449baf60dcacf038acff2ba0 \
+  cosmic-ai-executor:latest
 ```
 
 Push to the cosmicai account:
@@ -97,8 +96,9 @@ aws ecr describe-images --repository-name cosmic-ai-executor --image-ids imageTa
   --profile cosmicai-admin --region us-east-1 --query 'imageDetails[0].imageDigest' --output text
 ```
 
-Expected: `sha256:51341c349abfae4f5dd5f3110165d82714331dfe54067171fb24ec3fc08d49e0`. If it is still
-`sha256:5d477d77...`, the push did not land.
+Expected: `sha256:8b8961b0eb25b2644226517afb8bf50302dfaab9449baf60dcacf038acff2ba0`, the same digest
+as the cylon account. If it is still `sha256:51341c34...`, the push did not land. If it is a third
+digest, the image was rebuilt rather than copied; pull by digest again.
 
 ## 3. Optional: keep a copy of the files the apply replaces
 
@@ -118,25 +118,28 @@ From the cylon-armada repository root on the host, with the current working tree
 ```bash
 cd target/aws/scripts/terraform-cosmic-ai
 terraform init
-terraform workspace new cosmicai     # later: terraform workspace select cosmicai
-terraform plan -var-file=cosmicai.tfvars
+terraform workspace select cosmicai  # created 7 October; use "new" on a host that lacks it
+terraform plan
 ```
 
 Check the plan before applying:
 
-- `Plan: 18 to add, 0 to change, 0 to destroy`
-- the executor `image_uri` ends in `@sha256:51341c34...`
+- only additions, nothing to change or destroy (the account has no Cosmic AI resources yet)
+- the executor `image_uri` ends in `@sha256:8b8961b0...`
+- the FMI initializer's environment has `FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS = 10000`,
+  `FMI_ESTABLISH_PARALLELISM = 64` and `RENDEZVOUS_HOST = cylon-rendezvous.aws-cylondata.com`
 - no error from `terraform_data.account_guard` (it fails the plan when the credentials belong to
   another account)
 
 Then:
 
 ```bash
-terraform apply -var-file=cosmicai.tfvars
+terraform apply
 ```
 
-The cylon account is the default and lives in the default workspace (see the quick start); the
-cosmicai workspace keeps the two accounts' state apart.
+No variables or var-file: the selected workspace chooses the account. The `accounts` variable in
+`variables.tf` holds each account's profile, account id, bucket and executor image, keyed by workspace
+(`cylon`, `cosmicai`; `default` means cylon). The workspaces also keep the two accounts' state apart.
 
 ## 5. Check the deployment
 
@@ -148,7 +151,8 @@ aws lambda get-function --function-name cylon-armada-cosmic-ai-executor --profil
 ```
 
 Expected: `cylon-armada-cosmic-ai-workflow` and `cylon-armada-cosmic-ai-fmi-workflow`; executor at
-10240 MB on `@sha256:51341c34...`.
+10240 MB on `@sha256:8b8961b0...`. If the apply fails creating the executor with a memory error, the
+3,008 MB cap is still in place.
 
 ## 6. First runs: 1 and 2 workers
 
@@ -177,8 +181,8 @@ That is 8 executions (a cold-start run and 3 measured runs at 1 and 2 workers ea
 
 ### Arm B, 1 and 2 workers
 
-Before the 2-worker run, start the rendezvous server with your script and check its DNS name points
-at the running task and the port answers:
+Arm B uses the same public rendezvous server as the cylon account. Before the 2-worker run, check
+it answers:
 
 ```bash
 getent hosts cylon-rendezvous.aws-cylondata.com
@@ -205,7 +209,7 @@ configuration.
 
 ## 7. Ramp, then the full campaign
 
-The concurrency limit (1,000) covers the largest configuration (517 workers). After the pilot rows
+The concurrency limit (11,000) covers the largest configuration (517 workers). After the pilot rows
 are complete, ramp to 41 workers, then run the full campaign. Dry run before each to see the
 execution count and cost estimate:
 

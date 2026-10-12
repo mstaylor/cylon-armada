@@ -23,12 +23,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from results.chart_cosmic_campaign import (
-    BAR_EDGE, BAR_LW, CAPSIZE, FONT_SIZE, PARTITION_COLORS, PUBLISHED, TITLE_SIZE, _legend_below, _save,
-    published_seconds,
+    BAR_EDGE, BAR_LW, FONT_SIZE, PARTITION_COLORS, PARTITION_MARKERS, SERIES_STYLES, TITLE_SIZE, _legend_below,
+    _save, data_size_ticks, line_chart, published_seconds,
 )
 
 ARM_COLORS = {"A": "#1f77b4", "B": "#2ca02c"}
-ARM_LABELS = {"A": "Arm A (S3, published pipeline)", "B": "Arm B (direct communication)"}
 EXPERIMENT_COLORS = {"exp1": "#7f7f7f", "exp2": "#ff7f0e"}
 CONFIGURATION = ["series", "partition_mb", "data_gb", "batch_size", "workers"]
 
@@ -50,11 +49,33 @@ def _arm_rows(summary, arm, experiment):
         "duration_s_mean": f"{prefix}_mean_s", "duration_s_std": f"{prefix}_std_s"})
 
 
-def compare_arms(summary, experiment="exp2"):
+def _run_group_speedups(joined, runs):
+    measured = runs[runs.phase == "measured"]
+    arms = []
+    for arm in ("A", "B"):
+        prefix = arm.lower()
+        picked = joined[CONFIGURATION + [f"{prefix}_experiment"]].merge(
+            measured[measured.arm == arm], left_on=CONFIGURATION + [f"{prefix}_experiment"],
+            right_on=CONFIGURATION + ["experiment"])
+        arms.append(picked[CONFIGURATION + ["run", "duration_s"]].rename(columns={"duration_s": f"{prefix}_run_s"}))
+    pairs = arms[0].merge(arms[1], on=CONFIGURATION + ["run"])
+    pairs = pairs.assign(speedup=pairs.a_run_s / pairs.b_run_s)
+    return (pairs.groupby(CONFIGURATION)["speedup"].agg(run_pairs="count", run_speedup_mean="mean",
+                                                         run_speedup_std="std").reset_index())
+
+
+def compare_arms(summary, experiment="exp2", runs=None):
     """Arm A against Arm B per configuration, from `experiment`; baselines, which Experiment 2
-    does not plan, come from whichever experiment ran them."""
+    does not plan, come from whichever experiment ran them.
+
+    With `runs` (one row per validated execution), the speedup is also taken per run group, pairing
+    run i of each arm, and reported as the mean and sample std across the run groups.
+    """
     joined = _arm_rows(summary, "A", experiment).merge(_arm_rows(summary, "B", experiment), on=CONFIGURATION)
-    joined = joined.assign(speedup=joined.a_mean_s / joined.b_mean_s)
+    joined = joined.assign(speedup=joined.a_mean_s / joined.b_mean_s, a_cv=joined.a_std_s / joined.a_mean_s,
+                           b_cv=joined.b_std_s / joined.b_mean_s)
+    if runs is not None:
+        joined = joined.merge(_run_group_speedups(joined, runs), on=CONFIGURATION, how="left")
     return joined.sort_values(["workers", "series", "partition_mb", "batch_size"]).reset_index(drop=True)
 
 
@@ -95,77 +116,67 @@ def _published_means(published):
                              "mean": "published_mean_s", "std": "published_std_s"}))
 
 
-def chart_arms_vs_published(joined, published, output_dir, chart_format, dpi):
+def chart_arm_scaling(joined, published, output_dir, chart_format, dpi):
+    """One line chart per partition size: published, Arm A and Arm B execution time by data size."""
     rows = joined[joined.series == "scaling"].merge(_published_means(published), on=["partition_mb", "data_gb"],
                                                     how="left")
-    partitions = sorted(rows.partition_mb.unique())
-    fig, axes = plt.subplots(1, len(partitions), figsize=(4.5 * len(partitions), 4.5), sharey=True, squeeze=False)
-    width = 0.27
-    for ax, partition in zip(axes[0], partitions):
+    files = []
+    for partition in sorted(rows.partition_mb.unique()):
         part = rows[rows.partition_mb == partition].sort_values("data_gb")
-        x = list(range(len(part)))
-        bars = (("Published", part.published_mean_s, part.published_std_s, PUBLISHED, -width),
-                (ARM_LABELS["A"], part.a_mean_s, part.a_std_s, ARM_COLORS["A"], 0.0),
-                (ARM_LABELS["B"], part.b_mean_s, part.b_std_s, ARM_COLORS["B"], width))
-        for label, mean, std, color, offset in bars:
-            ax.bar([i + offset for i in x], mean, width, yerr=std.fillna(0), capsize=CAPSIZE, color=color,
-                   edgecolor=BAR_EDGE, linewidth=BAR_LW, label=label)
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"{d:g}\n({w})" for d, w in zip(part.data_gb, part.workers)])
-        ax.set_xlabel("Data size in GB (workers)", fontsize=FONT_SIZE)
-        ax.set_title(f"{partition} MB partitions", fontsize=FONT_SIZE)
-    axes[0][0].set_ylabel("Execution time (s)", fontsize=FONT_SIZE)
-    fig.suptitle("Cosmic AI on Lambda: S3 against direct communication", fontsize=TITLE_SIZE)
-    handles, labels = axes[0][0].get_legend_handles_labels()
-    _legend_below(fig, handles, labels, ncol=3, anchor=(0.5, -0.14))
-    return _save(fig, output_dir, "exp2_arms_vs_published", chart_format, dpi)
+        series = [(*SERIES_STYLES["published"], part.published_mean_s, part.published_std_s),
+                  (*SERIES_STYLES["A"], part.a_mean_s, part.a_std_s),
+                  (*SERIES_STYLES["B"], part.b_mean_s, part.b_std_s)]
+        files.append(line_chart(series, data_size_ticks(part), "Dataset size in GB (workers)", "Execution time (s)",
+                                f"S3 against direct communication, {partition} MB partitions",
+                                output_dir, f"exp2_scaling_{partition}MB", chart_format, dpi))
+    return files
 
 
 def chart_speedup(joined, output_dir, chart_format, dpi):
-    rows = joined[joined.series.isin(["scaling", "baseline"])]
-    fig, ax = plt.subplots(figsize=(10, 6))
+    """Speedup of Arm B over Arm A by data size, one line per partition size: the mean over run groups
+    with the sample std across them when per-run results are available, the ratio of means otherwise."""
+    rows = joined[joined.series == "scaling"]
+    per_run = "run_speedup_mean" in rows
+    sizes = sorted(rows.data_gb.unique())
+    series = []
     for partition in sorted(rows.partition_mb.unique()):
-        series = rows[rows.partition_mb == partition].sort_values("workers")
-        ax.plot(series.workers, series.speedup, marker="o", color=PARTITION_COLORS.get(partition),
-                markeredgecolor=BAR_EDGE, label=f"{partition} MB partitions")
-    ax.set_xscale("log")
-    ax.minorticks_off()
-    ticks = sorted(rows.workers.unique())
-    ax.set_xticks(ticks)
-    ax.set_xticklabels([str(int(t)) for t in ticks], rotation=45)
-    ax.set_xlabel("Workers", fontsize=FONT_SIZE)
-    ax.set_ylabel("Speedup of Arm B over Arm A (A time / B time)", fontsize=FONT_SIZE)
-    ax.set_title("Direct communication against S3 by worker count", fontsize=TITLE_SIZE)
-    _legend_below(ax, ncol=4)
-    return _save(fig, output_dir, "exp2_speedup", chart_format, dpi)
+        part = rows[rows.partition_mb == partition].set_index("data_gb").reindex(sizes)
+        means = part.run_speedup_mean if per_run else part.speedup
+        series.append((f"{partition} MB partitions", PARTITION_COLORS.get(partition),
+                       PARTITION_MARKERS.get(partition, "o"), means, part.run_speedup_std if per_run else None))
+    return line_chart(series, [f"{s:g}" for s in sizes], "Dataset size (GB)",
+                      "Speedup of Arm B over Arm A (A time / B time)",
+                      "Direct communication against S3", output_dir, "exp2_speedup", chart_format, dpi)
 
 
 def chart_agent_cost(experiments, arm, output_dir, chart_format, dpi):
-    rows = experiments[experiments.series == "scaling"].sort_values(["workers", "partition_mb"])
-    fig, ax = plt.subplots(figsize=(12, 6))
-    x = list(range(len(rows)))
-    width = 0.4
-    for experiment, offset, label in (("exp1", -width / 2, "Experiment 1 (hand-built inputs)"),
-                                      ("exp2", width / 2, "Experiment 2 (agent-planned inputs)")):
-        ax.bar([i + offset for i in x], rows[f"{experiment}_mean_s"], width,
-               yerr=rows[f"{experiment}_std_s"].fillna(0), capsize=CAPSIZE, color=EXPERIMENT_COLORS[experiment],
-               edgecolor=BAR_EDGE, linewidth=BAR_LW, label=label)
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"{int(w)}\n{int(p)}MB" for w, p in zip(rows.workers, rows.partition_mb)], fontsize=8)
-    ax.set_xlabel("Workers and partition size", fontsize=FONT_SIZE)
-    ax.set_ylabel("Execution time (s)", fontsize=FONT_SIZE)
-    ax.set_title(f"Execution time with and without the planning agent (Arm {arm})", fontsize=TITLE_SIZE)
-    _legend_below(ax, ncol=2)
-    return _save(fig, output_dir, f"exp1_vs_exp2_arm{arm}", chart_format, dpi)
+    """One line chart per partition size: Arm `arm` with hand-built against agent-planned inputs."""
+    rows = experiments[experiments.series == "scaling"]
+    files = []
+    for partition in sorted(rows.partition_mb.unique()):
+        part = rows[rows.partition_mb == partition].sort_values("data_gb")
+        series = [("Experiment 1 (hand-built inputs)", EXPERIMENT_COLORS["exp1"], "o", part.exp1_mean_s,
+                   part.exp1_std_s),
+                  ("Experiment 2 (agent-planned inputs)", EXPERIMENT_COLORS["exp2"], "^", part.exp2_mean_s,
+                   part.exp2_std_s)]
+        files.append(line_chart(series, data_size_ticks(part), "Dataset size in GB (workers)", "Execution time (s)",
+                                f"With and without the planning agent (Arm {arm}), {partition} MB partitions",
+                                output_dir, f"exp1_vs_exp2_arm{arm}_{partition}MB", chart_format, dpi))
+    return files
+
+
+PLANNING_CHARTS = (("llm_calls_total", "LLM calls", "exp2_planning_llm_calls"),
+                   ("wrong_plans", "Wrong plans", "exp2_planning_wrong_plans"))
 
 
 def chart_planning(table, output_dir, chart_format, dpi):
+    """One bar chart per planning measure, by plan cache mode and arm."""
     modes = [m for m in ("off", "exact", "structural") if m in set(table.cache_mode)]
     arms = sorted(table.arm.unique())
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5), squeeze=False)
     width = 0.8 / max(len(arms), 1)
-    for ax, column, ylabel in ((axes[0][0], "llm_calls_total", "LLM calls"),
-                               (axes[0][1], "wrong_plans", "Wrong plans")):
+    files = []
+    for column, ylabel, name in PLANNING_CHARTS:
+        fig, ax = plt.subplots(figsize=(10, 6))
         for k, arm in enumerate(arms):
             values = [table[(table.arm == arm) & (table.cache_mode == m)][column].sum() for m in modes]
             ax.bar([i + (k - (len(arms) - 1) / 2) * width for i in range(len(modes))], values, width,
@@ -174,14 +185,14 @@ def chart_planning(table, output_dir, chart_format, dpi):
         ax.set_xticklabels(modes)
         ax.set_xlabel("Plan cache mode", fontsize=FONT_SIZE)
         ax.set_ylabel(ylabel, fontsize=FONT_SIZE)
-    fig.suptitle("Planning the campaign: LLM calls and wrong plans by cache mode", fontsize=TITLE_SIZE)
-    handles, labels = axes[0][0].get_legend_handles_labels()
-    _legend_below(fig, handles, labels, ncol=len(arms), anchor=(0.5, -0.1))
-    return _save(fig, output_dir, "exp2_planning", chart_format, dpi)
+        ax.set_title(f"Planning the campaign: {ylabel.lower()} by plan cache mode", fontsize=TITLE_SIZE)
+        _legend_below(ax, ncol=len(arms), anchor=(0.5, -0.3))
+        files.append(_save(fig, output_dir, name, chart_format, dpi))
+    return files
 
 
-PAIR_LATENCY_VARIANTS = {"accept_timeout_1s": ("Listener accept timeout 1 s (current code)", "#d62728"),
-                         "accept_timeout_50ms": ("Listener accept timeout 50 ms", "#2ca02c")}
+PAIR_LATENCY_VARIANTS = {"accept_timeout_1s": ("Listener accept timeout 1 s (before the fix)", "#d62728"),
+                         "accept_timeout_50ms": ("Listener accept timeout 50 ms (after the fix)", "#2ca02c")}
 
 
 def pair_latency_summary(frame):
@@ -196,28 +207,20 @@ def pair_latency_summary(frame):
 
 
 def chart_pair_latency(frame, output_dir, chart_format, dpi):
+    """Mean pair() time per listener accept timeout, as bars without error bars."""
     summary = pair_latency_summary(frame)
     variants = [v for v in PAIR_LATENCY_VARIANTS if v in set(summary.variant)]
-    ok = frame[frame.pair_ms >= 0]
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5), squeeze=False)
-    bars, points = axes[0]
+    fig, ax = plt.subplots(figsize=(10, 6))
     for i, variant in enumerate(variants):
         label, color = PAIR_LATENCY_VARIANTS[variant]
         row = summary[summary.variant == variant].iloc[0]
-        bars.bar(i, row.mean_ms, yerr=row.std_ms if pd.notna(row.std_ms) else 0, capsize=CAPSIZE, color=color,
-                 edgecolor=BAR_EDGE, linewidth=BAR_LW, label=label)
-        values = ok[ok.variant == variant].pair_ms.tolist()
-        offsets = [((k % 9) - 4) * 0.03 for k in range(len(values))]
-        points.scatter([i + o for o in offsets], values, color=color, edgecolor=BAR_EDGE, linewidth=0.5, s=28)
-    for ax, ylabel in ((bars, "Mean pair() time (ms)"), (points, "pair() time per pairing (ms)")):
-        ax.set_xticks(list(range(len(variants))))
-        ax.set_xticklabels(["1 s" if v == "accept_timeout_1s" else "50 ms" for v in variants])
-        ax.set_xlabel("TCPunch listener accept timeout", fontsize=FONT_SIZE)
-        ax.set_ylabel(ylabel, fontsize=FONT_SIZE)
-    fig.suptitle("TCPunch pairing latency (local loopback, mean and sample std; right: every pairing)",
-                 fontsize=TITLE_SIZE)
-    handles, labels = bars.get_legend_handles_labels()
-    _legend_below(fig, handles, labels, ncol=len(variants), anchor=(0.5, -0.1))
+        ax.bar(i, row.mean_ms, color=color, edgecolor=BAR_EDGE, linewidth=BAR_LW, label=label)
+    ax.set_xticks(list(range(len(variants))))
+    ax.set_xticklabels(["1 s" if v == "accept_timeout_1s" else "50 ms" for v in variants])
+    ax.set_xlabel("TCPunch listener accept timeout", fontsize=FONT_SIZE)
+    ax.set_ylabel("Mean pair() time (ms)", fontsize=FONT_SIZE)
+    ax.set_title("TCPunch pairing latency (local loopback)", fontsize=TITLE_SIZE)
+    _legend_below(ax, ncol=len(variants), anchor=(0.5, -0.3))
     return _save(fig, output_dir, "tcpunch_pair_latency", chart_format, dpi)
 
 
@@ -227,21 +230,20 @@ def _write_csv(frame, output_dir, name):
     return name
 
 
-def render_all(summary, published, plans_root, output_dir, chart_format, dpi, pair_latency=None):
-    arms = compare_arms(summary)
+def render_all(summary, published, plans_root, output_dir, chart_format, dpi, pair_latency=None, runs=None):
+    arms = compare_arms(summary, runs=runs)
     experiments = compare_experiments(summary, arm="A")
     table = planning_table(plans_root)
     files = [_write_csv(arms, output_dir, "exp2_arm_comparison.csv"),
              _write_csv(experiments, output_dir, "exp1_vs_exp2_armA.csv"),
              _write_csv(table, output_dir, "exp2_planning_metrics.csv")]
     if (arms.series == "scaling").any():
-        files.append(chart_arms_vs_published(arms, published, output_dir, chart_format, dpi))
-    if len(arms):
+        files += chart_arm_scaling(arms, published, output_dir, chart_format, dpi)
         files.append(chart_speedup(arms, output_dir, chart_format, dpi))
-    if len(experiments):
-        files.append(chart_agent_cost(experiments, "A", output_dir, chart_format, dpi))
+    if (experiments.series == "scaling").any():
+        files += chart_agent_cost(experiments, "A", output_dir, chart_format, dpi)
     if len(table):
-        files.append(chart_planning(table, output_dir, chart_format, dpi))
+        files += chart_planning(table, output_dir, chart_format, dpi)
     if pair_latency is not None and len(pair_latency):
         files += [_write_csv(pair_latency_summary(pair_latency), output_dir, "tcpunch_pair_latency_summary.csv"),
                   chart_pair_latency(pair_latency, output_dir, chart_format, dpi)]
@@ -254,13 +256,16 @@ def main(argv=None):
     p.add_argument("--published", required=True)
     p.add_argument("--plans-root", required=True)
     p.add_argument("--pair-latency", help="local TCPunch pair() latency CSV (variant, trial, side, pair_ms)")
+    p.add_argument("--runs", help="per-run CSV from results.cosmic_lambda_results --runs-out; gives the speedup "
+                                  "per run group with the sample std across run groups")
     p.add_argument("--output", required=True)
     p.add_argument("--format", default="png")
     p.add_argument("--dpi", type=int, default=300)
     args = p.parse_args(argv)
     pair_latency = pd.read_csv(args.pair_latency) if args.pair_latency else None
+    runs = pd.read_csv(args.runs) if args.runs else None
     for name in render_all(pd.read_csv(args.summary), pd.read_csv(args.published), args.plans_root,
-                           args.output, args.format, args.dpi, pair_latency=pair_latency):
+                           args.output, args.format, args.dpi, pair_latency=pair_latency, runs=runs):
         print(os.path.join(args.output, name))
 
 
