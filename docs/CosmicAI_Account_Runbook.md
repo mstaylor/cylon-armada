@@ -37,7 +37,7 @@ the cylon deployment.
 | Item | State |
 |---|---|
 | Admin access | `qad5gv` role has AdministratorAccess; its trust policy lets the IAM user `qad5gv` assume it |
-| Terraform | `target/aws/scripts/terraform-cosmic-ai/`. Zero config: `terraform workspace select cosmicai`, then a plain `terraform plan` and `terraform apply`; the workspace chooses the account |
+| Terraform | `target/aws/scripts/terraform-cosmic-ai/`. Zero config: `terraform workspace select -or-create cosmicai`, then a plain `terraform plan` and `terraform apply`; the workspace chooses the account |
 | Data | Bucket `cosmicai` has the 10, 25, 50, 75 and 100 MB partitions and the `Anomaly Detection/` folder |
 | Executor image | **Not current** (checked 12 October). ECR `cosmic-ai-executor:latest` is the 6 October push (`sha256:51341c34...`), before the pairing, abort and warm-container fixes. The current image is the cylon account's `cylon-armada:cosmic-ai-executor`, `sha256:8b8961b0eb25b2644226517afb8bf50302dfaab9449baf60dcacf038acff2ba0`, pushed 11 October 19:00 with the TCPunch pairing fix |
 | Lambda memory | Was capped at 3,008 MB per function; AWS reports the cap lifted (12 October). There is no API that reports the cap, so the apply is the check: the executor is created at 10,240 MB only if the cap is gone (section 5) |
@@ -118,7 +118,7 @@ From the cylon-armada repository root on the host, with the current working tree
 ```bash
 cd target/aws/scripts/terraform-cosmic-ai
 terraform init
-terraform workspace select cosmicai  # created 7 October; use "new" on a host that lacks it
+terraform workspace select -or-create cosmicai
 terraform plan
 ```
 
