@@ -46,32 +46,38 @@ class _World:
 
 _WORLDS = {}
 _WORLDS_LOCK = threading.Lock()
+_EVENTS = []
 
 
 class _FakeBridge:
     instances = []
 
     def __init__(self, world_size, rank, channel_type, rendezvous_host, rendezvous_port,
-                 comm_name, maxtimeout, nonblocking, required_peers=None, assigned_rank=None,
-                 initialises=True):
+                 comm_name, maxtimeout, nonblocking, required_peers=None, gather_topology=None,
+                 assigned_rank=None, initialises=True):
         self.world_size = world_size
         self.rank = rank if assigned_rank is None else assigned_rank
         self.settings = dict(channel_type=channel_type, rendezvous_host=rendezvous_host,
                              rendezvous_port=rendezvous_port, comm_name=comm_name,
                              maxtimeout=maxtimeout, nonblocking=nonblocking)
         self.required_peers = required_peers
+        self.gather_topology = gather_topology
         self.available = world_size > 1 and initialises
         self.context = CylonContext(config=None, distributed=False) if self.available else None
         self.finalized = False
+        self.calls = []
+        _EVENTS.append(("connect", self.rank))
         with _WORLDS_LOCK:
             self.world = _WORLDS.setdefault(comm_name, _World(world_size))
             _FakeBridge.instances.append(self)
 
     def barrier(self):
+        self.calls.append("barrier")
         if self.available:
             self.world.barrier.wait()
 
     def broadcast(self, table, root):
+        self.calls.append("broadcast")
         assert isinstance(table, Table)
         if self.rank == root:
             self.world.slot = table.to_arrow()
@@ -81,6 +87,7 @@ class _FakeBridge:
         return received
 
     def gather(self, table, root):
+        self.calls.append("gather")
         assert isinstance(table, Table)
         self.world.parts[self.rank] = table.to_arrow()
         self.world.barrier.wait()
@@ -109,9 +116,12 @@ class _FakeS3:
 
     def __init__(self, objects=None):
         self.objects = dict(objects or {})
+        self.gets = []
         self.lock = threading.Lock()
 
     def get_object(self, Bucket, Key):
+        with self.lock:
+            self.gets.append((Bucket, Key))
         if (Bucket, Key) not in self.objects:
             raise self.exceptions.NoSuchKey(Key)
         return {"Body": _Body(self.objects[(Bucket, Key)])}
@@ -185,6 +195,7 @@ def test_startup_timings_split_code_fetch_out_of_init(monkeypatch, env, expected
 
 
 def _fake_run_inference(model, dataloader, device, batch_size, rank, result_path, data_path):
+    _EVENTS.append(("inference", rank))
     return {
         "inference_s": 1.0 + rank,
         "num_samples": 511,
@@ -203,17 +214,19 @@ def _fake_load(args, stage_timings):
     return None, None
 
 
-def _rank_args(rank, world_size, comm_name):
+def _rank_args(rank, world_size, comm_name, sync_mode="barrier", gather_topology="linear"):
     return types.SimpleNamespace(
         rank=rank, world_size=world_size, batch_size=512, device="cpu",
         data_bucket="bkt", data_prefix="10MB", result_path="res/run1",
         payload_bucket="bkt", payload_key="temp-results/p.json", comm_name=comm_name,
         fmi_channel_type="direct", fmi_options="nonblocking", fmi_max_timeout_ms=1000,
         rendezvous_host="rdv", rendezvous_port=10000,
+        sync_mode=sync_mode, gather_topology=gather_topology,
     )
 
 
-def _run_world(world_size, data_map, monkeypatch, comm_name, code_fetch_end_ts="2.0", bridge_cls=_FakeBridge):
+def _run_world(world_size, data_map, monkeypatch, comm_name, code_fetch_end_ts="2.0", bridge_cls=_FakeBridge,
+               sync_mode="barrier", gather_topology="linear"):
     payload = {"data_map": data_map}
     s3 = _FakeS3({("bkt", "temp-results/p.json"): json.dumps(payload).encode()})
     monkeypatch.setattr(inference_FMI, "s3_client", s3)
@@ -229,7 +242,7 @@ def _run_world(world_size, data_map, monkeypatch, comm_name, code_fetch_end_ts="
     seen_paths, errors = {}, []
 
     def rank_main(rank):
-        args = _rank_args(rank, world_size, comm_name)
+        args = _rank_args(rank, world_size, comm_name, sync_mode, gather_topology)
         try:
             inference_FMI.run_rank(args, 3.0)
             seen_paths[rank] = args.data_path
@@ -300,7 +313,7 @@ def _parse_peer_map(text):
 
 @pytest.mark.parametrize("world_size", [2, 41, 517])
 def test_peer_map_covers_every_rank_and_the_root_star_without_the_full_mesh(world_size):
-    rows = _parse_peer_map(inference_FMI.required_peer_map(world_size))
+    rows = _parse_peer_map(inference_FMI.required_peer_map(world_size, "linear", "barrier"))
     assert set(rows) == set(range(world_size))
     for rank, peers in rows.items():
         assert rank not in peers
@@ -315,7 +328,7 @@ def test_bridge_connects_only_the_peers_the_collectives_use(monkeypatch):
     _FakeBridge.instances.clear()
     _, _, errors = _run_world(3, {"0": "10MB/1.pt", "1": "10MB/2.pt", "2": "10MB/3.pt"}, monkeypatch, "t-peers")
     assert not errors, errors
-    assert {b.required_peers for b in _FakeBridge.instances} == {inference_FMI.required_peer_map(3)}
+    assert {b.required_peers for b in _FakeBridge.instances} == {inference_FMI.required_peer_map(3, "linear", "barrier")}
 
 
 @pytest.mark.parametrize("bridge_kwargs", [{"initialises": False}, {"assigned_rank": 5}])
@@ -329,6 +342,7 @@ def test_rank_fails_loudly_when_the_communicator_is_unusable(monkeypatch, bridge
 ABORT_AND_PAIRING_EVENT_FIELDS = {
     "abort_key": "res/abort-run.json", "abort_poll_s": 5, "fmi_holepunch_connect_timeout_ms": 120000,
     "fmi_tcpunch_max_tries": 6, "cylon_log_level": 1, "fmi_establish_parallelism": 64,
+    "fmi_gather_topology": "linear", "arm_b_sync_mode": "barrier", "fmi_finalize_linger_s": 0,
 }
 
 
@@ -348,7 +362,7 @@ def test_initializer_items_carry_fmi_settings_and_no_data_path(monkeypatch):
 
     items = json.loads(s3.objects[("bkt", first["body"]["S3_KEY"])])
     assert len(items) == 2
-    assert all("DATA_PATH" not in item for item in items)
+    assert all("DATA_PATH" not in item and "PARTITION_KEYS" not in item for item in items)
     assert {item["RANK"] for item in items} == {"0", "1"}
     payload = json.loads(s3.objects[("bkt", items[0]["PAYLOAD_KEY"])])
     assert payload["data_map"] == {"0": "10MB/1.pt", "1": "10MB/2.pt"}
@@ -380,6 +394,7 @@ FMI_ENVIRONMENT = {
     "RENDEZVOUS_HOST": "rdv.env", "RENDEZVOUS_PORT": "10000",
     "ABORT_POLL_S": "5", "FMI_HOLEPUNCH_CONNECT_TIMEOUT_MS": "120000", "FMI_TCPUNCH_MAX_TRIES": "6",
     "CYLON_LOG_LEVEL": "1", "FMI_ESTABLISH_PARALLELISM": "64",
+    "FMI_GATHER_TOPOLOGY": "binomial", "ARM_B_SYNC_MODE": "early_exit", "FMI_FINALIZE_LINGER_S": "5",
 }
 
 BASE_EVENT = {
@@ -526,3 +541,166 @@ def test_aggregate_metrics_time_the_trailing_gather_separately(monkeypatch):
     assert metrics["trailing_gather_s"] == 0.25
     assert 0 <= metrics["aggregate_s"] < 1.0
     assert metrics["ranks_aggregated"] == 2
+
+
+@pytest.mark.parametrize("world_size", [1, 2, 3, 5, 13, 517])
+def test_early_exit_preconnects_only_what_its_gather_needs(world_size):
+    binomial = _parse_peer_map(inference_FMI.required_peer_map(world_size, "binomial", "early_exit"))
+    linear = _parse_peer_map(inference_FMI.required_peer_map(world_size, "linear", "early_exit"))
+    assert binomial == {r: set() for r in range(world_size)}
+    root = inference_FMI.PAYLOAD_ROOT
+    assert linear == {r: ({p for p in range(world_size) if p != root} if r == root else {root})
+                      for r in range(world_size)} if world_size > 1 else {0: set()}
+
+
+@pytest.mark.parametrize("world_size", [2, 41, 517])
+def test_barrier_mode_with_binomial_gather_drops_the_root_star(world_size):
+    rows = _parse_peer_map(inference_FMI.required_peer_map(world_size, "binomial", "barrier"))
+    rounds = __import__("math").ceil(__import__("math").log2(world_size))
+    assert len(rows[inference_FMI.PAYLOAD_ROOT]) == rounds
+    assert all(len(peers) <= 2 * rounds for peers in rows.values())
+
+
+@pytest.mark.parametrize("gather_topology", ["linear", "binomial"])
+@pytest.mark.parametrize("world_size,data_map", [
+    (1, {"0": "10MB/1.pt"}),
+    (2, {"0": "10MB/1.pt", "1": "10MB/10.pt"}),
+    (5, {"0": ["10MB/1.pt", "10MB/2.pt"], "1": "10MB/3.pt", "2": "10MB/4.pt", "3": "10MB/5.pt",
+         "4": "10MB/6.pt"}),
+])
+def test_early_exit_ranks_read_the_payload_compute_then_connect_and_root_writes_the_same_records(
+        world_size, data_map, gather_topology, monkeypatch):
+    _FakeBridge.instances.clear()
+    _EVENTS.clear()
+    comm_name = f"t-early-{gather_topology}-{world_size}"
+    s3, seen_paths, errors = _run_world(world_size, data_map, monkeypatch, comm_name,
+                                        sync_mode="early_exit", gather_topology=gather_topology)
+    assert not errors, errors
+    assert seen_paths == {r: data_map[str(r)] for r in range(world_size)}
+
+    for bridge in _FakeBridge.instances:
+        assert "barrier" not in bridge.calls and "broadcast" not in bridge.calls
+        assert bridge.calls == (["gather", "gather"] if world_size > 1 else [])
+        assert bridge.required_peers == inference_FMI.required_peer_map(world_size, gather_topology, "early_exit")
+        assert bridge.gather_topology == gather_topology
+        assert bridge.finalized
+    for rank in range(world_size):
+        assert _EVENTS.index(("inference", rank)) < _EVENTS.index(("connect", rank))
+    assert s3.gets == [("bkt", "temp-results/p.json")] * world_size
+
+    records = json.loads(s3.objects[("bkt", "res/run1/combined_data.json")])
+    metrics = json.loads(s3.objects[("bkt", "res/run1/aggregate_metrics.json")])
+    assert metrics["ranks_aggregated"] == world_size
+    assert set(metrics) == {"aggregate_s", "trailing_gather_s", "ranks_aggregated", "bytes_aggregated"}
+    assert [r["rank"] for r in records] == list(range(world_size))
+    for rank, record in enumerate(records):
+        for field in inference.STAGE_FIELDS:
+            assert record[field] is not None, field
+        assert record["barrier_s"] == 0.0
+        assert record["data_path"] == data_map[str(rank)]
+        assert record["inference_s"] == pytest.approx(1.0 + rank)
+        staged = sum(record[f] for f in ("comm_init_s", "payload_fetch_s", "scatter_s", "model_load_s",
+                                         "barrier_s", "publish_s"))
+        assert staged <= record["total_s"] + 1e-6
+
+
+def test_early_exit_records_match_barrier_records_field_for_field(monkeypatch):
+    data_map = {"0": "10MB/1.pt", "1": "10MB/2.pt", "2": ["10MB/3.pt", "10MB/4.pt"]}
+    barrier_s3, _, errors = _run_world(3, data_map, monkeypatch, "t-cmp-barrier")
+    assert not errors, errors
+    early_s3, _, errors = _run_world(3, data_map, monkeypatch, "t-cmp-early", sync_mode="early_exit",
+                                     gather_topology="binomial")
+    assert not errors, errors
+    barrier = json.loads(barrier_s3.objects[("bkt", "res/run1/combined_data.json")])
+    early = json.loads(early_s3.objects[("bkt", "res/run1/combined_data.json")])
+    assert [sorted(r) for r in barrier] == [sorted(r) for r in early]
+    timing = set(inference.STAGE_FIELDS)
+    for b, e in zip(barrier, early):
+        assert {k: v for k, v in b.items() if k not in timing} == {k: v for k, v in e.items() if k not in timing}
+
+
+@pytest.mark.parametrize("data_map", [{"0": "10MB/1.pt"}, {"0": "10MB/1.pt", "1": "25MB/1.pt"}])
+def test_early_exit_rank_without_a_valid_payload_partition_fails_before_inference(data_map, monkeypatch):
+    _EVENTS.clear()
+    s3 = _FakeS3({("bkt", "temp-results/p.json"): json.dumps({"data_map": data_map}).encode()})
+    monkeypatch.setattr(inference_FMI, "s3_client", s3)
+    monkeypatch.setattr(inference_FMI, "run_inference", _fake_run_inference)
+    monkeypatch.setattr(inference_FMI, "load_partition_and_model", _fake_load)
+    monkeypatch.setattr(inference_FMI, "FMIBridge", _FakeBridge)
+    args = _rank_args(1, 2, f"t-bad-payload-{len(data_map)}", "early_exit", "binomial")
+    with pytest.raises(inference_FMI.FMIStageError, match="rank=1"):
+        inference_FMI.run_rank(args, 3.0)
+    assert ("inference", 1) not in _EVENTS
+
+
+def test_unknown_sync_mode_is_rejected(monkeypatch):
+    with pytest.raises(ValueError):
+        inference_FMI.run_rank(_rank_args(0, 1, "t-bad-mode", sync_mode="eventually"), 3.0)
+
+
+def _early_exit_event(**overrides):
+    return {
+        "bucket": "bkt", "object_type": "folder", "script": "/tmp/x.py", "S3_object_name": "Anomaly Detection",
+        "result_path": "res/early", "file_limit": "5", "world_size": 3, "batch_size": 512,
+        "data_bucket": "bkt", "data_prefix": "10MB", "fmi_channel_type": "direct", "fmi_options": "nonblocking",
+        "fmi_max_timeout": 900000, "rendezvous_host": "rdv", "rendezvous_port": 10000,
+        **ABORT_AND_PAIRING_EVENT_FIELDS, "arm_b_sync_mode": "early_exit", "fmi_gather_topology": "binomial",
+        "fmi_finalize_linger_s": 5, **overrides,
+    }
+
+
+def test_initializer_forwards_early_exit_settings_without_partition_in_items(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
+    s3 = _FakeS3()
+    monkeypatch.setattr(initializer_FMI, "s3_client", s3)
+    monkeypatch.setattr(initializer_FMI, "get_file_list", lambda bucket, prefix: _files("10MB", 5))
+    response = initializer_FMI.lambda_handler(_early_exit_event(), None)
+
+    items = json.loads(s3.objects[("bkt", response["body"]["S3_KEY"])])
+    payload = json.loads(s3.objects[("bkt", items[0]["PAYLOAD_KEY"])])
+    assert len(items) == 3 and sorted(payload["data_map"]) == ["0", "1", "2"]
+    for item in items:
+        assert "DATA_PATH" not in item and "PARTITION_KEYS" not in item
+        assert item["ARM_B_SYNC_MODE"] == "early_exit"
+        assert item["FMI_GATHER_TOPOLOGY"] == "binomial"
+        assert item["FMI_FINALIZE_LINGER_S"] == "5"
+
+
+def test_initializer_forwards_topology_mode_and_linger_from_environment(monkeypatch):
+    _clear_fmi_environment(monkeypatch)
+    for name, value in FMI_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+
+    item = _initialize(monkeypatch, {**BASE_EVENT, "arm_b_sync_mode": "barrier"})[0]
+
+    assert item["FMI_GATHER_TOPOLOGY"] == "binomial"
+    assert item["ARM_B_SYNC_MODE"] == "early_exit"
+    assert item["FMI_FINALIZE_LINGER_S"] == "5"
+
+
+@pytest.mark.parametrize("field,value", [("arm_b_sync_mode", "eventually"), ("fmi_gather_topology", "star")])
+def test_initializer_rejects_unknown_topology_or_mode(monkeypatch, field, value):
+    _clear_fmi_environment(monkeypatch)
+    monkeypatch.setattr(initializer_FMI, "s3_client", _FakeS3())
+    monkeypatch.setattr(initializer_FMI, "get_file_list", lambda bucket, prefix: _files("10MB", 5))
+    with pytest.raises(initializer_FMI.InvalidFMIEvent, match=field):
+        initializer_FMI.lambda_handler(_early_exit_event(**{field: value}), None)
+
+
+class _EnvCapturingEnv:
+    seen = []
+
+    def __init__(self, config, distributed):
+        _EnvCapturingEnv.seen.append(os.environ.get("FMI_GATHER_TOPOLOGY"))
+        self.context = types.SimpleNamespace(get_communicator=lambda: object(), get_rank=lambda: 1)
+
+
+@pytest.mark.parametrize("gather_topology,expected", [("binomial", "binomial"), ("linear", "linear"), (None, None)])
+def test_bridge_exports_the_gather_topology_before_the_channel_is_built(monkeypatch, gather_topology, expected):
+    import communicator.fmi_bridge as fmi_bridge
+    monkeypatch.setenv("FMI_GATHER_TOPOLOGY", "stale")
+    monkeypatch.setattr(fmi_bridge, "_import_fmi",
+                        lambda: (lambda **kw: types.SimpleNamespace(**kw), _EnvCapturingEnv, object()))
+    _EnvCapturingEnv.seen.clear()
+    fmi_bridge.FMIBridge(world_size=2, rank=1, channel_type="direct-redis", gather_topology=gather_topology)
+    assert _EnvCapturingEnv.seen == [expected]

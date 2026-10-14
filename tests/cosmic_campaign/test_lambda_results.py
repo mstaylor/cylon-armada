@@ -77,6 +77,25 @@ def test_execution_runs_lists_each_validated_run_with_its_run_group():
     assert runs[1]["workers"] == 2 and runs[1]["total_s_max"] == 4.0
 
 
+def test_execution_runs_record_the_account_and_the_original_a_rerun_replaced():
+    from results.cosmic_lambda_results import execution_runs
+    rerun = {**_row("measured", 2, 11), "arn": "arn:aws:states:us-east-1:881908115028:execution:wf:rerun5",
+             "rerun_of": "exp1-r2"}
+    original = {**_row("measured", 1, 10), "arn": "arn:aws:states:us-east-1:448324707516:execution:wf:exp1-r1"}
+    runs = execution_runs([original, rerun], _loader())
+    assert [(r["account"], r["rerun_of"]) for r in runs] == [("448324707516", None), ("881908115028", "exp1-r2")]
+
+
+def test_each_row_is_read_from_the_store_of_the_account_that_ran_it():
+    from results.cosmic_lambda_results import store_for
+    stores = {"881908115028": ("cosmicai-client", "cosmicai")}
+    default = ("cylon-client", "cosmicai-data-cylon")
+    rerun = {"arn": "arn:aws:states:us-east-1:881908115028:execution:wf:rerun5"}
+    original = {"arn": "arn:aws:states:us-east-1:448324707516:execution:wf:exp1"}
+    assert store_for(rerun, stores, default) == ("cosmicai-client", "cosmicai")
+    assert store_for(original, stores, default) == default
+
+
 def test_failed_and_incomplete_runs_lower_n_and_flag_the_cell():
     rows = [_row("measured", 1, 10), _row("measured", 2, 12, status="FAILED"),
             _row("measured", 3, 14), _row("measured", 4, 16)]

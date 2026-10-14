@@ -55,6 +55,9 @@ resource "aws_lambda_function" "fmi_init" {
       FMI_TCPUNCH_MAX_TRIES            = tostring(var.fmi_tcpunch_max_tries)
       CYLON_LOG_LEVEL                  = tostring(var.cylon_log_level)
       FMI_ESTABLISH_PARALLELISM        = tostring(var.fmi_establish_parallelism)
+      FMI_GATHER_TOPOLOGY              = var.fmi_gather_topology
+      ARM_B_SYNC_MODE                  = var.arm_b_sync_mode
+      FMI_FINALIZE_LINGER_S            = tostring(var.fmi_finalize_linger_s)
     }
   }
 

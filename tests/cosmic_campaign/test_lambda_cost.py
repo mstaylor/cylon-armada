@@ -87,6 +87,19 @@ def test_usage_is_collected_once_per_successful_execution_and_cached_ones_are_no
     assert set(usage) == {"a1", "b1"}
 
 
+def test_each_execution_is_queried_in_the_logs_of_the_account_that_ran_it():
+    from results.cosmic_lambda_cost import collect_usage_by_account
+    rerun = {**_row("r1", "A", 4, 2000), "arn": "arn:aws:states:us-east-1:881908115028:execution:wf:r1"}
+    original = {**_row("a1", "A", 4, 1000), "arn": "arn:aws:states:us-east-1:448324707516:execution:wf:a1"}
+    cylon_logs = _FakeLogs({1000: [(EXECUTOR, 4, 8000, 1024)]})
+    cosmicai_logs = _FakeLogs({2000: [(EXECUTOR, 4, 9000, 1024)]})
+    usage = collect_usage_by_account([original, rerun], {"881908115028": cosmicai_logs}, cylon_logs, ["g"], {},
+                                     slack_s=0, poll_s=0)
+    assert [q["start"] for q in cylon_logs.queries] == [1000]
+    assert [q["start"] for q in cosmicai_logs.queries] == [2000]
+    assert usage["r1"][EXECUTOR]["billed_ms"] == 9000.0
+
+
 def test_summary_averages_measured_runs_and_drops_windows_that_caught_another_execution():
     rows = [_row("a1", "A", 4, 1000, index=1), _row("a2", "A", 4, 2000, index=2),
             _row("b1", "B", 4, 3000, index=1), _row("b2", "B", 4, 4000, index=2)]

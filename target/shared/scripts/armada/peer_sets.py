@@ -19,6 +19,7 @@ armada.topology maps CollectivePatterns onto these sets.
 """
 
 import math
+from enum import Enum
 
 
 def _rounds(world_size):
@@ -58,9 +59,39 @@ def linear_gather_peers(world_size, rank, root=0):
     return {root}
 
 
-def collective_peers(world_size, rank, tree, gather, roots=(0,)):
-    """Every peer `rank` can be asked to talk to by a barrier, plus binomial-tree
-    collectives when `tree` and the linear gatherv star when `gather`, for each root.
+class GatherTopology(str, Enum):
+    """Gatherv payload algorithm; FMI_GATHER_TOPOLOGY selects the same one in cylon's FMI channel."""
+
+    LINEAR = "linear"
+    BINOMIAL = "binomial"
+
+
+def no_preconnected_peers(world_size, rank, root=0):
+    """Peers of a collective whose sockets the direct channel pairs on first use."""
+    return set()
+
+
+PRECONNECTED_GATHER_PEER_SETS = {
+    GatherTopology.LINEAR: linear_gather_peers,
+    GatherTopology.BINOMIAL: no_preconnected_peers,
+}
+
+
+def preconnected_gather_peers(world_size, rank, root, topology):
+    """Peers of `rank` that a gatherv to `root` under `topology` needs connected before it runs.
+
+    cylon's linear gatherv is nonblocking over connections established up front, so root needs
+    every rank. Its binomial gatherv is blocking, like FMI's binomial gather and scatterv, so the
+    channel pairs each tree edge on first use and nothing needs connecting ahead of time.
+    """
+    return PRECONNECTED_GATHER_PEER_SETS[GatherTopology(topology)](world_size, rank, root)
+
+
+def collective_peers(world_size, rank, tree, gather, roots=(0,),
+                     gather_topology=GatherTopology.LINEAR, barrier=True):
+    """Every peer `rank` can be asked to talk to by a barrier when `barrier`, plus
+    binomial-tree collectives when `tree` and the preconnected peers of a
+    `gather_topology` gatherv when `gather`, for each root.
 
     Returns an empty set for world_size <= 1 (nothing to connect).
     """
@@ -69,22 +100,24 @@ def collective_peers(world_size, rank, tree, gather, roots=(0,)):
 
     # A barrier is an allreduce, and the executor may issue one regardless of
     # which operator patterns the plan contains, so recursive-doubling peers are
-    # always required — leaving them out risks a hang at the first barrier.
-    peers = recursive_doubling_peers(world_size, rank)
+    # required unless the caller guarantees no barrier runs.
+    peers = recursive_doubling_peers(world_size, rank) if barrier else set()
 
     for root in roots:
         if tree:
             peers |= binomial_tree_peers(world_size, rank, root)
         if gather:
-            peers |= linear_gather_peers(world_size, rank, root)
+            peers |= preconnected_gather_peers(world_size, rank, root, gather_topology)
 
     peers.discard(rank)
     return peers
 
 
-def collective_peer_map(world_size, tree, gather, roots=(0,)):
+def collective_peer_map(world_size, tree, gather, roots=(0,),
+                        gather_topology=GatherTopology.LINEAR, barrier=True):
     """collective_peers() for every rank: {rank: {peers}}."""
-    return {r: collective_peers(world_size, r, tree, gather, roots) for r in range(world_size)}
+    return {r: collective_peers(world_size, r, tree, gather, roots, gather_topology, barrier)
+            for r in range(world_size)}
 
 
 def format_peer_list(peers):

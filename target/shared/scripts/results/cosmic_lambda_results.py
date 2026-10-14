@@ -129,6 +129,15 @@ def summarize(manifest_rows, loader, measured_runs, cold_init_threshold_s=None):
 CONFIGURATION_FIELDS = ("series", "partition_mb", "data_gb", "batch_size", "workers")
 
 
+def account_of(row):
+    return row["arn"].split(":")[4] if row.get("arn") else None
+
+
+def store_for(row, stores, default):
+    """The (S3 client, bucket) of the account whose execution produced the row."""
+    return stores.get(account_of(row), default)
+
+
 def execution_runs(manifest_rows, loader, cold_init_threshold_s=None):
     """One row per validated execution, carrying its run group (the run index within its configuration)."""
     runs = []
@@ -141,7 +150,8 @@ def execution_runs(manifest_rows, loader, cold_init_threshold_s=None):
             continue
         runs.append({"experiment": row["experiment"], "arm": row["arm"],
                      **dict(zip(CONFIGURATION_FIELDS, row["slot"][:5])),
-                     "phase": REPORTED_PHASE[row["phase"]], "run": row["slot"][6], **metrics})
+                     "phase": REPORTED_PHASE[row["phase"]], "run": row["slot"][6], **metrics,
+                     "account": account_of(row), "rerun_of": row.get("rerun_of")})
     return runs
 
 
@@ -187,6 +197,12 @@ def write_csv(rows, path):
         writer.writerows(rows)
 
 
+def _account_store(spec):
+    account, location = spec.split("=", 1)
+    profile, bucket = location.split(":", 1)
+    return account, profile, bucket
+
+
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--manifest", required=True, nargs="+",
@@ -202,6 +218,10 @@ def build_parser():
                    help="data bucket holding the results (cosmicai: cosmicai)")
     p.add_argument("--profile", default="cylon",
                    help="AWS CLI profile for the target account (cosmicai: cosmicai-admin)")
+    p.add_argument("--account", action="append", default=[], type=_account_store,
+                   metavar="ACCOUNT_ID=PROFILE:BUCKET",
+                   help="read rows whose execution arn is in ACCOUNT_ID from BUCKET with PROFILE; other rows use "
+                        "--profile and --bucket")
     p.add_argument("--measured-runs", type=int, default=3,
                    help="expected measured runs per scaling and baseline configuration")
     p.add_argument("--batch-measured-runs", type=int, default=4,
@@ -216,7 +236,11 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     import boto3
 
-    s3 = boto3.Session(profile_name=args.profile).client("s3", region_name=args.region)
+    def client(profile):
+        return boto3.Session(profile_name=profile).client("s3", region_name=args.region)
+
+    default = (client(args.profile), args.bucket)
+    stores = {account: (client(profile), bucket) for account, profile, bucket in args.account}
     rows = []
     for manifest in args.manifest:
         with open(manifest) as handle:
@@ -227,7 +251,8 @@ def main(argv=None):
 
     def loader(r):
         if r["result_path"] not in cache:
-            cache[r["result_path"]] = load_execution(s3, args.bucket, r["result_path"], r["workers"],
+            s3, bucket = store_for(r, stores, default)
+            cache[r["result_path"]] = load_execution(s3, bucket, r["result_path"], r["workers"],
                                                      started_at=r["start"])
         return cache[r["result_path"]]
 

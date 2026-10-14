@@ -10,12 +10,15 @@ Run: pytest tests/cosmic_ai_lambda/test_arm_b_real_fmi.py -v
 
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
 import uuid
 
 import pytest
+
+from armada.peer_sets import binomial_tree_peers
 
 REDIS_HOST = os.environ.get("REDIS_ADDR", "10.211.55.2:6379").split(":")[0]
 REDIS_PORT = int(os.environ.get("REDIS_ADDR", "10.211.55.2:6379").split(":")[1])
@@ -61,7 +64,8 @@ WORKER_SCRIPT = textwrap.dedent("""
         listen_port=int(os.environ["FMI_LISTEN_PORT"]),
         redis_host=os.environ["REDIS_HOST"], redis_port=int(os.environ["REDIS_PORT"]),
         comm_name=os.environ["COMM_NAME"], maxtimeout=20000, advertise_host="127.0.0.1",
-        required_peers=inference_FMI.required_peer_map(world_size),
+        required_peers=inference_FMI.required_peer_map(world_size, "linear", "barrier"),
+        gather_topology="linear",
     )
     rank = bridge.rank
     data_map = json.loads(os.environ["DATA_MAP"])
@@ -97,10 +101,55 @@ WORKER_SCRIPT = textwrap.dedent("""
 """)
 
 
-def _run_world(world_size, data_map, tmp_path):
+EARLY_EXIT_WORKER_SCRIPT = textwrap.dedent("""
+    import json
+    import os
+    import sys
+
+    sys.path.insert(0, {scripts_dir!r})
+    sys.path.insert(0, {lambda_src!r})
+    os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
+    from communicator.fmi_bridge import FMIBridge
+    import inference_FMI
+
+    world_size = int(os.environ["WORLD_SIZE"])
+    topology = os.environ["GATHER_TOPOLOGY"]
+    bridge = FMIBridge(
+        world_size=world_size, rank=int(os.environ["RANK"]), channel_type="direct-redis",
+        listen_port=int(os.environ["FMI_LISTEN_PORT"]),
+        redis_host=os.environ["REDIS_HOST"], redis_port=int(os.environ["REDIS_PORT"]),
+        comm_name=os.environ["COMM_NAME"], maxtimeout=20000, advertise_host="127.0.0.1",
+        required_peers=inference_FMI.required_peer_map(world_size, topology, "early_exit"),
+        gather_topology=topology,
+    )
+    rank = bridge.rank
+    record = {{field: float(rank) * 1.5 for field in inference_FMI.GATHERED_FIELDS}}
+    record["code_fetch_s"] = None
+    gathered = inference_FMI.gather_table(
+        bridge, inference_FMI.row_table(rank, inference_FMI.GATHERED_FIELDS, record), 0,
+    )
+    trailing = inference_FMI.gather_table(
+        bridge, inference_FMI.row_table(rank, inference_FMI.TRAILING_FIELDS,
+                                        {{"publish_s": float(rank), "total_s": 2.0 * rank}}), 0,
+    )
+    result = {{"rank": rank, "gathered": len(gathered), "trailing": len(trailing)}}
+    if rank == 0:
+        rows = inference_FMI.rows_by_rank(gathered, inference_FMI.GATHERED_FIELDS)
+        tails = inference_FMI.rows_by_rank(trailing, inference_FMI.TRAILING_FIELDS)
+        result["rows"] = {{str(r): rows[r] for r in rows}}
+        result["tails"] = {{str(r): tails[r] for r in tails}}
+    bridge.finalize()
+
+    with open(os.environ["RESULT_PATH"], "w") as f:
+        json.dump(result, f)
+""")
+
+
+def _run_world(world_size, data_map, tmp_path, script=WORKER_SCRIPT, extra_env=None):
     script_path = os.path.join(str(tmp_path), "worker.py")
     with open(script_path, "w") as f:
-        f.write(WORKER_SCRIPT.format(scripts_dir=_SCRIPTS, lambda_src=_LAMBDA_SRC))
+        f.write(script.format(scripts_dir=_SCRIPTS, lambda_src=_LAMBDA_SRC))
 
     comm_name = f"armb_real_fmi_{uuid.uuid4().hex[:8]}"
     port_base = 30000 + (os.getpid() % 20000)
@@ -116,6 +165,7 @@ def _run_world(world_size, data_map, tmp_path):
             "FMI_LISTEN_PORT": str(port_base + slot),
             "DATA_MAP": json.dumps(data_map),
             "RESULT_PATH": os.path.join(str(tmp_path), f"result_{slot}.json"),
+            **(extra_env or {}),
         })
         log_path = os.path.join(str(tmp_path), f"log_{slot}.txt")
         log_file = open(log_path, "w")
@@ -134,6 +184,7 @@ def _run_world(world_size, data_map, tmp_path):
                     pytest.fail(f"launch slot {slot} failed (exit {rc}):\n{lf.read()}")
             with open(result_path) as f:
                 data = json.load(f)
+            data["log_path"] = log_path
             results[data["rank"]] = data
         return results
     finally:
@@ -163,3 +214,28 @@ def test_partition_map_broadcast_and_stage_gather_over_real_fmi(world_size, tmp_
     for rank in range(world_size):
         assert rows[str(rank)]["init_s"] == float(rank)
         assert rows[str(rank)]["code_fetch_s"] is None
+
+
+@pytest.mark.skipif(not _redis_available(), reason="host redis not reachable")
+@pytest.mark.skipif(not _pycylon_fmi_available(), reason="pycylon FMI native stack not importable")
+@pytest.mark.parametrize("gather_topology", ["linear", "binomial"])
+@pytest.mark.parametrize("world_size", [2, 3, 5, 11])
+def test_early_exit_gathers_every_rank_to_root_over_real_fmi(world_size, gather_topology, tmp_path):
+    results = _run_world(world_size, {}, tmp_path, script=EARLY_EXIT_WORKER_SCRIPT,
+                         extra_env={"GATHER_TOPOLOGY": gather_topology, "FMI_FINALIZE_LINGER_S": "5",
+                                    "CYLON_LOG_LEVEL": "0"})
+
+    assert sorted(results) == list(range(world_size))
+    for rank in range(world_size):
+        assert results[rank]["gathered"] == (world_size if rank == 0 else 0)
+    rows, tails = results[0]["rows"], results[0]["tails"]
+    assert sorted(rows, key=int) == [str(r) for r in range(world_size)]
+    for rank in range(world_size):
+        assert rows[str(rank)]["init_s"] == 1.5 * rank
+        assert rows[str(rank)]["code_fetch_s"] is None
+        assert tails[str(rank)] == {"publish_s": float(rank), "total_s": 2.0 * rank}
+
+    with open(results[0]["log_path"]) as f:
+        root_partners = {int(p) for p in re.findall(r"Paired partnerId: (\d+)", f.read())}
+    expected = binomial_tree_peers(world_size, 0) if gather_topology == "binomial" else set(range(1, world_size))
+    assert root_partners == expected

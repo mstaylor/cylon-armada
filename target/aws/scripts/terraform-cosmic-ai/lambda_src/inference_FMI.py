@@ -5,10 +5,11 @@ import math
 import os
 import sys
 import time
+from enum import Enum
 
 import pyarrow as pa
 
-from armada.peer_sets import collective_peer_map, format_peer_map
+from armada.peer_sets import GatherTopology, collective_peer_map, format_peer_map
 from communicator.fmi_bridge import FMIBridge
 from inference import (
     STAGE_FIELDS,
@@ -39,6 +40,19 @@ INTEGER_FIELDS = ('num_samples', 'num_batches', 'cold_start')
 PARTITION_MAP_SCHEMA = pa.schema([('rank', pa.int32()), ('partition_index', pa.int64())])
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+class SyncMode(str, Enum):
+    """How a rank synchronises: today's barriers and broadcast, or infer first and leave after the gather."""
+
+    BARRIER = 'barrier'
+    EARLY_EXIT = 'early_exit'
+
+
+SYNC_MODE_COLLECTIVES = {
+    SyncMode.BARRIER: {'tree': True, 'barrier': True},
+    SyncMode.EARLY_EXIT: {'tree': False, 'barrier': False},
+}
 
 
 class FMIStageError(RuntimeError):
@@ -94,12 +108,16 @@ def gather_table(bridge, table, root):
     return [t.to_arrow() for t in bridge.gather(Table.from_arrow(bridge.context, table), root)]
 
 
+def fetch_partition_map(world_size, args):
+    obj = s3_client.get_object(Bucket=args.payload_bucket, Key=args.payload_key)
+    payload = json.loads(obj['Body'].read().decode('utf-8'))
+    return encode_data_map(payload['data_map'], world_size, args.data_prefix)
+
+
 def broadcast_partition_map(bridge, rank, world_size, args):
     partition_map = PARTITION_MAP_SCHEMA.empty_table()
     if rank == PAYLOAD_ROOT:
-        obj = s3_client.get_object(Bucket=args.payload_bucket, Key=args.payload_key)
-        payload = json.loads(obj['Body'].read().decode('utf-8'))
-        partition_map = encode_data_map(payload['data_map'], world_size, args.data_prefix)
+        partition_map = fetch_partition_map(world_size, args)
     return broadcast_table(bridge, partition_map, PAYLOAD_ROOT)
 
 
@@ -131,8 +149,11 @@ def timed_barrier(bridge):
     return time.time() - t_start
 
 
-def required_peer_map(world_size):
-    return format_peer_map(collective_peer_map(world_size, tree=True, gather=True, roots=(PAYLOAD_ROOT,)))
+def required_peer_map(world_size, gather_topology, sync_mode):
+    peers = collective_peer_map(world_size, gather=True, roots=(PAYLOAD_ROOT,),
+                                gather_topology=GatherTopology(gather_topology),
+                                **SYNC_MODE_COLLECTIVES[SyncMode(sync_mode)])
+    return format_peer_map(peers)
 
 
 def connect(args):
@@ -146,7 +167,8 @@ def connect(args):
         comm_name=args.comm_name,
         maxtimeout=args.fmi_max_timeout_ms,
         nonblocking=args.fmi_options != 'blocking',
-        required_peers=required_peer_map(args.world_size),
+        required_peers=required_peer_map(args.world_size, args.gather_topology, args.sync_mode),
+        gather_topology=GatherTopology(args.gather_topology).value,
     )
     comm_init_s = time.time() - t_start
     if args.world_size > 1 and not bridge.available:
@@ -156,7 +178,34 @@ def connect(args):
     return bridge, comm_init_s
 
 
-def run_rank(args, process_start_ts):
+def infer(args, rank, stage_timings):
+    dataloader, model = load_partition_and_model(args, stage_timings)
+    return run_inference(
+        model, dataloader, args.device, args.batch_size,
+        rank, args.result_path, args.data_path,
+    )
+
+
+def publish_records(bridge, args, record, partition_map, process_start_ts):
+    rank = args.rank
+    t_publish_start = time.time()
+    gathered = gather_table(bridge, row_table(rank, GATHERED_FIELDS, record), PAYLOAD_ROOT)
+    publish_s = time.time() - t_publish_start
+    logging.info(f'Rank: {rank}. stage gather done')
+    total_s = time.time() - process_start_ts
+
+    t_trailing_start = time.time()
+    trailing = gather_table(
+        bridge, row_table(rank, TRAILING_FIELDS, {'publish_s': publish_s, 'total_s': total_s}), PAYLOAD_ROOT,
+    )
+    trailing_gather_s = time.time() - t_trailing_start
+
+    if rank == PAYLOAD_ROOT:
+        write_combined_result(args, partition_map, gathered, trailing, time.time(), trailing_gather_s)
+
+
+def run_rank_with_barriers(args, process_start_ts):
+    """Connect, barrier, receive the partition map by broadcast, infer, barrier, gather."""
     rank, world_size = args.rank, args.world_size
     stage_timings = startup_timings(process_start_ts)
 
@@ -172,34 +221,51 @@ def run_rank(args, process_start_ts):
         stage_timings['payload_fetch_s'] = time.time() - t_payload_fetch_start
         args.data_path = decode_rank_paths(partition_map, rank, args.data_prefix)
 
-        dataloader, model = load_partition_and_model(args, stage_timings)
-        execution_info = run_inference(
-            model, dataloader, args.device, args.batch_size,
-            rank, args.result_path, args.data_path,
-        )
+        execution_info = infer(args, rank, stage_timings)
 
         barrier_s += timed_barrier(bridge)
         logging.info(f'Rank: {rank}. second barrier done')
         stage_timings['barrier_s'] = barrier_s
         stage_timings['inference_s'] = execution_info['inference_s']
-        record = {**execution_info, **stage_timings}
-
-        t_publish_start = time.time()
-        gathered = gather_table(bridge, row_table(rank, GATHERED_FIELDS, record), PAYLOAD_ROOT)
-        publish_s = time.time() - t_publish_start
-        logging.info(f'Rank: {rank}. stage gather done')
-        total_s = time.time() - process_start_ts
-
-        t_trailing_start = time.time()
-        trailing = gather_table(
-            bridge, row_table(rank, TRAILING_FIELDS, {'publish_s': publish_s, 'total_s': total_s}), PAYLOAD_ROOT,
-        )
-        trailing_gather_s = time.time() - t_trailing_start
-
-        if rank == PAYLOAD_ROOT:
-            write_combined_result(args, partition_map, gathered, trailing, time.time(), trailing_gather_s)
+        publish_records(bridge, args, {**execution_info, **stage_timings}, partition_map, process_start_ts)
     finally:
         bridge.finalize()
+
+
+def run_rank_early_exit(args, process_start_ts):
+    """Read this rank's partition from the S3 payload as Arm A does, infer with no communication,
+    then connect, gather to rank 0, and exit; no barrier and no broadcast."""
+    rank, world_size = args.rank, args.world_size
+    stage_timings = startup_timings(process_start_ts)
+
+    t_payload_fetch_start = time.time()
+    try:
+        partition_map = fetch_partition_map(world_size, args)
+        args.data_path = decode_rank_paths(partition_map, rank, args.data_prefix)
+    except (KeyError, ValueError) as e:
+        raise FMIStageError(f'payload gives no valid partition: {e!r}', rank, world_size, args.comm_name) from e
+    stage_timings['payload_fetch_s'] = time.time() - t_payload_fetch_start
+
+    execution_info = infer(args, rank, stage_timings)
+    stage_timings['barrier_s'] = 0.0
+    stage_timings['inference_s'] = execution_info['inference_s']
+
+    bridge, stage_timings['comm_init_s'] = connect(args)
+    logging.info(f'Rank: {rank}. connected after inference in {stage_timings["comm_init_s"]:.2f}s')
+    try:
+        publish_records(bridge, args, {**execution_info, **stage_timings}, partition_map, process_start_ts)
+    finally:
+        bridge.finalize()
+
+
+RANK_FLOWS = {
+    SyncMode.BARRIER: run_rank_with_barriers,
+    SyncMode.EARLY_EXIT: run_rank_early_exit,
+}
+
+
+def run_rank(args, process_start_ts):
+    RANK_FLOWS[SyncMode(args.sync_mode)](args, process_start_ts)
 
 
 def write_combined_result(args, partition_map, gathered, trailing, t_aggregate_start, trailing_gather_s):
@@ -268,6 +334,10 @@ def parse_args():
     parser.add_argument('--fmi_max_timeout_ms', type=int, **environ_or_required('FMI_MAX_TIMEOUT'))
     parser.add_argument('--rendezvous_host', type=str, **environ_or_required('RENDEZVOUS_HOST'))
     parser.add_argument('--rendezvous_port', type=int, **environ_or_required('RENDEZVOUS_PORT'))
+    parser.add_argument('--gather_topology', type=str, choices=[t.value for t in GatherTopology],
+                        **environ_or_required('FMI_GATHER_TOPOLOGY'))
+    parser.add_argument('--sync_mode', type=str, choices=[m.value for m in SyncMode],
+                        **environ_or_required('ARM_B_SYNC_MODE'))
     return parser.parse_args()
 
 

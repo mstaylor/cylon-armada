@@ -34,6 +34,28 @@ def test_measured_scaling_rows_are_joined_to_the_published_mean_and_ratio():
 
 def test_every_chart_is_written(tmp_path):
     paths = render_all(_summary(), _published(), str(tmp_path), "png", 72)
-    assert set(paths) == {"exp1_vs_published_25MB.png", "exp1_vs_published_100MB.png", "exp1_time_breakdown.png",
-                          "exp1_collect_scaling.png", "exp1_batch_sweep.png"}
+    assert set(paths) == {"exp1_vs_published.png", "exp1_time_breakdown.png", "exp1_collect_scaling.png",
+                          "exp1_batch_sweep.png"}
     assert all((tmp_path / p).exists() for p in paths)
+
+
+def test_a_line_chart_draws_every_series_with_its_error_bars_on_one_plot(tmp_path):
+    from results.chart_cosmic_campaign import line_chart
+    import matplotlib.pyplot as plt
+    series = [{"label": "Arm A", "color": "orange", "marker": "o", "linestyle": "-", "x": [41, 82], "y": [20.0, 23.0],
+               "yerr": [1.0, 2.0]},
+              {"label": "Arm B", "color": "green", "marker": "s", "linestyle": "--", "x": [41, 82], "y": [21.0, 20.0],
+               "yerr": [0.5, None]}]
+    captured = {}
+    original = plt.close
+    plt.close = lambda fig=None: captured.setdefault("fig", fig)
+    try:
+        name = line_chart(series, "Workers", "Execution time (s)", "t", str(tmp_path), "lines", "png", 60)
+    finally:
+        plt.close = original
+    ax = captured["fig"].axes[0]
+    assert len(captured["fig"].axes) == 1 and (tmp_path / name).exists()
+    assert ax.get_xscale() == "log"
+    assert [t.get_text() for t in ax.get_legend().get_texts()] == ["Arm A", "Arm B"]
+    caps = [c for c in ax.containers if hasattr(c, "has_yerr") and c.has_yerr]
+    assert len(caps) == 2

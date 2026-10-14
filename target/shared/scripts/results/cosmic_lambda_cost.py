@@ -24,11 +24,12 @@ from datetime import datetime
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from results.chart_cosmic_campaign import (
-    BAR_EDGE, BAR_LW, FONT_SIZE, PARTITION_COLORS, PARTITION_MARKERS, TITLE_SIZE, _legend_below, _save, line_chart,
+    BAR_EDGE, BAR_LW, FONT_SIZE, TITLE_SIZE, _legend_below, _save, line_chart, partition_series, subexperiment,
 )
-from results.cosmic_lambda_results import CONFIGURATION_FIELDS, REPORTED_PHASE, write_csv
+from results.cosmic_lambda_results import CONFIGURATION_FIELDS, REPORTED_PHASE, account_of, write_csv
 
 REPORT_QUERY = ('filter @type="REPORT" | stats count(*) as n, sum(@billedDuration) as billed_ms, '
                 'max(@memorySize) as mem by @log')
@@ -75,6 +76,18 @@ def collect_usage(rows, logs, log_groups, cache, slack_s, poll_s):
             cache[row["name"]] = query_billed_usage(logs, log_groups, _epoch(row["start"]), _epoch(row["stop"]),
                                                     slack_s, poll_s)
         usage[row["name"]] = cache[row["name"]]
+    return usage
+
+
+def collect_usage_by_account(rows, logs_by_account, default_logs, log_groups, cache, slack_s, poll_s):
+    """collect_usage with each execution queried in the logs of the account in its arn."""
+    groups = defaultdict(list)
+    for row in rows:
+        groups[account_of(row) if account_of(row) in logs_by_account else None].append(row)
+    usage = {}
+    for account, group in groups.items():
+        logs = logs_by_account[account] if account else default_logs
+        usage.update(collect_usage(group, logs, log_groups, cache, slack_s, poll_s))
     return usage
 
 
@@ -159,7 +172,7 @@ def render_cost_chart(executions, summary, output_dir, chart_format, dpi):
                 continue
             ax.bar([i + (k - (len(arms) - 1) / 2) * width for i, _ in present], [c["usd_mean"] for _, c in present],
                    width, color=ARM_BAR_COLORS.get((arm, variant), VARIANT_BAR_COLOR), edgecolor=BAR_EDGE,
-                   linewidth=BAR_LW, label=f"Arm {arm}" + (f" ({variant})" if variant else ""))
+                   linewidth=BAR_LW, label=subexperiment(arm) + (f" ({variant})" if variant else ""))
         ax.set_xticks(range(len(configurations)))
         ax.set_xticklabels([f"{d:g}\n({w})" for d, w in configurations])
         ax.set_xlabel("Dataset size in GB (workers)", fontsize=FONT_SIZE)
@@ -167,17 +180,12 @@ def render_cost_chart(executions, summary, output_dir, chart_format, dpi):
         ax.set_title(f"Billed Lambda cost per execution, {partition} MB partitions", fontsize=TITLE_SIZE)
         _legend_below(ax, ncol=min(len(arms), 3), anchor=(0.5, -0.3))
         files.append(_save(fig, output_dir, f"exp2_lambda_cost_{partition}MB", chart_format, dpi))
-    ratios = [r for r in cost_ratio_by_run_group(executions) if r["series"] == "scaling"]
-    sizes = sorted({r["data_gb"] for r in ratios})
-    series = []
-    for partition in sorted({r["partition_mb"] for r in ratios}):
-        by_size = {r["data_gb"]: r for r in ratios if r["partition_mb"] == partition}
-        series.append((f"{partition} MB partitions", PARTITION_COLORS.get(partition),
-                       PARTITION_MARKERS.get(partition, "o"),
-                       [by_size[s]["cost_ratio_mean"] if s in by_size else float("nan") for s in sizes],
-                       [by_size[s]["cost_ratio_std"] if s in by_size else None for s in sizes]))
-    files.append(line_chart(series, [f"{s:g}" for s in sizes], "Dataset size (GB)", "Arm B cost / Arm A cost",
-                            "Lambda cost of direct communication relative to S3", output_dir,
+    ratios = pd.DataFrame([r for r in cost_ratio_by_run_group(executions) if r["series"] == "scaling"])
+    series = partition_series(ratios, ("cost ratio", "-", "o"), "cost_ratio_mean", "cost_ratio_std")
+    for s in series:
+        s["label"] = f"{s['partition']} MB partitions"
+    files.append(line_chart(series, "Workers (log2)", f"{subexperiment('B')} cost / {subexperiment('A')} cost",
+                            "Lambda cost of direct communication relative to S3, per run group", output_dir,
                             "exp2_lambda_cost_ratio", chart_format, dpi))
     return files
 
@@ -223,8 +231,15 @@ def build_parser():
                    help="seconds after an execution's stop that its REPORT records may still arrive")
     p.add_argument("--poll-s", type=float, default=1.0)
     p.add_argument("--profile", default="cylon")
+    p.add_argument("--account", action="append", default=[], type=_account_profile, metavar="ACCOUNT_ID=PROFILE",
+                   help="query executions whose arn is in ACCOUNT_ID with PROFILE; others use --profile")
     p.add_argument("--region", default="us-east-1")
     return p
+
+
+def _account_profile(spec):
+    account, profile = spec.split("=", 1)
+    return account, profile
 
 
 def main(argv=None):
@@ -236,9 +251,13 @@ def main(argv=None):
             cache = json.load(handle)
     if any(r["status"] == "SUCCEEDED" and r["name"] not in cache for r in rows):
         import boto3
-        logs = boto3.Session(profile_name=args.profile).client("logs", region_name=args.region)
+        def logs_client(profile):
+            return boto3.Session(profile_name=profile).client("logs", region_name=args.region)
+
+        logs_by_account = {account: logs_client(profile) for account, profile in args.account}
         try:
-            collect_usage(rows, logs, args.log_groups, cache, args.window_slack_s, args.poll_s)
+            collect_usage_by_account(rows, logs_by_account, logs_client(args.profile), args.log_groups, cache,
+                                     args.window_slack_s, args.poll_s)
         finally:
             with open(args.usage_cache, "w") as handle:
                 json.dump(cache, handle, indent=1)

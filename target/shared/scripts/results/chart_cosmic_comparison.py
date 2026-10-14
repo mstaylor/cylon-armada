@@ -23,12 +23,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from results.chart_cosmic_campaign import (
-    BAR_EDGE, BAR_LW, FONT_SIZE, PARTITION_COLORS, PARTITION_MARKERS, SERIES_STYLES, TITLE_SIZE, _legend_below,
-    _save, data_size_ticks, line_chart, published_seconds,
+    BAR_EDGE, BAR_LW, FONT_SIZE, SYSTEM_LINES, TITLE_SIZE, _legend_below, _save, by_partition, line_chart,
+    partition_series, published_seconds, subexperiment,
 )
 
 ARM_COLORS = {"A": "#1f77b4", "B": "#2ca02c"}
-EXPERIMENT_COLORS = {"exp1": "#7f7f7f", "exp2": "#ff7f0e"}
 CONFIGURATION = ["series", "partition_mb", "data_gb", "batch_size", "workers"]
 
 
@@ -116,53 +115,48 @@ def _published_means(published):
                              "mean": "published_mean_s", "std": "published_std_s"}))
 
 
-def chart_arm_scaling(joined, published, output_dir, chart_format, dpi):
-    """One line chart per partition size: published, Arm A and Arm B execution time by data size."""
+def chart_execution_time(joined, published, output_dir, chart_format, dpi):
+    """Execution time against workers for the published runs, Arm A and Arm B on one plot: color is the
+    partition size, line style and marker the system, error bars the sample std across measured runs."""
     rows = joined[joined.series == "scaling"].merge(_published_means(published), on=["partition_mb", "data_gb"],
                                                     how="left")
-    files = []
-    for partition in sorted(rows.partition_mb.unique()):
-        part = rows[rows.partition_mb == partition].sort_values("data_gb")
-        series = [(*SERIES_STYLES["published"], part.published_mean_s, part.published_std_s),
-                  (*SERIES_STYLES["A"], part.a_mean_s, part.a_std_s),
-                  (*SERIES_STYLES["B"], part.b_mean_s, part.b_std_s)]
-        files.append(line_chart(series, data_size_ticks(part), "Dataset size in GB (workers)", "Execution time (s)",
-                                f"S3 against direct communication, {partition} MB partitions",
-                                output_dir, f"exp2_scaling_{partition}MB", chart_format, dpi))
-    return files
+    series = by_partition(partition_series(rows, SYSTEM_LINES["published"], "published_mean_s", "published_std_s"),
+                          partition_series(rows, SYSTEM_LINES["A"], "a_mean_s", "a_std_s"),
+                          partition_series(rows, SYSTEM_LINES["B"], "b_mean_s", "b_std_s"))
+    return line_chart(series, "Workers (log2)", "Execution time (s)",
+                      f"Cosmic AI on Lambda, S3 ({subexperiment('A')}) against direct communication "
+                      f"({subexperiment('B')})",
+                      output_dir, "exp2_execution_time_vs_workers", chart_format, dpi)
 
 
 def chart_speedup(joined, output_dir, chart_format, dpi):
-    """Speedup of Arm B over Arm A by data size, one line per partition size: the mean over run groups
+    """Speedup of Arm B over Arm A against workers, one line per partition size: the mean over run groups
     with the sample std across them when per-run results are available, the ratio of means otherwise."""
     rows = joined[joined.series == "scaling"]
     per_run = "run_speedup_mean" in rows
-    sizes = sorted(rows.data_gb.unique())
-    series = []
-    for partition in sorted(rows.partition_mb.unique()):
-        part = rows[rows.partition_mb == partition].set_index("data_gb").reindex(sizes)
-        means = part.run_speedup_mean if per_run else part.speedup
-        series.append((f"{partition} MB partitions", PARTITION_COLORS.get(partition),
-                       PARTITION_MARKERS.get(partition, "o"), means, part.run_speedup_std if per_run else None))
-    return line_chart(series, [f"{s:g}" for s in sizes], "Dataset size (GB)",
-                      "Speedup of Arm B over Arm A (A time / B time)",
-                      "Direct communication against S3", output_dir, "exp2_speedup", chart_format, dpi)
+    style = ("speedup", "-", "o")
+    series = partition_series(rows, style, "run_speedup_mean" if per_run else "speedup",
+                              "run_speedup_std" if per_run else None)
+    for s in series:
+        s["label"] = f"{s['partition']} MB partitions"
+    return line_chart(series, "Workers (log2)", f"Speedup of {subexperiment('B')} over A (A time / B time)",
+                      "Direct communication against S3: speedup per run group", output_dir, "exp2_speedup",
+                      chart_format, dpi)
+
+
+EXPERIMENT_LINES = {"exp1": ("Experiment 1 (hand-built inputs)", "-", "o"),
+                    "exp2": ("Experiment 2 (agent-planned inputs)", "--", "s")}
 
 
 def chart_agent_cost(experiments, arm, output_dir, chart_format, dpi):
-    """One line chart per partition size: Arm `arm` with hand-built against agent-planned inputs."""
+    """Arm `arm` with hand-built against agent-planned inputs, one plot: color is the partition size, line
+    style and marker the experiment."""
     rows = experiments[experiments.series == "scaling"]
-    files = []
-    for partition in sorted(rows.partition_mb.unique()):
-        part = rows[rows.partition_mb == partition].sort_values("data_gb")
-        series = [("Experiment 1 (hand-built inputs)", EXPERIMENT_COLORS["exp1"], "o", part.exp1_mean_s,
-                   part.exp1_std_s),
-                  ("Experiment 2 (agent-planned inputs)", EXPERIMENT_COLORS["exp2"], "^", part.exp2_mean_s,
-                   part.exp2_std_s)]
-        files.append(line_chart(series, data_size_ticks(part), "Dataset size in GB (workers)", "Execution time (s)",
-                                f"With and without the planning agent (Arm {arm}), {partition} MB partitions",
-                                output_dir, f"exp1_vs_exp2_arm{arm}_{partition}MB", chart_format, dpi))
-    return files
+    series = by_partition(partition_series(rows, EXPERIMENT_LINES["exp1"], "exp1_mean_s", "exp1_std_s"),
+                          partition_series(rows, EXPERIMENT_LINES["exp2"], "exp2_mean_s", "exp2_std_s"))
+    return line_chart(series, "Workers (log2)", "Execution time (s)",
+                      f"With and without the planning agent ({subexperiment(arm)})", output_dir, f"exp1_vs_exp2_arm{arm}",
+                      chart_format, dpi)
 
 
 PLANNING_CHARTS = (("llm_calls_total", "LLM calls", "exp2_planning_llm_calls"),
@@ -180,12 +174,12 @@ def chart_planning(table, output_dir, chart_format, dpi):
         for k, arm in enumerate(arms):
             values = [table[(table.arm == arm) & (table.cache_mode == m)][column].sum() for m in modes]
             ax.bar([i + (k - (len(arms) - 1) / 2) * width for i in range(len(modes))], values, width,
-                   color=ARM_COLORS.get(arm), edgecolor=BAR_EDGE, linewidth=BAR_LW, label=f"Arm {arm}")
+                   color=ARM_COLORS.get(arm), edgecolor=BAR_EDGE, linewidth=BAR_LW, label=subexperiment(arm))
         ax.set_xticks(list(range(len(modes))))
         ax.set_xticklabels(modes)
         ax.set_xlabel("Plan cache mode", fontsize=FONT_SIZE)
         ax.set_ylabel(ylabel, fontsize=FONT_SIZE)
-        ax.set_title(f"Planning the campaign: {ylabel.lower()} by plan cache mode", fontsize=TITLE_SIZE)
+        ax.set_title(f"Planning the campaign, {ylabel.lower()} by plan cache mode", fontsize=TITLE_SIZE)
         _legend_below(ax, ncol=len(arms), anchor=(0.5, -0.3))
         files.append(_save(fig, output_dir, name, chart_format, dpi))
     return files
@@ -238,10 +232,10 @@ def render_all(summary, published, plans_root, output_dir, chart_format, dpi, pa
              _write_csv(experiments, output_dir, "exp1_vs_exp2_armA.csv"),
              _write_csv(table, output_dir, "exp2_planning_metrics.csv")]
     if (arms.series == "scaling").any():
-        files += chart_arm_scaling(arms, published, output_dir, chart_format, dpi)
+        files.append(chart_execution_time(arms, published, output_dir, chart_format, dpi))
         files.append(chart_speedup(arms, output_dir, chart_format, dpi))
     if (experiments.series == "scaling").any():
-        files += chart_agent_cost(experiments, "A", output_dir, chart_format, dpi)
+        files.append(chart_agent_cost(experiments, "A", output_dir, chart_format, dpi))
     if len(table):
         files += chart_planning(table, output_dir, chart_format, dpi)
     if pair_latency is not None and len(pair_latency):

@@ -108,6 +108,9 @@ class FMIBridge:
                           armada.topology.format_peer_map(), restricting the
                           channel to the peers the compiled plan actually uses
                           instead of the full N(N-1)/2 mesh. None keeps the mesh.
+        gather_topology:  Gatherv payload algorithm exported as FMI_GATHER_TOPOLOGY
+                          ('linear' or 'binomial'); must match the topology
+                          required_peers was built for. None leaves cylon's default.
     """
 
     def __init__(self, world_size, rank, channel_type="redis",
@@ -115,7 +118,7 @@ class FMIBridge:
                  redis_host="", redis_port=6379,
                  comm_name="cylon_armada", maxtimeout=120000,
                  enableping=False, nonblocking=True, advertise_host="",
-                 required_peers=None):
+                 required_peers=None, gather_topology=None):
         self.world_size = int(world_size)
         self.rank = int(rank)
 
@@ -157,6 +160,10 @@ class FMIBridge:
             os.environ["FMI_REQUIRED_PEERS"] = required_peers
         else:
             os.environ.pop("FMI_REQUIRED_PEERS", None)
+        if gather_topology:
+            os.environ["FMI_GATHER_TOPOLOGY"] = gather_topology
+        else:
+            os.environ.pop("FMI_GATHER_TOPOLOGY", None)
 
         port = int(listen_port) if self.channel_type == "direct-redis" else int(rendezvous_port)
 

@@ -135,8 +135,9 @@ def test_every_chart_and_table_is_written(tmp_path):
     paths = render_all(_summary(), _published(), str(plans), str(tmp_path / "out"), "png", 72,
                        runs=_runs([30.0, 33.0, 36.0], [20.0, 30.0, 24.0]))
     assert all((tmp_path / "out" / p).exists() for p in paths)
-    assert {"exp2_scaling_25MB.png", "exp2_scaling_100MB.png", "exp2_speedup.png", "exp2_planning_llm_calls.png",
-            "exp2_planning_wrong_plans.png"} <= set(paths)
+    assert {"exp2_execution_time_vs_workers.png", "exp2_speedup.png", "exp1_vs_exp2_armA.png",
+            "exp2_planning_llm_calls.png", "exp2_planning_wrong_plans.png"} <= set(paths)
+    assert not any(p.startswith("exp2_scaling_") for p in paths)
 
 def test_rendering_works_before_both_arms_share_a_scaling_configuration(tmp_path):
     summary = _summary()

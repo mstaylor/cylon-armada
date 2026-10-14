@@ -26,7 +26,6 @@ BAR_LW = 0.8
 CAPSIZE = 5
 STAGE_COLORS = {"inference": "#1f77b4", "collect": "#d62728", "other": "#bdbdbd"}
 PARTITION_COLORS = {25: "#d62728", 50: "#ff7f0e", 75: "#1f77b4", 100: "#2ca02c"}
-PARTITION_MARKERS = {25: "o", 50: "s", 75: "^", 100: "D"}
 
 plt.rcParams.update({"figure.facecolor": "white", "axes.facecolor": "white",
                      "savefig.facecolor": "white", "axes.grid": False})
@@ -55,31 +54,53 @@ def _legend_below(ax_or_fig, handles=None, labels=None, ncol=2, anchor=(0.5, -0.
     ax_or_fig.legend(**kwargs)
 
 
-SERIES_STYLES = {"published": ("Published", "#7f7f7f", "o"), "A": ("Arm A (S3)", "orange", "D"),
-                 "B": ("Arm B (direct communication)", "green", "s")}
+def subexperiment(arm):
+    return f"Subexperiment {arm}"
 
 
-def line_chart(series, tick_labels, xlabel, ylabel, title, output_dir, name, chart_format, dpi):
-    """One plot, evenly spaced categories, one line per series with the run-group std as error bars.
+SYSTEM_LINES = {"published": ("Published", ":", "^"), "A": (f"{subexperiment('A')} (S3)", "-", "o"),
+                "B": (f"{subexperiment('B')} (direct communication)", "--", "s")}
 
-    `series` is a list of (label, color, marker, means, stds); a std of None draws no error bar.
+
+def line_chart(series, xlabel, ylabel, title, output_dir, name, chart_format, dpi, legend_ncol=4):
+    """One plot in the style of chart_collectives_compare: one errorbar line per series on a log2 x axis.
+
+    Each series is a dict with label, color, marker, linestyle, x, y and yerr (the sample std across the
+    run group's measured runs, None where a point has no spread).
     """
-    fig, ax = plt.subplots(figsize=(10, 6))
-    x = [str(t) for t in tick_labels]
-    for label, color, marker, means, stds in series:
-        ax.plot(x, means, marker=marker, color=color, label=label, linewidth=2)
-        if stds is not None:
-            ax.errorbar(x, means, yerr=[0 if pd.isna(s) else s for s in stds], fmt="none", color=color,
-                        capsize=CAPSIZE)
+    fig, ax = plt.subplots(figsize=(11, 7))
+    for s in series:
+        err = [0.0 if e is None or pd.isna(e) else float(e) for e in s["yerr"]]
+        ax.errorbar(list(s["x"]), list(s["y"]), yerr=err if any(err) else None, marker=s["marker"],
+                    linestyle=s["linestyle"], color=s["color"], lw=2, capsize=CAPSIZE, label=s["label"])
+    ax.set_xscale("log", base=2)
+    ax.minorticks_off()
     ax.set_xlabel(xlabel, fontsize=FONT_SIZE)
     ax.set_ylabel(ylabel, fontsize=FONT_SIZE)
     ax.set_title(title, fontsize=TITLE_SIZE)
-    _legend_below(ax, ncol=len(series) if len(series) <= 3 else 2, anchor=(0.5, -0.3))
+    ncol = min(legend_ncol, len(series))
+    rows = -(-len(series) // ncol)
+    ax.legend(fontsize=LEGEND_SIZE - 1, ncol=ncol, loc="lower center", bbox_to_anchor=(0.5, -0.14 - 0.06 * rows),
+              frameon=True)
     return _save(fig, output_dir, name, chart_format, dpi)
 
 
-def data_size_ticks(rows):
-    return [f"{d:g}\n({w})" for d, w in zip(rows.data_gb, rows.workers)]
+def partition_series(rows, style, y, yerr):
+    """One series per partition size; color is the partition, and `style` (label, line style, marker) the system."""
+    label, linestyle, marker = style
+    series = []
+    for partition in sorted(rows.partition_mb.unique()):
+        part = rows[rows.partition_mb == partition].sort_values("workers")
+        series.append({"label": f"{partition} MB, {label}", "color": PARTITION_COLORS.get(partition, "#333333"),
+                       "marker": marker, "linestyle": linestyle, "x": part.workers, "y": part[y],
+                       "yerr": part[yerr] if yerr else [None] * len(part), "partition": partition})
+    return series
+
+
+def by_partition(*series_lists):
+    """Interleave series so each legend column holds one partition size."""
+    merged = [s for group in series_lists for s in group]
+    return sorted(merged, key=lambda s: s["partition"])
 
 
 def _save(fig, output_dir, name, chart_format, dpi):
@@ -91,17 +112,11 @@ def _save(fig, output_dir, name, chart_format, dpi):
 
 
 def chart_reproduction(joined, output_dir, chart_format, dpi):
-    files = []
-    for partition in sorted(joined.partition_mb.unique()):
-        rows = joined[joined.partition_mb == partition].sort_values("data_gb")
-        published, ours = SERIES_STYLES["published"], SERIES_STYLES["A"]
-        files.append(line_chart(
-            [(published[0], published[1], published[2], rows.published_mean_s, rows.published_std_s),
-             ("This reproduction", ours[1], ours[2], rows.duration_s_mean, rows.duration_s_std)],
-            data_size_ticks(rows), "Dataset size in GB (workers)", "Execution time (s)",
-            f"Reproduction against the published runs, {partition} MB partitions",
-            output_dir, f"exp1_vs_published_{partition}MB", chart_format, dpi))
-    return files
+    series = by_partition(partition_series(joined, SYSTEM_LINES["published"], "published_mean_s", "published_std_s"),
+                          partition_series(joined, SYSTEM_LINES["A"], "duration_s_mean", "duration_s_std"))
+    return line_chart(series, "Workers (log2)", "Execution time (s)",
+                      f"Cosmic AI on Lambda, reproduction ({subexperiment('A')}) against the published runs",
+                      output_dir, "exp1_vs_published", chart_format, dpi)
 
 
 def chart_breakdown(summary, output_dir, chart_format, dpi):
@@ -121,7 +136,7 @@ def chart_breakdown(summary, output_dir, chart_format, dpi):
     ax.set_xticklabels([str(w) for w in rows.workers])
     ax.set_xlabel("Workers", fontsize=FONT_SIZE)
     ax.set_ylabel("Time (s)", fontsize=FONT_SIZE)
-    ax.set_title(f"Where the time goes, {int(rows.partition_mb.iloc[0])} MB partitions (Arm A)",
+    ax.set_title(f"Where the time goes, {int(rows.partition_mb.iloc[0])} MB partitions ({subexperiment('A')})",
                  fontsize=TITLE_SIZE)
     _legend_below(ax, ncol=3)
     return _save(fig, output_dir, "exp1_time_breakdown", chart_format, dpi)
@@ -129,31 +144,27 @@ def chart_breakdown(summary, output_dir, chart_format, dpi):
 
 def chart_collect_scaling(summary, output_dir, chart_format, dpi):
     rows = summary[(summary.series == "scaling") & (summary.phase == "measured")]
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for partition in sorted(rows.partition_mb.unique()):
-        series = rows[rows.partition_mb == partition].sort_values("workers")
-        ax.plot(series.workers, series.collect_s_mean, marker="o", color=PARTITION_COLORS.get(partition),
-                markeredgecolor=BAR_EDGE, label=f"{partition} MB partitions")
-    ax.set_xlabel("Workers", fontsize=FONT_SIZE)
-    ax.set_ylabel("Result collection time (s)", fontsize=FONT_SIZE)
-    ax.set_title("Result collection grows linearly with workers (Arm A, S3)", fontsize=TITLE_SIZE)
-    _legend_below(ax, ncol=4)
-    return _save(fig, output_dir, "exp1_collect_scaling", chart_format, dpi)
+    yerr = "collect_s_std" if "collect_s_std" in rows else None
+    return line_chart(partition_series(rows, SYSTEM_LINES["A"], "collect_s_mean", yerr), "Workers (log2)",
+                      "Result collection time (s)", f"Result collection grows with workers ({subexperiment('A')}, S3)",
+                      output_dir, "exp1_collect_scaling", chart_format, dpi)
 
 
 def chart_batch_sweep(summary, output_dir, chart_format, dpi):
     rows = summary[(summary.series == "batch") & (summary.phase == "measured")].sort_values("batch_size")
     first = rows.iloc[0] if len(rows) else None
     where = f", {int(first.partition_mb)} MB partitions, {first.data_gb:g} GB" if first is not None else ""
-    ours = SERIES_STYLES["A"]
-    return line_chart([("Arm A (S3)", ours[1], ours[2], rows.duration_s_mean, rows.duration_s_std)],
-                      list(rows.batch_size), "Batch size", "Execution time (s)", f"Batch size sweep{where}",
+    label, linestyle, marker = SYSTEM_LINES["A"]
+    series = [{"label": label, "color": PARTITION_COLORS.get(int(first.partition_mb)) if first is not None else None,
+               "marker": marker, "linestyle": linestyle, "x": rows.batch_size, "y": rows.duration_s_mean,
+               "yerr": rows.duration_s_std}]
+    return line_chart(series, "Batch size (log2)", "Execution time (s)", f"Batch size sweep{where}",
                       output_dir, "exp1_batch_sweep", chart_format, dpi)
 
 
 def render_all(summary, published, output_dir, chart_format, dpi):
     joined = compare_with_published(summary, published)
-    return [*chart_reproduction(joined, output_dir, chart_format, dpi),
+    return [chart_reproduction(joined, output_dir, chart_format, dpi),
             chart_breakdown(summary, output_dir, chart_format, dpi),
             chart_collect_scaling(summary, output_dir, chart_format, dpi),
             chart_batch_sweep(summary, output_dir, chart_format, dpi)]

@@ -27,6 +27,14 @@ ENVIRONMENT_FIELDS = {
     'fmi_tcpunch_max_tries': 'FMI_TCPUNCH_MAX_TRIES',
     'cylon_log_level': 'CYLON_LOG_LEVEL',
     'fmi_establish_parallelism': 'FMI_ESTABLISH_PARALLELISM',
+    'fmi_gather_topology': 'FMI_GATHER_TOPOLOGY',
+    'arm_b_sync_mode': 'ARM_B_SYNC_MODE',
+    'fmi_finalize_linger_s': 'FMI_FINALIZE_LINGER_S',
+}
+
+ALLOWED_VALUES = {
+    'fmi_gather_topology': ('linear', 'binomial'),
+    'arm_b_sync_mode': ('barrier', 'early_exit'),
 }
 
 
@@ -50,6 +58,12 @@ def validate_event(event):
     ]
     if missing:
         raise InvalidFMIEvent(f'Arm B execution input is missing {missing} (result_path={event.get("result_path")})')
+    invalid = [
+        f'{field}={event[field]!r} (expected one of {allowed})' for field, allowed in ALLOWED_VALUES.items()
+        if event[field] not in allowed
+    ]
+    if invalid:
+        raise InvalidFMIEvent(f'Arm B execution input has {invalid} (result_path={event.get("result_path")})')
 
 
 def lambda_handler(event, context):
@@ -109,6 +123,9 @@ def lambda_handler(event, context):
             'FMI_TCPUNCH_MAX_TRIES': str(event['fmi_tcpunch_max_tries']),
             'CYLON_LOG_LEVEL': str(event['cylon_log_level']),
             'FMI_ESTABLISH_PARALLELISM': str(event['fmi_establish_parallelism']),
+            'FMI_GATHER_TOPOLOGY': event['fmi_gather_topology'],
+            'ARM_B_SYNC_MODE': event['arm_b_sync_mode'],
+            'FMI_FINALIZE_LINGER_S': str(event['fmi_finalize_linger_s']),
         }
         for rank in range(world_size)
     ]
