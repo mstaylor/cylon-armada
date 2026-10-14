@@ -211,7 +211,7 @@ def chart_barrier_vs_n_compare(rows, output_dir, chart_format, chart_dpi):
     ax.set_xticklabels([str(n) for n in ns])
     ax.set_xlabel("World size N", fontsize=FONT_SIZE)
     ax.set_ylabel("Barrier P50 latency (ms)", fontsize=FONT_SIZE)
-    ax.set_title("Barrier synchronization latency vs N — Rivanna vs Fargate", fontsize=TITLE_SIZE)
+    ax.set_title("Barrier synchronization latency vs N, Rivanna vs Fargate", fontsize=TITLE_SIZE)
     _legend_below(ax, ncol=2, y=-0.28)
     return _save(fig, output_dir, "collectives_barrier_vs_N_rivanna_vs_fargate", chart_format, chart_dpi)
 

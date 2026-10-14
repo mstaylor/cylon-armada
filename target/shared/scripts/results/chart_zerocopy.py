@@ -133,7 +133,7 @@ def chart_memory_behavior(rows, output_dir, chart_format, chart_dpi):
     ax.set_xticks(list(x))
     ax.set_xticklabels(fmts, fontsize=TICK_SIZE, rotation=30, ha="right")
     ax.set_ylabel("Deserialize peak allocation (KB, log scale)", fontsize=FONT_SIZE)
-    ax.set_title(f"Memory copies on read  (N={n}, D={d}; payload = {payload_kb:,.0f} KB)",
+    ax.set_title(f"Memory copies on read (N={n}, D={d}, payload {payload_kb:,.0f} KB)",
                  fontsize=TITLE_SIZE)
     for i, (p, c) in enumerate(zip(peaks, copies)):
         ax.text(i, p * 1.3, f"{c} cop{'y' if str(c)=='1' else 'ies'}",
