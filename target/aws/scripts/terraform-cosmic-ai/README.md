@@ -90,24 +90,11 @@ Added to `inference.py`, `lambda_entry3.py`, and `summarizer.py`:
 
 ## Before `apply`
 
-1. Build and push the executor image (from the `cylon-armada` repo root).
-   Uses the same shared `cylon-armada` ECR repository name the rest of this
-   project uses (per `target/aws/scripts/terraform/variables.tf`'s
-   `ecr_repository_name` convention — one repo, one tag per image). It did
-   not exist yet in the `cosmicai` account as of this module's last real
-   `terraform plan` — `create-repository` is still in the commands below:
-   ```bash
-   docker build --platform=linux/amd64 \
-     -t cosmic-ai-executor \
-     -f docker/cosmic-ai-lambda/Dockerfile \
-     .
-
-   aws ecr get-login-password --profile cosmicai --region us-east-1 | \
-     docker login --username AWS --password-stdin 881908115028.dkr.ecr.us-east-1.amazonaws.com
-   aws ecr create-repository --profile cosmicai --region us-east-1 --repository-name cylon-armada
-   docker tag cosmic-ai-executor:latest 881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
-   docker push 881908115028.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
-   ```
+1. Build and push the executor image. The commands for both accounts, including the
+   repository and tag each one uses, are in `docs/CosmicAI_Account_Runbook.md` section 2b. The
+   cosmicai account uses repository `cosmic-ai-executor` with tag `latest`, and the cylon account
+   uses repository `cylon-armada` with tag `cosmic-ai-executor`, per the `accounts` map in
+   `variables.tf`.
 2. `executor_image_uri`'s default already matches the tag above, so no
    `terraform.tfvars` is required unless you tag differently.
 3. `terraform init && terraform plan` — last verified clean (10 to add, 0

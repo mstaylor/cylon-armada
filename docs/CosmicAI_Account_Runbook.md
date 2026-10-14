@@ -100,6 +100,46 @@ Expected: `sha256:8b8961b0eb25b2644226517afb8bf50302dfaab9449baf60dcacf038acff2b
 as the cylon account. If it is still `sha256:51341c34...`, the push did not land. If it is a third
 digest, the image was rebuilt rather than copied; pull by digest again.
 
+## 2b. Rebuild the executor image after a cylon change
+
+Section 2 copies an existing image. Rebuild instead when the executor needs new cylon C++, for
+example the binomial gatherv and the linger close behind `FMI_GATHER_TOPOLOGY` and
+`FMI_FINALIZE_LINGER_S` (see `docs/cosmic_campaign/ARM_B_EARLY_EXIT_TREE_GATHER.md`).
+
+The Dockerfile clones cylon from GitHub `main` (`docker/cosmic-ai-lambda/Dockerfile` line 148), not
+from the local checkout, so push the cylon change to `main` first. The Dockerfile also adds the `main`
+head ref, so a new commit invalidates the cache without `--no-cache`.
+
+Build from the cylon-armada repository root. Always build for `linux/amd64`, because the dev VM is
+aarch64 and the Lambdas run x86_64.
+
+```bash
+docker build --platform=linux/amd64 -t cosmic-ai-executor -f docker/cosmic-ai-lambda/Dockerfile .
+```
+
+Push to the cylon account (repository `cylon-armada`, tag `cosmic-ai-executor`, from the `accounts`
+map in `target/aws/scripts/terraform-cosmic-ai/variables.tf`).
+
+```bash
+aws ecr get-login-password --region us-east-1 --profile cylon | \
+  docker login --username AWS --password-stdin 448324707516.dkr.ecr.us-east-1.amazonaws.com
+docker tag cosmic-ai-executor:latest 448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
+docker push 448324707516.dkr.ecr.us-east-1.amazonaws.com/cylon-armada:cosmic-ai-executor
+```
+
+Push to the cosmicai account (repository `cosmic-ai-executor`, tag `latest`).
+
+```bash
+aws ecr get-login-password --region us-east-1 --profile cosmicai-admin | \
+  docker login --username AWS --password-stdin 881908115028.dkr.ecr.us-east-1.amazonaws.com
+docker tag cosmic-ai-executor:latest 881908115028.dkr.ecr.us-east-1.amazonaws.com/cosmic-ai-executor:latest
+docker push 881908115028.dkr.ecr.us-east-1.amazonaws.com/cosmic-ai-executor:latest
+```
+
+Both pushes should report the same digest. Then run section 4 in each account's workspace so
+Terraform resolves the new digest. The new settings default to today's behaviour, so the apply alone
+changes nothing until a run sets them.
+
 ## 3. Optional: keep a copy of the files the apply replaces
 
 The apply overwrites two objects in the bucket: `Anomaly Detection/Inference/inference.py` (an old

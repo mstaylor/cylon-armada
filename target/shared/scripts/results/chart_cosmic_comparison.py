@@ -140,7 +140,7 @@ def chart_speedup(joined, output_dir, chart_format, dpi):
     for s in series:
         s["label"] = f"{s['partition']} MB partitions"
     return line_chart(series, "Workers (log2)", f"Speedup of {subexperiment('B')} over A (A time / B time)",
-                      "Direct communication against S3: speedup per run group", output_dir, "exp2_speedup",
+                      "Direct communication against S3, speedup per run group", output_dir, "exp2_speedup",
                       chart_format, dpi)
 
 
