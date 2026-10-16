@@ -383,7 +383,7 @@ variable "cosmic_ai_fmi_establish_parallelism" {
 variable "cosmic_ai_fmi_gather_topology" {
   description = "Arm B gatherv payload algorithm: linear (every rank sends to rank 0) or binomial (tree, rank 0 receives O(log N) messages). binomial needs an executor image whose cylon has the binomial gatherv"
   type        = string
-  default     = "linear"
+  default     = "binomial"
 
   validation {
     condition     = contains(["linear", "binomial"], var.cosmic_ai_fmi_gather_topology)
@@ -394,7 +394,7 @@ variable "cosmic_ai_fmi_gather_topology" {
 variable "cosmic_ai_arm_b_sync_mode" {
   description = "Arm B rank flow: barrier (connect, barrier, partition map broadcast, infer, barrier, gather) or early_exit (read the partition from the S3 payload as Arm A does, infer, then connect and gather, no barriers)"
   type        = string
-  default     = "barrier"
+  default     = "early_exit"
 
   validation {
     condition     = contains(["barrier", "early_exit"], var.cosmic_ai_arm_b_sync_mode)
@@ -405,7 +405,7 @@ variable "cosmic_ai_arm_b_sync_mode" {
 variable "cosmic_ai_fmi_finalize_linger_s" {
   description = "Seconds each Arm B socket close waits for the peer's TCP acknowledgement of all sent data (SO_LINGER); 0 closes immediately. Positive values need an executor image whose cylon supports FMI_FINALIZE_LINGER_S"
   type        = number
-  default     = 0
+  default     = 5
 
   validation {
     condition     = var.cosmic_ai_fmi_finalize_linger_s >= 0
