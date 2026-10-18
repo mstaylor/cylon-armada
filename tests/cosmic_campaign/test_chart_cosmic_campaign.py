@@ -59,3 +59,55 @@ def test_a_line_chart_draws_every_series_with_its_error_bars_on_one_plot(tmp_pat
     assert [t.get_text() for t in ax.get_legend().get_texts()] == ["Arm A", "Arm B"]
     caps = [c for c in ax.containers if hasattr(c, "has_yerr") and c.has_yerr]
     assert len(caps) == 2
+
+def test_the_paper_version_published_file_gives_seconds_per_run_without_the_mean_rows():
+    from results.chart_cosmic_campaign import normalize_published
+    paper = pd.DataFrame({"partition (MB)": [25, 25, 25], "data (GB)": [1.0, 1.0, 1.0], "run": ["1", "2", "mean"],
+                          "total_duration (s)": [20.0, 22.0, 21.0], "inference_duration (s)": [15.0, 16.0, 15.5]})
+    rows = normalize_published(paper)
+    assert list(rows.columns) == ["partition_mb", "data_gb", "run", "seconds"]
+    assert rows.seconds.tolist() == [20.0, 22.0]
+
+
+def test_the_console_published_file_gives_seconds_per_run():
+    from results.chart_cosmic_campaign import normalize_published
+    rows = normalize_published(_published())
+    assert rows.seconds.tolist() == [26.0, 28.0, 62.5, 32.64]
+    assert rows.partition_mb.tolist() == [25, 25, 25, 100]
+
+
+def test_partition_panels_draw_one_panel_per_partition_with_every_system(tmp_path):
+    from results.chart_cosmic_campaign import partition_panels
+    import matplotlib.pyplot as plt
+    rows = pd.DataFrame({"partition_mb": [25, 25, 100], "data_gb": [1.0, 2.0, 1.0], "workers": [41, 82, 11],
+                         "a": [20.0, 22.0, 30.0], "a_std": [1.0, 1.0, 2.0], "b": [19.0, 20.0, 31.0],
+                         "b_std": [0.5, None, 1.0]})
+    lines = [("A", "a", "a_std"), ("B", "b", "b_std")]
+    captured = {}
+    original = plt.close
+    plt.close = lambda fig=None: captured.setdefault("fig", fig)
+    try:
+        name = partition_panels(rows, lines, "Execution time (s)", "t", str(tmp_path), "panels", "png", 60)
+    finally:
+        plt.close = original
+    axes = [ax for ax in captured["fig"].axes if ax.has_data()]
+    assert (tmp_path / name).exists() and len(axes) == 2
+    assert [ax.get_title() for ax in axes] == ["25 MB partitions", "100 MB partitions"]
+    assert [t.get_text() for t in axes[0].get_xticklabels()] == ["1\n(41)", "2\n(82)"]
+    assert all(len(ax.get_lines()) >= 2 for ax in axes)
+
+
+def test_partition_panels_share_one_y_scale(tmp_path):
+    from results.chart_cosmic_campaign import partition_panels
+    import matplotlib.pyplot as plt
+    rows = pd.DataFrame({"partition_mb": [25, 100], "data_gb": [1.0, 1.0], "workers": [41, 11],
+                         "a": [20.0, 60.0], "a_std": [None, 1.0]})
+    captured = {}
+    original = plt.close
+    plt.close = lambda fig=None: captured.setdefault("fig", fig)
+    try:
+        partition_panels(rows, [("A", "a", "a_std")], "s", "t", str(tmp_path), "shared", "png", 60)
+    finally:
+        plt.close = original
+    first, second = [ax for ax in captured["fig"].axes if ax.has_data()]
+    assert first.get_ylim() == second.get_ylim()

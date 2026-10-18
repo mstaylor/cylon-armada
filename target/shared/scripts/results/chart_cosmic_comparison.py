@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from results.chart_cosmic_campaign import (
-    BAR_EDGE, BAR_LW, FONT_SIZE, SYSTEM_LINES, TITLE_SIZE, _legend_below, _save, by_partition, line_chart,
-    partition_series, published_seconds, subexperiment,
+    BAR_EDGE, BAR_LW, FONT_SIZE, TITLE_SIZE, _legend_below, _save, by_partition, line_chart, partition_panels,
+    partition_series, published_means, subexperiment,
 )
 
 ARM_COLORS = {"A": "#1f77b4", "B": "#2ca02c"}
@@ -108,40 +108,28 @@ def planning_table(plans_root):
     return pd.DataFrame(rows)
 
 
-def _published_means(published):
-    pub = published.assign(seconds=published_seconds(published["duration"]))
-    return (pub.groupby(["partition(MB)", "data(GB)"])["seconds"].agg(["mean", "std"]).reset_index()
-            .rename(columns={"partition(MB)": "partition_mb", "data(GB)": "data_gb",
-                             "mean": "published_mean_s", "std": "published_std_s"}))
-
-
 def chart_execution_time(joined, published, output_dir, chart_format, dpi):
-    """Execution time against workers for the published runs, Arm A and Arm B on one plot: color is the
-    partition size, line style and marker the system, error bars the sample std across measured runs."""
-    rows = joined[joined.series == "scaling"].merge(_published_means(published), on=["partition_mb", "data_gb"],
-                                                    how="left")
-    series = by_partition(partition_series(rows, SYSTEM_LINES["published"], "published_mean_s", "published_std_s"),
-                          partition_series(rows, SYSTEM_LINES["A"], "a_mean_s", "a_std_s"),
-                          partition_series(rows, SYSTEM_LINES["B"], "b_mean_s", "b_std_s"))
-    return line_chart(series, "Workers (log2)", "Execution time (s)",
-                      f"Cosmic AI on Lambda, S3 ({subexperiment('A')}) against direct communication "
-                      f"({subexperiment('B')})",
-                      output_dir, "exp2_execution_time_vs_workers", chart_format, dpi)
+    """End to end time against dataset size for the published runs, Arm A and Arm B, one panel per partition
+    size, error bars the sample std across measured runs."""
+    rows = joined[joined.series == "scaling"].merge(
+        published_means(published)[["partition_mb", "data_gb", "published_mean_s", "published_std_s"]],
+        on=["partition_mb", "data_gb"], how="left")
+    return partition_panels(rows, [("published", "published_mean_s", "published_std_s"), ("A", "a_mean_s", "a_std_s"),
+                                   ("B", "b_mean_s", "b_std_s")], "End to end time (s)",
+                            f"Cosmic AI on Lambda, S3 ({subexperiment('A')}) against direct communication "
+                            f"({subexperiment('B')})", output_dir, "exp2_execution_time_vs_workers", chart_format, dpi)
 
 
 def chart_speedup(joined, output_dir, chart_format, dpi):
-    """Speedup of Arm B over Arm A against workers, one line per partition size: the mean over run groups
+    """Speedup of Arm B over Arm A against dataset size, one panel per partition size: the mean over run groups
     with the sample std across them when per-run results are available, the ratio of means otherwise."""
     rows = joined[joined.series == "scaling"]
     per_run = "run_speedup_mean" in rows
-    style = ("speedup", "-", "o")
-    series = partition_series(rows, style, "run_speedup_mean" if per_run else "speedup",
-                              "run_speedup_std" if per_run else None)
-    for s in series:
-        s["label"] = f"{s['partition']} MB partitions"
-    return line_chart(series, "Workers (log2)", f"Speedup of {subexperiment('B')} over A (A time / B time)",
-                      "Direct communication against S3, speedup per run group", output_dir, "exp2_speedup",
-                      chart_format, dpi)
+    return partition_panels(rows, [("speedup", "run_speedup_mean" if per_run else "speedup",
+                                    "run_speedup_std" if per_run else None)],
+                            "Speedup (A time / B time)",
+                            f"Speedup of {subexperiment('B')} (direct communication) over {subexperiment('A')} (S3)",
+                            output_dir, "exp2_speedup", chart_format, dpi)
 
 
 EXPERIMENT_LINES = {"exp1": ("Experiment 1 (hand-built inputs)", "-", "o"),

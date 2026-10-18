@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from results.chart_cosmic_campaign import (
-    BAR_EDGE, BAR_LW, FONT_SIZE, TITLE_SIZE, _legend_below, _save, line_chart, partition_series, subexperiment,
+    BAR_EDGE, BAR_LW, FONT_SIZE, TITLE_SIZE, _legend_below, _save, partition_panels, subexperiment,
 )
 from results.cosmic_lambda_results import CONFIGURATION_FIELDS, REPORTED_PHASE, account_of, write_csv
 
@@ -181,12 +181,10 @@ def render_cost_chart(executions, summary, output_dir, chart_format, dpi):
         _legend_below(ax, ncol=min(len(arms), 3), anchor=(0.5, -0.3))
         files.append(_save(fig, output_dir, f"exp2_lambda_cost_{partition}MB", chart_format, dpi))
     ratios = pd.DataFrame([r for r in cost_ratio_by_run_group(executions) if r["series"] == "scaling"])
-    series = partition_series(ratios, ("cost ratio", "-", "o"), "cost_ratio_mean", "cost_ratio_std")
-    for s in series:
-        s["label"] = f"{s['partition']} MB partitions"
-    files.append(line_chart(series, "Workers (log2)", f"{subexperiment('B')} cost / {subexperiment('A')} cost",
-                            "Lambda cost of direct communication relative to S3, per run group", output_dir,
-                            "exp2_lambda_cost_ratio", chart_format, dpi))
+    files.append(partition_panels(ratios, [("cost_ratio", "cost_ratio_mean", "cost_ratio_std")],
+                                  f"{subexperiment('B')} cost / {subexperiment('A')} cost",
+                                  "Lambda cost of direct communication relative to S3, per run group", output_dir,
+                                  "exp2_lambda_cost_ratio", chart_format, dpi))
     return files
 
 

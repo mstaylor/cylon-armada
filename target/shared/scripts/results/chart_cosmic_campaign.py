@@ -36,11 +36,27 @@ def published_seconds(durations):
     return parts[0] * 60 + parts[1]
 
 
+def normalize_published(published):
+    """Published end to end seconds per run, from either the console export total_execution_time.csv or the
+    paper version result_stats_adjusted.csv (Step Functions total_duration per run, with mean rows)."""
+    if "total_duration (s)" in published:
+        runs = published[published.run.astype(str) != "mean"]
+        rows = pd.DataFrame({"partition_mb": runs["partition (MB)"], "data_gb": runs["data (GB)"],
+                             "run": runs.run.astype(int), "seconds": runs["total_duration (s)"].astype(float)})
+    else:
+        rows = pd.DataFrame({"partition_mb": published["partition(MB)"], "data_gb": published["data(GB)"],
+                             "run": published.run, "seconds": published_seconds(published["duration"])})
+    return rows.reset_index(drop=True)
+
+
+def published_means(published):
+    return (normalize_published(published).groupby(["partition_mb", "data_gb"])["seconds"]
+            .agg(["mean", "std", "count"]).reset_index()
+            .rename(columns={"mean": "published_mean_s", "std": "published_std_s", "count": "published_n"}))
+
+
 def compare_with_published(summary, published):
-    pub = published.assign(seconds=published_seconds(published["duration"]))
-    pub = (pub.groupby(["partition(MB)", "data(GB)"])["seconds"].agg(["mean", "std", "count"]).reset_index()
-           .rename(columns={"partition(MB)": "partition_mb", "data(GB)": "data_gb", "mean": "published_mean_s",
-                            "std": "published_std_s", "count": "published_n"}))
+    pub = published_means(published)
     ours = summary[(summary.series == "scaling") & (summary.phase == "measured")]
     joined = ours.merge(pub, on=["partition_mb", "data_gb"]).sort_values(["partition_mb", "data_gb"])
     return joined.assign(ratio=joined.duration_s_mean / joined.published_mean_s).reset_index(drop=True)
@@ -60,6 +76,52 @@ def subexperiment(arm):
 
 SYSTEM_LINES = {"published": ("Published", ":", "^"), "A": (f"{subexperiment('A')} (S3)", "-", "o"),
                 "B": (f"{subexperiment('B')} (direct communication)", "--", "s")}
+
+
+PANEL_STYLES = {"published": ("Published", "black", ":", "^"),
+                "A": (f"{subexperiment('A')} (S3)", "#1f77b4", "-", "o"),
+                "B": (f"{subexperiment('B')} (direct communication)", "#d62728", "--", "s"),
+                "speedup": ("Speedup of B over A", "#d62728", "-", "o"),
+                "cost_ratio": ("Cost of B over A", "#7b4ea3", "-", "o")}
+
+
+def partition_panels(rows, lines, ylabel, title, output_dir, name, chart_format, dpi):
+    """One panel per partition size against dataset size, the layout of the published Cosmic AI figures.
+
+    `lines` holds (style key in PANEL_STYLES, mean column, std column or None); `rows` one row per
+    configuration with partition_mb, data_gb and workers. Ticks read dataset size over the worker count.
+    """
+    partitions = sorted(rows.partition_mb.unique())
+    ncols = 2 if len(partitions) > 1 else 1
+    nrows = -(-len(partitions) // ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(12, 4.2 * nrows + 0.8), squeeze=False, sharey=True)
+    for ax, partition in zip(axes.flat, partitions):
+        part = rows[rows.partition_mb == partition].sort_values("data_gb")
+        positions = list(range(len(part)))
+        for key, y, yerr in lines:
+            label, color, linestyle, marker = PANEL_STYLES[key]
+            present = part[y].notna().tolist()
+            xs = [x for x, keep in zip(positions, present) if keep]
+            values = part[y][part[y].notna()]
+            err = ([float("nan") if pd.isna(e) else float(e) for e in part[yerr][part[y].notna()]] if yerr else [])
+            ax.errorbar(xs, values.tolist(), yerr=err if any(e == e for e in err) else None, color=color,
+                        linestyle=linestyle,
+                        marker=marker, lw=2, capsize=CAPSIZE, label=label)
+        ax.set_xticks(positions)
+        ax.set_xticklabels([f"{d:g}\n({int(w)})" for d, w in zip(part.data_gb, part.workers)])
+        ax.set_title(f"{int(partition)} MB partitions", fontsize=FONT_SIZE)
+        ax.set_xlabel("Dataset size in GB (workers)", fontsize=FONT_SIZE - 1)
+        ax.set_ylabel(ylabel, fontsize=FONT_SIZE - 1)
+        ax.tick_params(labelleft=True)
+        ax.minorticks_off()
+    for ax in list(axes.flat)[len(partitions):]:
+        ax.set_visible(False)
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.suptitle(title, fontsize=TITLE_SIZE)
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.0), ncol=len(labels), frameon=True,
+               fontsize=LEGEND_SIZE)
+    return _save(fig, output_dir, name, chart_format, dpi)
 
 
 def line_chart(series, xlabel, ylabel, title, output_dir, name, chart_format, dpi, legend_ncol=4):
@@ -112,11 +174,11 @@ def _save(fig, output_dir, name, chart_format, dpi):
 
 
 def chart_reproduction(joined, output_dir, chart_format, dpi):
-    series = by_partition(partition_series(joined, SYSTEM_LINES["published"], "published_mean_s", "published_std_s"),
-                          partition_series(joined, SYSTEM_LINES["A"], "duration_s_mean", "duration_s_std"))
-    return line_chart(series, "Workers (log2)", "Execution time (s)",
-                      f"Cosmic AI on Lambda, reproduction ({subexperiment('A')}) against the published runs",
-                      output_dir, "exp1_vs_published", chart_format, dpi)
+    return partition_panels(joined, [("published", "published_mean_s", "published_std_s"),
+                                     ("A", "duration_s_mean", "duration_s_std")],
+                            "End to end time (s)",
+                            f"Cosmic AI on Lambda, reproduction ({subexperiment('A')}) against the published runs",
+                            output_dir, "exp1_vs_published", chart_format, dpi)
 
 
 def chart_breakdown(summary, output_dir, chart_format, dpi):
