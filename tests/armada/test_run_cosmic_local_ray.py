@@ -52,8 +52,8 @@ def test_ray_native_runs_through_the_ray_native_executor(monkeypatch):
     captured = {}
 
     class FakeRayNativeExecutor:
-        def __init__(self, shard_actor):
-            captured["shard_actor"] = shard_actor
+        def __init__(self, shard):
+            captured["shard"] = shard
 
         def run(self, seq, input_tables):
             captured["ran"] = True
@@ -61,12 +61,12 @@ def test_ray_native_runs_through_the_ray_native_executor(monkeypatch):
 
     monkeypatch.setattr(mod, "RayNativeExecutor", FakeRayNativeExecutor)
 
-    shard_actor = object()
+    shard = object()
     shards = [pa.table({"value": [1]})]
     results = run_epochs(_seq_of_one_passthrough(), shards,
-                         ExecutionBackend.RayNative, shard_actor=shard_actor)
+                         ExecutionBackend.RayNative, shard=shard)
 
-    assert captured["shard_actor"] is shard_actor
+    assert captured["shard"] is shard
     assert captured["ran"] is True
     assert len(results) == 1
 
@@ -126,7 +126,7 @@ def test_other_ranks_join_by_discovery_and_count_only_alive_nodes(monkeypatch):
     assert calls[-1][0] == "wait" and calls[-1][1] == 3 and calls[-1][3] == 2
 
 
-def test_ray_native_actors_pin_the_shard_and_name_registry_and_barrier_per_run(monkeypatch):
+def test_ray_native_actors_name_registry_and_barrier_per_run_and_shard_in_the_driver(monkeypatch):
     """The named actors live in one configured namespace, not the driver's
     own: every rank is a separate driver with its own anonymous namespace,
     so a name lookup scoped to that would give each rank a private registry
@@ -140,9 +140,10 @@ def test_ray_native_actors_pin_the_shard_and_name_registry_and_barrier_per_run(m
             handles.registry._actor_id
         assert ray.get_actor("cosmic_barrier_run-z", namespace="test-ns")._actor_id == \
             handles.barrier._actor_id
-        ray.get(handles.shard_actor.publish.remote(["ctx"]))
-        ray.get(handles.shard_actor.flush.remote())
+        handles.shard.publish("ctx")
+        handles.shard.flush()
         assert ray.get(handles.registry.count.remote()) == 1
+        assert handles.shard.rank == 0
         mod.release_ray_native_run(handles, rank=0, world_size=1, ray_api=ray, timeout_s=10.0)
         with pytest.raises(ValueError):
             ray.get_actor("cosmic_registry_run-z", namespace="test-ns")
@@ -176,7 +177,7 @@ def _fake_release_ray(calls, depart_raises=False):
         kill=lambda actor: calls.append(("kill", actor)),
         exceptions=SimpleNamespace(RayActorError=_FakeActorDied),
     )
-    handles = mod.RayNativeHandles(shard_actor="shard", registry="registry", barrier=barrier)
+    handles = mod.RayNativeHandles(shard="shard", registry="registry", barrier=barrier)
     return handles, ray_api
 
 
@@ -239,6 +240,7 @@ class _FakeClock:
 
 CLUSTER_S = 4.0
 ESTABLISH_S = 0.5
+START_ALIGN_S = 1.0
 RUN_S = 2.0
 TEARDOWN_S = 8.0
 
@@ -271,6 +273,10 @@ def test_ray_native_records_cluster_formation_and_teardown_barrier_apart(monkeyp
         return results
 
     class TimedFinish(mod.RayNativeExecutor):
+        def start(self, barrier, timeout_s):
+            super().start(barrier, timeout_s)
+            clock.advance(START_ALIGN_S)
+
         def finish(self, seq, barrier, timeout_s):
             result = super().finish(seq, barrier, timeout_s)
             clock.advance(TEARDOWN_S)
@@ -285,7 +291,7 @@ def test_ray_native_records_cluster_formation_and_teardown_barrier_apart(monkeyp
     record = json.load(open(out))
 
     assert record["ray_cluster_s"] == CLUSTER_S
-    assert record["establish_s"] == ESTABLISH_S
+    assert record["establish_s"] == ESTABLISH_S + START_ALIGN_S
     assert record["run_s"] == RUN_S
     assert record["teardown_barrier_s"] == TEARDOWN_S
     assert record["records_written"] == 6
@@ -327,3 +333,79 @@ def test_ray_rendezvous_fails_fast_without_redis_host(monkeypatch):
     monkeypatch.delenv("REDIS_HOST", raising=False)
     with pytest.raises(ValueError, match="REDIS_HOST"):
         mod._redis_client_for_rendezvous()
+
+
+def test_ray_collective_runs_through_the_collective_executor_with_its_handles(monkeypatch):
+    captured = {}
+
+    class FakeRayCollectiveExecutor:
+        def __init__(self, exchanger, rank, timings):
+            captured["args"] = (exchanger, rank, timings)
+
+        def run(self, seq, input_tables):
+            return input_tables
+
+    monkeypatch.setattr(mod, "RayCollectiveExecutor", FakeRayCollectiveExecutor)
+    handles = mod.RayCollectiveHandles(exchanger="exchanger", barrier="barrier", rank=3,
+                                       timings="timings")
+
+    results = run_epochs(_seq_of_one_passthrough(), [pa.table({"value": [1]})],
+                         ExecutionBackend.RayCollective, ray_collective=handles)
+
+    assert captured["args"] == ("exchanger", 3, "timings")
+    assert len(results) == 1
+
+
+def test_ray_collective_charges_group_setup_and_alignment_to_establish_s(monkeypatch, tmp_path):
+    """Group formation and start alignment are setup, as under ray-native. The
+    allgather already waits for every rank each epoch, so nothing is added
+    after the last epoch and the compared figure is run_s alone. The Arrow
+    conversion is reported beside it."""
+    ray = pytest.importorskip("ray")
+    out = _main_env(monkeypatch, tmp_path, "rcol-timing")
+    clock = _install_clock(monkeypatch)
+    real_actors = mod.ray_collective_actors
+    real_run_epochs = mod.run_epochs
+
+    def timed_cluster(rank, world_size, comm_name, redis_client, ray_api):
+        ray_api.init(num_cpus=2, include_dashboard=False, ignore_reinit_error=True)
+        clock.advance(CLUSTER_S)
+
+    def timed_actors(*args, **kwargs):
+        handles = real_actors(*args, **kwargs)
+        clock.advance(ESTABLISH_S)
+        return handles
+
+    def timed_run_epochs(*args, **kwargs):
+        results = real_run_epochs(*args, **kwargs)
+        clock.advance(RUN_S)
+        return results
+
+    class TimedStart(mod.RayCollectiveExecutor):
+        def start(self, barrier, timeout_s):
+            super().start(barrier, timeout_s)
+            clock.advance(START_ALIGN_S)
+
+    monkeypatch.setattr(mod, "form_ray_cluster", timed_cluster)
+    monkeypatch.setattr(mod, "ray_collective_actors", timed_actors)
+    monkeypatch.setattr(mod, "run_epochs", timed_run_epochs)
+    monkeypatch.setattr(mod, "RayCollectiveExecutor", TimedStart)
+
+    assert mod.main(["--backend", "ray-collective", "--galaxies", "6", "--result-path", out]) == 0
+    record = json.load(open(out))
+
+    assert record["backend"] == "ray-collective"
+    assert record["context_backend"] == "cylon"
+    assert record["ray_cluster_s"] == CLUSTER_S
+    assert record["establish_s"] == ESTABLISH_S + START_ALIGN_S
+    assert record["run_s"] == RUN_S
+    assert "teardown_barrier_s" not in record
+    assert record["packed_bytes"] > 0
+    assert {"pack_s", "unpack_s", "exchange_s", "collective_s"} <= set(record)
+    assert record["gloo_interface_source"] == "derived"
+    assert record["gloo_node_ip"] == ray.util.get_node_ip_address()
+    assert record["gloo_interface"]
+    assert record["records_written"] == 6
+    assert record["acks_visible"] == 6
+    assert "error" not in record
+    assert not ray.is_initialized()

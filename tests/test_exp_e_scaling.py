@@ -21,7 +21,8 @@ _SCRIPTS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "target
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
-from results.exp_e_scaling import comparable_s, load_runs, summarize, write_summary
+from results.exp_e_scaling import (comparable_s, llm_call_parity, load_runs, summarize,
+                                   write_summary)
 
 
 def _record(rank, world_size, backend, run_s, per_rank=5, **extra):
@@ -135,7 +136,7 @@ def test_write_summary_emits_csv_and_discarded_json(tmp_path):
     _sweep(root, [(1.0, 2.0, 3.0), (2.0, 3.0, 4.0)])
     out = str(tmp_path / "out")
 
-    csv_path, discarded_path = write_summary(root, out)
+    csv_path, discarded_path, _ = write_summary(root, out)
 
     with open(csv_path) as handle:
         rows = list(csv.DictReader(handle))
@@ -176,7 +177,7 @@ def _captured_figures(monkeypatch, tmp_path):
     root = str(tmp_path / "in")
     for world_size in (1, 2, 4):
         _sweep(root, [(1.0, 2.0, 3.0), (2.0, 3.0, 4.0)], world_size=world_size)
-    csv_path, _ = write_summary(root, str(tmp_path / "out"))
+    csv_path, _, _ = write_summary(root, str(tmp_path / "out"))
     chart_exp_e_scaling.generate_exp_e_scaling_charts(csv_path, str(tmp_path / "charts"))
     return figures
 
@@ -210,3 +211,117 @@ def test_charts_follow_the_quals_notebook_style(monkeypatch, tmp_path):
     import matplotlib.pyplot as plt
     for fig in figures.values():
         plt.close(fig)
+
+
+def _counted_sweep(root, calls_by_run):
+    """calls_by_run: per run, {arm: [(llm_calls, cache_hits) per rank]}."""
+    for run_index, by_arm in enumerate(calls_by_run):
+        for arm, per_rank in by_arm.items():
+            extra = {"teardown_barrier_s": 0.1} if arm == "ray-native" else {}
+            _write(root, "weak", arm, len(per_rank), f"run{run_index}",
+                   [_record(r, len(per_rank), arm, 1.0, llm_calls=calls, cache_hits=hits,
+                            records_written=5 - hits, **extra)
+                    for r, (calls, hits) in enumerate(per_rank)])
+
+
+def test_summary_reports_model_calls_and_cache_hits_per_arm_as_total_and_per_rank(tmp_path):
+    """An arm that reuses less makes more model calls, so a comparable_s gap
+    can be a workload difference rather than a data plane one. The counts
+    have to sit beside the time to tell the two apart."""
+    root = str(tmp_path)
+    _counted_sweep(root, [
+        {"armada": [(3, 2), (4, 1)], "ray-native": [(5, 0), (4, 1)]},
+        {"armada": [(3, 2), (2, 3)], "ray-native": [(5, 0), (5, 0)]},
+    ])
+
+    rows, discarded = summarize(load_runs(root))
+    by_arm = {row["arm"]: row for row in rows}
+
+    assert discarded == []
+    assert by_arm["armada"]["llm_calls_total_mean"] == pytest.approx(statistics.mean([7, 5]))
+    assert by_arm["armada"]["llm_calls_total_std"] == pytest.approx(statistics.stdev([7, 5]))
+    assert by_arm["armada"]["llm_calls_per_rank_mean"] == pytest.approx(statistics.mean([3.5, 2.5]))
+    assert by_arm["armada"]["cache_hits_total_mean"] == pytest.approx(statistics.mean([3, 5]))
+    assert by_arm["ray-native"]["llm_calls_total_mean"] == pytest.approx(statistics.mean([9, 10]))
+    assert by_arm["ray-native"]["cache_hits_per_rank_mean"] == pytest.approx(statistics.mean([0.5, 0.0]))
+    assert by_arm["armada"]["llm_calls_matched_runs"] == 0
+    assert by_arm["ray-native"]["llm_calls_matched_runs"] == 0
+
+
+def test_parity_flags_each_run_where_the_arms_made_different_numbers_of_model_calls(tmp_path):
+    root = str(tmp_path)
+    _counted_sweep(root, [
+        {"armada": [(3, 2), (4, 1)], "ray-native": [(4, 1), (3, 2)]},
+        {"armada": [(3, 2), (4, 1)], "ray-native": [(5, 0), (4, 1)]},
+    ])
+
+    parity = llm_call_parity(load_runs(root))
+    by_run = {(row["run"], row["arm"]): row for row in parity}
+
+    assert by_run[(0, "armada")]["llm_calls_total"] == 7
+    assert by_run[(0, "ray-native")]["llm_calls_total"] == 7
+    assert by_run[(0, "armada")]["llm_calls_match"] is True
+    assert by_run[(1, "ray-native")]["llm_calls_total"] == 9
+    assert by_run[(1, "armada")]["llm_calls_match"] is False
+    assert by_run[(1, "ray-native")]["llm_calls_spread"] == 2
+
+    rows, _ = summarize(load_runs(root))
+    assert {row["llm_calls_matched_runs"] for row in rows} == {1}
+
+
+def test_records_without_model_call_counts_leave_the_counts_empty_rather_than_zero(tmp_path):
+    root = str(tmp_path)
+    _sweep(root, [(1.0, 2.0, 3.0), (2.0, 3.0, 4.0)])
+
+    rows, _ = summarize(load_runs(root))
+    parity = llm_call_parity(load_runs(root))
+
+    assert all(row["llm_calls_total_mean"] is None for row in rows)
+    assert all(row["llm_calls_matched_runs"] is None for row in rows)
+    assert all(row["llm_calls_match"] is None for row in parity)
+
+
+def test_write_summary_emits_the_per_run_model_call_parity_csv(tmp_path):
+    root = str(tmp_path / "in")
+    _counted_sweep(root, [{"armada": [(3, 2), (4, 1)], "ray-native": [(5, 0), (4, 1)]}])
+
+    _, _, parity_path = write_summary(root, str(tmp_path / "out"))
+
+    with open(parity_path) as handle:
+        rows = list(csv.DictReader(handle))
+    assert {(row["arm"], row["llm_calls_total"], row["llm_calls_match"]) for row in rows} == {
+        ("armada", "7", "False"), ("ray-native", "9", "False")}
+
+
+def test_ray_collective_is_compared_on_run_s_because_its_allgather_waits_every_epoch():
+    record = _record(0, 2, "ray-collective", 3.0, pack_s=0.2, unpack_s=0.1, exchange_s=1.0,
+                     collective_s=0.6, ray_cluster_s=9.0)
+    assert comparable_s(record) == 3.0
+
+
+def test_ray_collective_conversion_and_exchange_are_summarised_beside_the_time(tmp_path):
+    """The Arrow-to-bytes copy is the cost the zero-copy claim is about, so the
+    summary carries it per arm rather than leaving it inside run_s unseen."""
+    root = str(tmp_path)
+    for run_index, scale in enumerate((1.0, 2.0)):
+        _write(root, "weak", "armada", 2, f"run{run_index}",
+               [_record(r, 2, "armada", 3.0, llm_calls=5, cache_hits=0) for r in range(2)])
+        _write(root, "weak", "ray-collective", 2, f"run{run_index}",
+               [_record(r, 2, "ray-collective", 3.0 + r, llm_calls=5, cache_hits=0,
+                        pack_s=0.1 * scale * (r + 1), unpack_s=0.05 * scale,
+                        exchange_s=0.4 * scale, collective_s=0.3 * scale, ray_cluster_s=8.0)
+                for r in range(2)])
+
+    rows, discarded = summarize(load_runs(root))
+    by_arm = {row["arm"]: row for row in rows}
+    parity = llm_call_parity(load_runs(root))
+
+    assert discarded == []
+    assert by_arm["ray-collective"]["comparable_s_mean"] == pytest.approx(4.0)
+    assert by_arm["ray-collective"]["pack_s_mean"] == pytest.approx(statistics.mean([0.2, 0.4]))
+    assert by_arm["ray-collective"]["unpack_s_mean"] == pytest.approx(statistics.mean([0.05, 0.1]))
+    assert by_arm["ray-collective"]["exchange_s_mean"] == pytest.approx(statistics.mean([0.4, 0.8]))
+    assert by_arm["ray-collective"]["collective_s_mean"] == pytest.approx(statistics.mean([0.3, 0.6]))
+    assert by_arm["armada"]["pack_s_mean"] is None
+    assert by_arm["ray-collective"]["llm_calls_matched_runs"] == 2
+    assert {row["arm"] for row in parity} == {"armada", "ray-collective"}

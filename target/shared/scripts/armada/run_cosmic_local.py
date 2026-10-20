@@ -13,15 +13,18 @@
 """One rank of a local multi-rank Cosmic AI run (SP1 Task 6).
 
 Launched once per rank by run_cosmic_local.sh. Builds the six-operator agentic
-workflow and executes it under one of five backends (ExecutionBackend):
+workflow and executes it under one of six backends (ExecutionBackend):
 armada and ray-cylon open an FMIBridge over the direct-redis channel, with
 ray-cylon building it through CylonRayActor inside a Ray cluster; ray-native
 shares contexts through the Ray object store with one end-of-run barrier;
+ray-collective exchanges them with ray.util.collective's allgather over Gloo;
 langchain shares through Redis; isolated shares nothing.
 
 Ray arms record ray_cluster_s (forming the cluster) apart from establish_s
-(the data plane's own setup), and ray-native records teardown_barrier_s (the
-end-of-run barrier and late drain) apart from run_s.
+(the data plane's own setup), ray-native records teardown_barrier_s (the
+end-of-run barrier and late drain) apart from run_s, and ray-collective
+records its Arrow conversion (pack_s, unpack_s) apart from its exchange
+(exchange_s, collective_s), all inside run_s.
 
 Services are mocked by default: --live switches to real Bedrock/Redis/DynamoDB
 and therefore costs money on every rank (one embedding call and one LLM call per
@@ -30,7 +33,8 @@ galaxy), so it is opt-in rather than the default.
 Environment (set by the launcher): RANK, WORLD_SIZE, COMM_NAME, REDIS_HOST,
 REDIS_PORT, FMI_LISTEN_PORT. Ray arms also read RAY_PORT,
 RAY_RENDEZVOUS_TIMEOUT_S, RAY_CLUSTER_TIMEOUT_S, RAY_BARRIER_TIMEOUT_S and
-RAY_NAMESPACE.
+RAY_NAMESPACE. ray-collective also reads RAY_COLLECTIVE_TIMEOUT_S,
+RAY_COLLECTIVE_POLL_S, RAY_COLLECTIVE_BACKEND and GLOO_SOCKET_IFNAME.
 
 Rank identity differs by arm. Under the armada and ray-cylon backends the rank
 is the one the FMI channel negotiates through Redis INCR (bridge.rank), which
@@ -62,6 +66,7 @@ import pyarrow as pa
 from armada.cosmic_workflow import build_cosmic_workflow
 from armada.epochs import epoch_count, plan_epochs
 from armada.executor import ArmadaExecutor, InputPlacement, required_peer_map
+from armada.ray_collective_executor import ConversionTimings, RayCollectiveExecutor
 from armada.ray_native_executor import RayNativeExecutor
 from armada.reuse_policy import (
     PHOTOMETRY_BANDS,
@@ -391,22 +396,29 @@ class ExecutionBackend(Enum):
     Isolated = "isolated"
     RayNative = "ray-native"
     RayCylon = "ray-cylon"
+    RayCollective = "ray-collective"
 
 
 _CONTEXT_STORE = {
     ExecutionBackend.Armada: "cylon",
     ExecutionBackend.LangChain: "redis",
     ExecutionBackend.Isolated: "cylon",
-    ExecutionBackend.RayNative: "plasma",
+    ExecutionBackend.RayNative: "cylon",
     ExecutionBackend.RayCylon: "cylon",
+    ExecutionBackend.RayCollective: "cylon",
 }
+
+RAY_BACKENDS = (ExecutionBackend.RayNative, ExecutionBackend.RayCylon,
+                ExecutionBackend.RayCollective)
 
 
 def context_store_for(backend):
     """The context store an arm runs on. The arm is its store: Armada on the
     Arrow ContextTable, LangChain on Redis, so this is not independently
-    tunable. An environment that already names a different store is refused
-    rather than silently overridden.
+    tunable. ray-native searches the same process-local table as Armada and
+    moves contexts between ranks through the object store, never through a
+    store other ranks write to. An environment that already names a different
+    store is refused rather than silently overridden.
     """
     required = _CONTEXT_STORE[backend]
     configured = os.environ.get("CONTEXT_BACKEND")
@@ -447,91 +459,143 @@ def form_ray_cluster(rank, world_size, comm_name, redis_client, ray_api):
 
 @dataclass(frozen=True)
 class RayNativeHandles:
-    """The actors one ray-native rank uses: its own shard, and the run's
+    """What one ray-native rank uses: its own DriverShard, and the run's
     shared registry and end-of-run barrier."""
 
-    shard_actor: object
+    shard: object
     registry: object
     barrier: object
 
 
 def ray_native_actors(rank, world_size, comm_name, ray_api):
-    """This rank's ShardActor, pinned to its own node, plus the run's named
-    registry and barrier.
+    """The run's named registry and barrier, plus this rank's DriverShard.
 
     The registry and barrier are named per run so concurrent runs on one
     cluster never share them, placed in the RAY_NAMESPACE namespace because
     each rank is its own driver with its own anonymous namespace, and
     detached so they outlive rank 0's driver until release_ray_native_run
-    kills them. Pinning keeps each rank's
-    ray.put in its own node's object store; left to the scheduler, a rank's
-    actor could land on another task's node and turn its local reads into
-    network transfers. Returns only once the shard and registry actors are
-    running: .remote() returns before the actor process exists, so without
-    the wait their startup would be charged to the first epoch's run_s
-    instead of establish_s.
+    kills them. The shard lives in this driver, so every ray.put lands in
+    this rank's own node and is owned by this process. Returns only once the
+    registry is running: .remote() returns before the actor process exists,
+    so without the wait its startup would be charged to the first epoch's
+    run_s instead of establish_s.
     """
-    from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
-
-    from ray_arm.native import ContextRegistry, RunBarrier, ShardActor
+    from ray_arm.native import ContextRegistry, DriverShard
 
     namespace = os.environ.get("RAY_NAMESPACE", "cylon-armada")
     registry = ContextRegistry.options(
         name=f"cosmic_registry_{comm_name}", namespace=namespace,
         get_if_exists=True, lifetime="detached"
     ).remote()
-    barrier = RunBarrier.options(
-        name=f"cosmic_barrier_{comm_name}", namespace=namespace,
-        get_if_exists=True, lifetime="detached"
-    ).remote(world_size)
-    node_id = ray_api.get_runtime_context().get_node_id()
-    shard_actor = ShardActor.options(
-        scheduling_strategy=NodeAffinitySchedulingStrategy(node_id=node_id, soft=False)
-    ).remote(rank, world_size, registry)
-    ray_api.get([shard_actor.watermark.remote(), registry.count.remote()])
-    return RayNativeHandles(shard_actor=shard_actor, registry=registry, barrier=barrier)
+    barrier = _run_barrier(world_size, comm_name, namespace)
+    ray_api.get(registry.count.remote())
+    return RayNativeHandles(shard=DriverShard(rank, registry), registry=registry, barrier=barrier)
 
 
-def release_ray_native_run(handles, rank, world_size, ray_api, timeout_s):
-    """Kill the run's named actors once no rank can still need them.
+def _release_run(barrier, run_actors, rank, world_size, ray_api, timeout_s):
+    """Kill the run's shared named actors once no rank can still need them.
 
-    Called after RayNativeExecutor.finish, so every rank is already past its
-    last read. Rank 0 alone cleans up, after every other rank has departed;
-    the others only depart. A departure whose reply is lost because rank 0
-    killed the barrier right after counting it is the expected end state,
-    not a failure.
+    Rank 0 alone cleans up, after every other rank has departed; the others
+    only depart. A departure whose reply is lost because rank 0 killed the
+    barrier right after counting it is the expected end state, not a failure.
     """
     if rank == 0:
-        ray_api.get(handles.barrier.wait_departed.remote(world_size - 1), timeout=timeout_s)
-        ray_api.kill(handles.registry)
-        ray_api.kill(handles.barrier)
+        ray_api.get(barrier.wait_departed.remote(world_size - 1), timeout=timeout_s)
+        for actor in (*run_actors, barrier):
+            ray_api.kill(actor)
         return
     try:
-        ray_api.get(handles.barrier.depart.remote(), timeout=timeout_s)
+        ray_api.get(barrier.depart.remote(), timeout=timeout_s)
     except ray_api.exceptions.RayActorError:
         logger.info("rank %d departed as the run's barrier was released", rank)
 
 
-def run_epochs(seq, shards, backend, bridge=None, ctx=None, root=0, shard_actor=None):
+def release_ray_native_run(handles, rank, world_size, ray_api, timeout_s):
+    """Kill the registry and barrier, called after RayNativeExecutor.finish,
+    so every rank is already past its last read."""
+    _release_run(handles.barrier, (handles.registry,), rank, world_size, ray_api, timeout_s)
+
+
+@dataclass(frozen=True)
+class RayCollectiveHandles:
+    """What one ray-collective rank uses: its exchanger in the run's
+    collective group, the run's start barrier, its rank in the group, the
+    conversion timings its epochs accumulate, and the interface its exchanger
+    bound Gloo to."""
+
+    exchanger: object
+    barrier: object
+    rank: int
+    timings: object
+    gloo: object = None
+
+
+def _run_barrier(world_size, comm_name, namespace):
+    from ray_arm.native import RunBarrier
+
+    return RunBarrier.options(
+        name=f"cosmic_barrier_{comm_name}", namespace=namespace,
+        get_if_exists=True, lifetime="detached"
+    ).remote(world_size)
+
+
+def ray_collective_actors(rank, world_size, comm_name, ray_api):
+    """This rank's exchanger, joined into the run's collective group, and the
+    run's named barrier.
+
+    Rank 0 builds the group once every rank's exchanger exists and only then
+    reaches the start barrier, so a rank released from that barrier knows the
+    group is ready. The group is named by comm_name, so concurrent runs on one
+    cluster never share it.
+    """
+    from ray_arm.collective import form_collective_group
+
+    namespace = os.environ.get("RAY_NAMESPACE", "cylon-armada")
+    barrier = _run_barrier(world_size, comm_name, namespace)
+    exchanger = form_collective_group(
+        rank, world_size, comm_name, namespace, ray_api,
+        timeout_s=float(os.environ.get("RAY_COLLECTIVE_TIMEOUT_S", 300)),
+        poll_s=float(os.environ.get("RAY_COLLECTIVE_POLL_S", 0.5)))
+    gloo = ray_api.get(exchanger.gloo_interface.remote())
+    logger.info("rank %d Gloo interface %s (node IP %s, %s)", rank, gloo["interface"],
+                gloo["node_ip"], gloo["source"])
+    return RayCollectiveHandles(exchanger=exchanger, barrier=barrier, rank=rank,
+                                timings=ConversionTimings(), gloo=gloo)
+
+
+def release_ray_collective_run(handles, rank, world_size, ray_api, timeout_s):
+    """Kill the barrier once every rank is past its last allgather. Each
+    exchanger belongs to its own rank's driver and ends with it."""
+    _release_run(handles.barrier, (), rank, world_size, ray_api, timeout_s)
+
+
+def run_epochs(seq, shards, backend, bridge=None, ctx=None, root=0, shard=None,
+               ray_collective=None):
     """Execute one epoch per shard, returning each epoch's result table.
 
     Under Armada and ray-cylon each epoch is one executor pass ending in
     MemoryUpsert's AllGather, moved over FMI either way — ray-cylon differs
     only in how the bridge was constructed, never in how it runs. Under
     ray-native each epoch runs locally except MemoryUpsert, which publishes
-    to and reads from the object store instead. Under LangChain/Isolated
-    nothing crosses ranks because the store itself is shared.
+    to and reads from the object store instead. Under ray-collective
+    MemoryUpsert's exchange is ray.util.collective's allgather. Under
+    LangChain/Isolated nothing crosses ranks because the store itself is
+    shared.
     """
     results = []
-    for shard in shards:
+    for epoch_input in shards:
         if backend in (ExecutionBackend.LangChain, ExecutionBackend.Isolated):
-            results.append(seq.invoke(shard))
+            results.append(seq.invoke(epoch_input))
         elif backend in (ExecutionBackend.Armada, ExecutionBackend.RayCylon):
             results.append(ArmadaExecutor(bridge).run(
-                seq, input_tables=shard, ctx=ctx, root=root,
+                seq, input_tables=epoch_input, ctx=ctx, root=root,
                 placement=InputPlacement.PreDistributed))
         elif backend is ExecutionBackend.RayNative:
-            results.append(RayNativeExecutor(shard_actor).run(seq, shard))
+            results.append(RayNativeExecutor(shard).run(seq, epoch_input))
+        elif backend is ExecutionBackend.RayCollective:
+            results.append(RayCollectiveExecutor(
+                ray_collective.exchanger, ray_collective.rank, ray_collective.timings
+            ).run(seq, epoch_input))
         else:
             raise ValueError(f"unknown execution backend {backend!r}")
     return results
@@ -583,7 +647,8 @@ def main(argv=None):
                         choices=[b.value for b in ExecutionBackend],
                         help="armada (Cylon collectives over FMI), langchain (native invoke, "
                              "Redis-shared context), isolated (no sharing), ray-native (Ray "
-                             "object store), or ray-cylon (Ray cluster, Cylon collectives "
+                             "object store), ray-collective (ray.util.collective allgather "
+                             "over Gloo), or ray-cylon (Ray cluster, Cylon collectives "
                              "over FMI); env EXECUTION_BACKEND")
     parser.add_argument("--epoch-batch-size", type=int,
                         default=int(os.environ.get("EPOCH_BATCH_SIZE", 4)),
@@ -632,6 +697,8 @@ def main(argv=None):
     ray_cluster_s = None
     bridge = None
     ray_native = None
+    ray_collective = None
+    ray_barrier_timeout_s = float(os.environ.get("RAY_BARRIER_TIMEOUT_S", 300))
     if backend is ExecutionBackend.Armada:
         # Derived before the bridge exists: the channel establishes its
         # connections while the communicator is built, so the topology has to
@@ -651,7 +718,7 @@ def main(argv=None):
         establish_s = time.perf_counter() - t0
         true_rank = bridge.rank
         channel = bridge.channel_type
-    elif backend in (ExecutionBackend.RayNative, ExecutionBackend.RayCylon):
+    elif backend in RAY_BACKENDS:
         import ray
 
         t_cluster = time.perf_counter()
@@ -661,7 +728,15 @@ def main(argv=None):
         true_rank = rank
         if backend is ExecutionBackend.RayNative:
             ray_native = ray_native_actors(true_rank, world_size, comm_name, ray)
-            channel = "ray-plasma"
+            RayNativeExecutor(ray_native.shard).start(ray_native.barrier,
+                                                      ray_barrier_timeout_s)
+            channel = "ray-object-store"
+        elif backend is ExecutionBackend.RayCollective:
+            ray_collective = ray_collective_actors(true_rank, world_size, comm_name, ray)
+            RayCollectiveExecutor(ray_collective.exchanger, true_rank,
+                                  ray_collective.timings).start(ray_collective.barrier,
+                                                                ray_barrier_timeout_s)
+            channel = "ray-collective-gloo"
         else:
             actor = CylonRayActor(rank=rank, world_size=world_size, comm_name=comm_name,
                                   required_peers=required_peer_map(build_for(rank), world_size),
@@ -753,7 +828,6 @@ def main(argv=None):
     record["pricing_source"] = pricing.source
     if ray_cluster_s is not None:
         record["ray_cluster_s"] = round(ray_cluster_s, 4)
-    ray_barrier_timeout_s = float(os.environ.get("RAY_BARRIER_TIMEOUT_S", 300))
 
     results = []
     t1 = time.perf_counter()
@@ -761,10 +835,11 @@ def main(argv=None):
     try:
         results = run_epochs(seq, shards, backend, bridge=bridge,
                              ctx=bridge._ctx if bridge is not None else None, root=root,
-                             shard_actor=ray_native.shard_actor if ray_native else None)
+                             shard=ray_native.shard if ray_native else None,
+                             ray_collective=ray_collective)
         run_end = time.perf_counter()
         if ray_native is not None:
-            late = RayNativeExecutor(ray_native.shard_actor).finish(
+            late = RayNativeExecutor(ray_native.shard).finish(
                 seq, ray_native.barrier, ray_barrier_timeout_s)
             record["teardown_barrier_s"] = round(time.perf_counter() - run_end, 4)
             if late is not None:
@@ -774,6 +849,11 @@ def main(argv=None):
         raise
     finally:
         record["run_s"] = round((run_end or time.perf_counter()) - t1, 4)
+        if ray_collective is not None:
+            record.update(ray_collective.timings.as_record())
+            record.update({"gloo_interface": ray_collective.gloo["interface"],
+                           "gloo_node_ip": ray_collective.gloo["node_ip"],
+                           "gloo_interface_source": ray_collective.gloo["source"]})
         record.update(metrics.summary())
         record["acks_visible"] = sum(
             1
@@ -789,11 +869,14 @@ def main(argv=None):
         if bridge.available:
             bridge.barrier()
         bridge.finalize()
-    if backend in (ExecutionBackend.RayNative, ExecutionBackend.RayCylon):
+    if backend in RAY_BACKENDS:
         import ray
 
         if ray_native is not None:
             release_ray_native_run(ray_native, true_rank, world_size, ray, ray_barrier_timeout_s)
+        if ray_collective is not None:
+            release_ray_collective_run(ray_collective, true_rank, world_size, ray,
+                                       ray_barrier_timeout_s)
         ray.shutdown()
     return 0
 

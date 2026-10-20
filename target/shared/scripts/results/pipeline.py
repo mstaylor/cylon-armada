@@ -516,9 +516,9 @@ def main():
                          "--experiment exp_e_scaling")
         from .exp_e_scaling import write_summary
         from .chart_exp_e_scaling import generate_exp_e_scaling_charts
-        csv_path, discarded_path = write_summary(args.local_dir, args.output_dir)
-        logger.info("Experiment E scaling summary: %s (discarded runs: %s)",
-                    csv_path, discarded_path)
+        csv_path, discarded_path, parity_path = write_summary(args.local_dir, args.output_dir)
+        logger.info("Experiment E scaling summary: %s (discarded runs: %s, model-call parity: %s)",
+                    csv_path, discarded_path, parity_path)
         generate_exp_e_scaling_charts(csv_path, os.path.join(args.output_dir, "charts"),
                                       args.chart_format, args.chart_dpi)
         return

@@ -17,13 +17,17 @@ Every pattern except AllGather is already a plain local call under the
 compiled plan (armada/executor.py's own dispatch loop treats PointToPoint,
 and Scatter under PreDistributed placement, the same way) — this executor
 exists only because MemoryUpsert is the one operator this arm takes a
-genuinely different path for, sharing contexts through Plasma instead of a
-collective, per the design's rejection of ray.util.collective.
+genuinely different path for, sharing contexts through the Ray object store
+with ownership-based transfer instead of a collective, per the design's
+rejection of ray.util.collective. Publishing and reading go through the rank's
+DriverShard, so payloads are put and resolved in this process.
 
 There is no per-epoch barrier: a rank reads whatever has been published when
-it gets there, and anything published later arrives on its next read. The one
-barrier is at the end of the run (finish), so the last epochs' late arrivals
-still reach every rank and no rank tears down objects a peer is still reading.
+it gets there, and anything published later arrives on its next read. The
+only barriers are outside the epochs: one before the first (start), charged
+to setup, and one at the end of the run (finish), so the last epochs' late
+arrivals still reach every rank and no rank tears down objects a peer is
+still reading.
 Ray is imported on first use so this module stays importable in images
 without Ray.
 """
@@ -32,21 +36,35 @@ from cylon_armada.dag_compiler import CollectivePattern
 
 from armada.executor import ArmadaExecutor, _operators, lower
 
+STARTED_PHASE = "started"
 PUBLISHED_PHASE = "published"
 DRAINED_PHASE = "drained"
 
 
+def align_start(barrier, timeout_s):
+    """Hold this rank until every rank is ready to run, before any epoch.
+
+    Charged to setup, not to the run: Armada's ranks are aligned the same way
+    while its channel connects, so without this the launch skew would surface
+    in the run of whichever Ray arm skipped it.
+    """
+    import ray
+
+    ray.get(barrier.wait.remote(STARTED_PHASE), timeout=timeout_s)
+
+
 class RayNativeExecutor:
-    def __init__(self, shard_actor):
-        self.shard_actor = shard_actor
+    def __init__(self, shard):
+        self.shard = shard
+
+    def start(self, barrier, timeout_s):
+        align_start(barrier, timeout_s)
 
     def _publish_and_drain(self, contribution):
-        import ray
-
         if not contribution.num_rows:
-            return ray.get(self.shard_actor.drain_new.remote())
-        self.shard_actor.publish.remote([ray.put(contribution)])
-        return [contribution, *ray.get(self.shard_actor.drain_new.remote())]
+            return self.shard.drain_new()
+        self.shard.publish(contribution)
+        return [contribution, *self.shard.drain_new()]
 
     def run(self, seq, input_tables):
         plan = lower(seq)
@@ -62,7 +80,8 @@ class RayNativeExecutor:
     def finish(self, seq, barrier, timeout_s):
         """End-of-run drain, between two barriers on the run's RunBarrier.
 
-        The first barrier means every rank has published its last epoch, so
+        This rank's last registration is landed before the first barrier,
+        which therefore means every rank's last epoch is in the registry, so
         the drain after it sees every contribution this rank has not yet
         read; those rows run through MemoryUpsert and the operators after
         it, exactly as an epoch's gathered rows do. The second barrier means
@@ -72,8 +91,9 @@ class RayNativeExecutor:
         """
         import ray
 
+        self.shard.flush()
         ray.get(barrier.wait.remote(PUBLISHED_PHASE), timeout=timeout_s)
-        late = ray.get(self.shard_actor.drain_new.remote())
+        late = self.shard.drain_new()
         result = self._upsert_late(seq, late) if late else None
         ray.get(barrier.wait.remote(DRAINED_PHASE), timeout=timeout_s)
         return result

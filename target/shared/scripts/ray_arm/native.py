@@ -1,19 +1,18 @@
-"""Arm A: context shared through Ray's object store.
+"""Arm A: context shared through the Ray object store with ownership-based transfer.
 
-Each rank owns a shard and publishes its new contexts with ray.put, which
-places them in Plasma; the registry actor holds only the references, so a
-reader fetches the payload directly from the object store rather than through
-the registry. That keeps the registry small and lets Ray decide whether a read
-is a shared-memory mapping or a network transfer.
+Each rank's driver puts its new contexts with ray.put and so owns them. The
+registry actor holds only references, and a reader resolves them itself, so
+payloads move between the owner and the reader without passing through the
+registry or any other actor. Ray decides how: objects under its inline
+threshold (about 100 KB, which covers one Cosmic AI epoch) travel by RPC from
+the owner's in-process store, and larger ones go through the node's shared
+object store or a network transfer.
 
-No barrier is imposed. Ray may resolve references lazily and overlap them,
-which is the behaviour a Ray deployment would actually exhibit.
+DriverShard is the path the arm runs. ShardActor hosts registration and a
+full-history read in an actor and is kept for the cross-rank visibility tests.
 
-Payloads are expected to be numpy arrays or Arrow buffers: those are the
-objects Plasma places and returns zero-copy, which is the property this arm
-exists to compare against. Plain Python objects still work through
-``ray.put``/``ray.get``, but fall back to pickling and do not exercise that
-property.
+No barrier is imposed between epochs. Ray may resolve references lazily and
+overlap them, which is the behaviour a Ray deployment would actually exhibit.
 """
 
 import asyncio
@@ -59,7 +58,6 @@ class ShardActor:
         self._registry = registry
         self._contexts = []
         self._watermark = 0
-        self._drain_watermark = 0
         self._pending_registration = None
 
     def publish(self, refs):
@@ -105,17 +103,40 @@ class ShardActor:
         self._watermark = total
         return list(self._contexts)
 
-    def drain_new(self):
-        """Contexts other ranks published since this shard last read.
 
-        The epoch-scoped read for MemoryUpsert, which consumes this rank's own
-        rows locally. Fetched payloads are not retained, so the object store
-        can release them once every reader is done.
+class DriverShard:
+    """One rank's publish and epoch-scoped read, held in that rank's driver.
+
+    The driver puts each payload once, registers the reference itself and
+    resolves peers' references with one ray.get, so no actor relays a payload
+    or a reference between the object store and the operators that use it.
+    Calls to the registry from one driver run in the order they were made.
+    """
+
+    def __init__(self, rank, registry):
+        self.rank = rank
+        self._registry = registry
+        self._watermark = 0
+        self._pending_registration = None
+
+    def publish(self, payload):
+        self._pending_registration = self._registry.register.remote(self.rank, [ray.put(payload)])
+
+    def flush(self):
+        """Wait until this rank's latest registration is in the registry."""
+        if self._pending_registration is not None:
+            ray.get(self._pending_registration)
+
+    def drain_new(self):
+        """Contexts other ranks registered since this rank last drained.
+
+        Own rows are consumed locally in their epoch. Fetched payloads are not
+        retained, so the object store can release them once every reader is
+        done.
         """
         new_refs, total = ray.get(
-            self._registry.refs_from_others.remote(self.rank, since=self._drain_watermark)
-        )
-        self._drain_watermark = total
+            self._registry.refs_from_others.remote(self.rank, since=self._watermark))
+        self._watermark = total
         return ray.get(new_refs) if new_refs else []
 
 

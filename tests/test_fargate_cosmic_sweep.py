@@ -53,7 +53,7 @@ def _shared_module(dotted):
 def _args(**overrides):
     base = dict(listen_port=10000, timeout_ms=120000, device="cpu", batch_size=32,
                 epoch_batch_size=4, live=True, galaxies=152,
-                reuse_tolerance=0.0091, outlier_threshold=0.027677)
+                reuse_tolerance=0.0091, outlier_threshold=0.027677, gloo_socket_ifname=None)
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -349,22 +349,26 @@ def test_every_arm_launches_on_the_cosmic_task_definition():
     assert {row["task_definition"] for row in m.sweep_matrix(args)} == {m.TASK_DEFINITION}
 
 
-def test_ray_comparison_selects_armada_and_both_ray_arms():
+def test_ray_comparison_selects_armada_and_every_ray_arm():
     m = _driver()
-    assert m._selected_arms("ray-comparison") == ("armada", "ray-native", "ray-cylon")
+    assert m._selected_arms("ray-comparison") == (
+        "armada", "ray-native", "ray-collective", "ray-cylon")
     assert "ray-comparison" in m.build_parser().parse_args(
         ["--backend", "ray-comparison"]).backend
 
 
 def test_ray_comparison_leaders_over_the_four_measured_runs():
-    """Whoever leads a run pays any leftover cold-start cost. Four runs cannot
-    split evenly over three arms; ordering over the selected arms' own
-    permutations puts the extra lead on ray-cylon, the side check, rather than
-    on either headline arm. Recorded so a change to it is noticed."""
+    """Whoever leads a run pays any leftover cold-start cost. Where ray-cylon
+    runs, four arms over four runs lead once each. Elsewhere four runs cannot
+    split evenly over three arms, and the extra lead falls on ray-collective
+    rather than on either headline arm. Recorded so a change to it is noticed."""
     m = _driver()
     arms = m._selected_arms("ray-comparison")
-    leaders = [m.order_for(arms, i)[0] for i in range(4)]
-    assert leaders == ["armada", "ray-cylon", "ray-cylon", "ray-native"]
+    trimmed = tuple(arm for arm in arms if arm != "ray-cylon")
+    assert [m.order_for(arms, i)[0] for i in range(4)] == [
+        "armada", "ray-native", "ray-collective", "ray-cylon"]
+    assert [m.order_for(trimmed, i)[0] for i in range(4)] == [
+        "armada", "ray-collective", "ray-collective", "ray-native"]
 
 
 @pytest.mark.parametrize("arms", [("armada", "langchain"), ("armada", "ray-native")])
@@ -411,7 +415,8 @@ def test_ray_cylon_runs_only_at_its_configured_world_sizes():
     assert args.ray_cylon_world_sizes == [2, 8]
     ray_cylon_sizes = {r["world_size"] for r in rows if r["arm"] == "ray-cylon"}
     assert ray_cylon_sizes == {2, 8}
-    assert {r["arm"] for r in rows if r["world_size"] in (1, 4)} == {"armada", "ray-native"}
+    assert {r["arm"] for r in rows if r["world_size"] in (1, 4)} == {
+        "armada", "ray-native", "ray-collective"}
 
 
 def test_ray_cylon_world_sizes_are_overridable():
@@ -439,10 +444,10 @@ def test_warmups_precede_measured_runs_and_land_under_their_own_prefix():
     ws2 = [r for r in rows if r["world_size"] == 2]
 
     phases = [r["phase"] for r in ws2]
-    assert phases == ["warmup"] * 3 + ["measured"] * 6
+    assert phases == ["warmup"] * 4 + ["measured"] * 8
     assert all("/warmup0/" in r["s3_prefix"] for r in ws2 if r["phase"] == "warmup")
     assert all("/warmup" not in r["s3_prefix"] for r in ws2 if r["phase"] == "measured")
-    assert {r["arm"] for r in ws2} == {"armada", "ray-native", "ray-cylon"}
+    assert {r["arm"] for r in ws2} == {"armada", "ray-native", "ray-collective", "ray-cylon"}
 
 
 def test_the_matrix_covers_every_world_size_and_counts_one_task_per_rank():
@@ -454,7 +459,7 @@ def test_the_matrix_covers_every_world_size_and_counts_one_task_per_rank():
     assert all(r["tasks"] == r["world_size"] for r in rows)
     runs = args.runs + args.warmup_runs
     for n in args.world_sizes:
-        arms = 3 if n in args.ray_cylon_world_sizes else 2
+        arms = 4 if n in args.ray_cylon_world_sizes else 3
         assert sum(1 for r in rows if r["world_size"] == n) == arms * runs, n
 
 
@@ -474,9 +479,10 @@ def test_dry_run_prints_the_matrix_and_the_estimate(capsys):
     m.print_dry_run(args)
     out = capsys.readouterr().out
     assert "ray-native" in out and "ray-cylon" in out and "armada" in out
+    assert "ray-collective" in out
     assert "task-hours" in out
-    assert "40 tasks" in out
-    assert "6.67 task-hours" in out
+    assert "55 tasks" in out
+    assert "9.17 task-hours" in out
 
 
 def test_all_includes_every_arm_but_both_still_means_two():
@@ -490,15 +496,16 @@ def test_all_includes_every_arm_but_both_still_means_two():
     assert set(m.LAUNCHABLE_ARMS) | set(m.ARMS_WITHOUT_EXECUTOR) == set(m.ARMS)
 
 
-def test_ray_arms_have_a_context_store_mapping():
-    """A backend with no entry in _CONTEXT_STORE fails at runtime inside the
-    task, which costs a Fargate launch to discover."""
+def test_driver_and_runner_agree_on_every_arms_context_store():
+    """The driver sets CONTEXT_BACKEND per arm and the runner refuses any
+    store that is not its arm's own, so a disagreement fails every rank inside
+    the task, which costs a Fargate launch to discover."""
+    m = _driver()
     run_cosmic_local = _shared_module("armada.run_cosmic_local")
-    ExecutionBackend = run_cosmic_local.ExecutionBackend
-    _CONTEXT_STORE = run_cosmic_local._CONTEXT_STORE
 
-    assert _CONTEXT_STORE[ExecutionBackend.RayNative] == "plasma"
-    assert _CONTEXT_STORE[ExecutionBackend.RayCylon] == "cylon"
+    for arm in m.ARMS:
+        backend = run_cosmic_local.ExecutionBackend(arm)
+        assert m._CONTEXT_STORE[arm] == run_cosmic_local._CONTEXT_STORE[backend], arm
 
 
 def test_gating_the_ray_arms_does_not_unbalance_who_leads():
@@ -587,5 +594,32 @@ def test_dry_run_prints_a_fargate_cost_estimate(capsys):
          "--est-task-minutes", "10", "--vcpu-hour-usd", "0.04", "--gb-hour-usd", "0.004"])
     m.print_dry_run(args)
     out = capsys.readouterr().out
-    assert "Estimated Fargate cost: $1.28" in out
+    assert "Estimated Fargate cost: $1.76" in out
     assert m.RAY_SECURITY_GROUP_NAME in out
+
+
+def test_ray_collective_is_a_ray_arm_on_the_cylon_store():
+    m = _driver()
+    run_cosmic_local = _shared_module("armada.run_cosmic_local")
+
+    assert "ray-collective" in m.ARMS and "ray-collective" in m.RAY_ARMS
+    assert m.security_groups_for("ray-collective", ["sg-ray"]) == ["sg-ray"]
+    assert run_cosmic_local.ExecutionBackend("ray-collective") is \
+        run_cosmic_local.ExecutionBackend.RayCollective
+
+
+def _env(overrides):
+    return {e["name"]: e["value"] for e in overrides["containerOverrides"][0]["environment"]}
+
+
+def test_the_gloo_interface_reaches_the_task_only_when_given():
+    """Each exchanger derives Gloo's interface from its Ray node IP. The flag
+    is an override and reaches the task only when given."""
+    m = _driver()
+
+    assert m.build_parser().parse_args(["--dry-run"]).gloo_socket_ifname is None
+    assert m.build_parser().parse_args(
+        ["--dry-run", "--gloo-socket-ifname", "eth1"]).gloo_socket_ifname == "eth1"
+    assert "GLOO_SOCKET_IFNAME" not in _env(m.build_overrides(0, 2, "c", "p/", _args(), "ray-collective"))
+    named = _args(gloo_socket_ifname="eth1")
+    assert _env(m.build_overrides(0, 2, "c", "p/", named, "ray-collective"))["GLOO_SOCKET_IFNAME"] == "eth1"

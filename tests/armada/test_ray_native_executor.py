@@ -15,7 +15,7 @@ ray = pytest.importorskip("ray")
 from armada.operator import ArmadaOperator
 from armada.ray_native_executor import RayNativeExecutor
 from cylon_armada.dag_compiler import CollectivePattern
-from ray_arm.native import ContextRegistry, RunBarrier, ShardActor
+from ray_arm.native import ContextRegistry, DriverShard, RunBarrier
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +34,7 @@ def _passthrough(name, pattern):
 
 def test_point_to_point_operators_run_locally_with_no_ray_traffic(local_ray):
     registry = ContextRegistry.remote()
-    shard = ShardActor.remote(0, 1, registry)
+    shard = DriverShard(0, registry)
     executor = RayNativeExecutor(shard)
     seq = _passthrough("Reason", CollectivePattern.PointToPoint)
 
@@ -48,8 +48,8 @@ def test_allgather_operator_publishes_and_reads_back_other_ranks(local_ray):
     """No barrier: rank 0 reads before rank 1 publishes, so only the later
     reader sees both contributions within the same epoch."""
     registry = ContextRegistry.remote()
-    shard0 = ShardActor.remote(0, 2, registry)
-    shard1 = ShardActor.remote(1, 2, registry)
+    shard0 = DriverShard(0, registry)
+    shard1 = DriverShard(1, registry)
     seq = _passthrough("MemoryUpsert", CollectivePattern.AllGather)
 
     result0 = RayNativeExecutor(shard0).run(seq, pa.table({"value": [1]}))
@@ -64,8 +64,8 @@ def test_a_second_epoch_does_not_see_the_first_epochs_contribution_again(local_r
     must not run twice over rank 0's first-epoch row during rank 1's second
     epoch read."""
     registry = ContextRegistry.remote()
-    shard0 = ShardActor.remote(0, 2, registry)
-    shard1 = ShardActor.remote(1, 2, registry)
+    shard0 = DriverShard(0, registry)
+    shard1 = DriverShard(1, registry)
 
     seen = []
 
@@ -91,7 +91,7 @@ def test_an_epoch_where_every_rank_contributed_nothing_reaches_upsert_as_empty(l
     """Trailing epochs carry zero-row tables; MemoryUpsert must still run,
     on an empty table of the input schema, as it does under ArmadaExecutor."""
     registry = ContextRegistry.remote()
-    shard = ShardActor.remote(0, 1, registry)
+    shard = DriverShard(0, registry)
     seen = []
 
     def upsert_fn(table):
@@ -128,8 +128,8 @@ def test_finish_delivers_contributions_a_rank_missed_without_a_barrier(local_ray
     rank must see every contribution exactly once."""
     registry = ContextRegistry.remote()
     barrier = RunBarrier.remote(2)
-    shard0 = ShardActor.remote(0, 2, registry)
-    shard1 = ShardActor.remote(1, 2, registry)
+    shard0 = DriverShard(0, registry)
+    shard1 = DriverShard(1, registry)
     seen0, seen1 = [], []
 
     RayNativeExecutor(shard0).run(_recording_upsert(seen0), pa.table({"value": [1]}))
@@ -148,16 +148,16 @@ def test_finish_delivers_contributions_a_rank_missed_without_a_barrier(local_ray
 def test_finish_runs_the_operators_after_memory_upsert_on_the_late_rows(local_ray):
     registry = ContextRegistry.remote()
     barrier = RunBarrier.remote(1)
-    shard = ShardActor.remote(0, 2, registry)
-    peer = ShardActor.remote(1, 2, registry)
+    shard = DriverShard(0, registry)
+    peer = DriverShard(1, registry)
     seq = (ArmadaOperator("Reason", CollectivePattern.PointToPoint, VALUE_SCHEMA, VALUE_SCHEMA,
                           fn=lambda t: t)
            | _recording_upsert([])
            | ArmadaOperator("Tag", CollectivePattern.PointToPoint, VALUE_SCHEMA, VALUE_SCHEMA,
                             fn=lambda t: pa.table({"value": [v * 100 for v in t.column("value").to_pylist()]})))
 
-    ray.get(peer.publish.remote([ray.put(pa.table({"value": [7]}))]))
-    ray.get(peer.flush.remote())
+    peer.publish(pa.table({"value": [7]}))
+    peer.flush()
 
     final = RayNativeExecutor(shard).finish(seq, barrier, 30.0)
 
@@ -169,7 +169,7 @@ def test_a_ranks_own_rows_reach_upsert_exactly_once(local_ray):
     through a later drain or the end-of-run drain."""
     registry = ContextRegistry.remote()
     barrier = RunBarrier.remote(1)
-    shard = ShardActor.remote(0, 1, registry)
+    shard = DriverShard(0, registry)
     seen = []
     seq = _recording_upsert(seen)
     executor = RayNativeExecutor(shard)
@@ -185,9 +185,60 @@ def test_a_ranks_own_rows_reach_upsert_exactly_once(local_ray):
 def test_finish_with_nothing_late_returns_none(local_ray):
     registry = ContextRegistry.remote()
     barrier = RunBarrier.remote(1)
-    shard = ShardActor.remote(0, 1, registry)
+    shard = DriverShard(0, registry)
     seq = _recording_upsert([])
 
     RayNativeExecutor(shard).run(seq, pa.table({"value": [1]}))
 
     assert RayNativeExecutor(shard).finish(seq, barrier, 30.0) is None
+
+
+def test_start_holds_each_rank_until_every_rank_has_arrived(local_ray):
+    """Ranks leave cluster formation and actor startup at different times.
+    Without aligning them, that launch skew lands in the end-of-run barrier
+    and so in this arm's compared time, where Armada's own skew is absorbed
+    while its channel connects, before its run starts."""
+    barrier = RunBarrier.remote(2)
+    shard0 = DriverShard(0, ContextRegistry.remote())
+    executor0 = RayNativeExecutor(shard0)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        early = pool.submit(executor0.start, barrier, 30.0)
+        with pytest.raises(TimeoutError):
+            early.result(timeout=0.5)
+        RayNativeExecutor(shard0).start(barrier, 30.0)
+        early.result(timeout=30)
+
+
+class _RecordingShard:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def flush(self):
+        self.calls.append("flush")
+
+    def drain_new(self):
+        self.calls.append("drain")
+        return []
+
+
+class _RecordingBarrier:
+    def __init__(self, calls):
+        self.calls = calls
+        self.wait = type("_Wait", (), {"remote": lambda _, phase: self._wait(phase)})()
+
+    def _wait(self, phase):
+        self.calls.append(f"barrier:{phase}")
+        return ray.put(None)
+
+
+def test_finish_lands_this_ranks_last_registration_before_announcing_it_published(local_ray):
+    """The published phase promises peers that every contribution is in the
+    registry. A registration still in flight at that point could be missed by
+    a peer's final drain, losing that row on that rank."""
+    calls = []
+
+    RayNativeExecutor(_RecordingShard(calls)).finish(
+        _recording_upsert([]), _RecordingBarrier(calls), 30.0)
+
+    assert calls == ["flush", "barrier:published", "drain", "barrier:drained"]

@@ -32,10 +32,11 @@ registry), so the first measured run is not also the first touch of those.
 Each world size runs `--runs` measured paired runs; within a run the arms execute back
 to back, never concurrently, and their order cycles through the permutations
 of the arms being compared, so that Bedrock latency drift over the session
-cannot masquerade as an effect. Two arms alternate; five lead once each over
-five runs; three arms over four runs leave one extra lead, which falls on
-ray-cylon. Inside a comparison ray-cylon runs only at --ray-cylon-world-sizes:
-its data plane is Armada's, so it is a portability check, not a sweep arm.
+cannot masquerade as an effect. Two arms alternate; the ray-comparison arms
+lead once each over four runs where ray-cylon runs, and elsewhere three arms
+over four runs leave one extra lead, which falls on ray-collective. Inside a
+comparison ray-cylon runs only at --ray-cylon-world-sizes: its data plane is
+Armada's, so it is a portability check, not a sweep arm.
 
 Prerequisites:
     - cylon-armada-python image built with the AstroMAE deps and pushed to ECR
@@ -125,10 +126,10 @@ def galaxies_for(scaling, world_size, per_rank, total):
     return min(per_rank * world_size, total)
 
 
-ARMS = ("armada", "langchain", "isolated", "ray-native", "ray-cylon")
+ARMS = ("armada", "langchain", "isolated", "ray-native", "ray-cylon", "ray-collective")
 
 ARMS_WITHOUT_EXECUTOR = ()
-RAY_ARMS = ("ray-native", "ray-cylon")
+RAY_ARMS = ("ray-native", "ray-cylon", "ray-collective")
 LAUNCHABLE_ARMS = tuple(arm for arm in ARMS if arm not in ARMS_WITHOUT_EXECUTOR)
 
 _ORDERS = tuple(itertools.permutations(ARMS))
@@ -146,7 +147,7 @@ def _order_stride(n_arms, n_orders):
 
     Distinct leaders over the first n runs is NOT guaranteed by that construction
     and must not be assumed for an arbitrary arm count. It holds at the current
-    five arms (stride 29, first five runs led by all five arms) and is pinned by
+    six arms (stride 121, first six runs led by all six arms) and is pinned by
     test_leader_diversity_over_short_runs; it is false at three arms, where
     stride 5 leads with arms 0, 2, 2. Anyone changing ARMS must re-check that
     test rather than trusting this function to generalise.
@@ -195,7 +196,7 @@ def arm_order(run_index):
 _ARM_SELECTIONS = {
     "all": LAUNCHABLE_ARMS,
     "both": ("armada", "langchain"),
-    "ray-comparison": ("armada", "ray-native", "ray-cylon"),
+    "ray-comparison": ("armada", "ray-native", "ray-collective", "ray-cylon"),
 }
 
 
@@ -228,7 +229,7 @@ def _selected_arms(backend):
     Folding it into "all" would silently add a third arm — 50% more Fargate and
     Bedrock than the name implies — to every caller and script that already
     passes it. "ray-comparison" is the headline comparison: Armada against
-    both Ray arms.
+    every Ray arm.
 
     An arm listed in ARMS_WITHOUT_EXECUTOR is refused here rather than at the
     far end of a sweep, where it would cost a Fargate task per rank and yield
@@ -278,7 +279,7 @@ def plan_launches(backend, runs, arms=None):
 
 
 _CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon",
-                  "ray-native": "plasma", "ray-cylon": "cylon"}
+                  "ray-native": "cylon", "ray-cylon": "cylon", "ray-collective": "cylon"}
 
 
 def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
@@ -305,6 +306,8 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
         {"name": "LIVE", "value": "1" if args.live else "0"},
         {"name": "GALAXIES", "value": str(args.galaxies)},
     ]
+    if args.gloo_socket_ifname:
+        environment.append({"name": "GLOO_SOCKET_IFNAME", "value": args.gloo_socket_ifname})
     return {
         "containerOverrides": [
             {
@@ -634,7 +637,9 @@ def build_parser():
                         default=[1, 2, 4, 8, 16, 32, 64],
                         help="must include 1 and 2 as baselines")
     parser.add_argument("--scaling", choices=["weak", "strong"], default="strong",
-                        help="weak (fixed per-rank load, primary) or strong (fixed total)")
+                        help="strong (fixed total, the default) or weak (fixed per-rank load, "
+                             "--per-rank galaxies per rank); pass it explicitly, since the "
+                             "choice changes what the sweep measures")
     parser.add_argument("--reuse-tolerance", type=float, default=0.0091,
                         help="redshift tolerance for the reuse validity gate; identical on "
                              "every arm or the policy becomes the difference being measured")
@@ -644,7 +649,7 @@ def build_parser():
                              "the generator derives it per shard and the workload moves with N")
     parser.add_argument("--backend", choices=list(ARMS) + list(_ARM_SELECTIONS),
                         default="all",
-                        help="which arm(s); 'ray-comparison' is armada against both Ray arms")
+                        help="which arm(s); 'ray-comparison' is armada against every Ray arm")
     parser.add_argument("--runs", type=int, default=4,
                         help="measured paired runs per world size; arm order alternates "
                              "between runs; mean and sample std are taken across them")
@@ -675,6 +680,10 @@ def build_parser():
                         help="torch device inside the task; Fargate has no GPU")
     parser.add_argument("--batch-size", type=int, default=32,
                         help="AstroMAE inference batch size")
+    parser.add_argument("--gloo-socket-ifname", default=None,
+                        help="override only: the network interface Gloo binds for "
+                             "ray-collective. By default each exchanger derives it from the "
+                             "interface holding its Ray node IP, so this is rarely needed")
     parser.add_argument("--listen-port", type=int, default=10000)
     parser.add_argument("--timeout-ms", type=int, default=120000)
     parser.add_argument("--arm-timeout-s", type=int, default=1800,

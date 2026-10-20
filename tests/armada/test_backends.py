@@ -164,6 +164,17 @@ def test_the_isolated_arm_runs_on_its_own_local_store():
     assert context_store_for(ExecutionBackend.Isolated) == "cylon"
 
 
+@pytest.mark.parametrize("backend", list(ExecutionBackend), ids=lambda b: b.value)
+def test_every_arm_runs_on_a_store_the_live_context_manager_can_build(monkeypatch, backend):
+    """--live builds a ContextManager from the arm's store, so a store it
+    rejects fails every rank of that arm at startup, after the launch is paid."""
+    from context.manager import ContextManager
+
+    monkeypatch.delenv("CONTEXT_BACKEND", raising=False)
+    ContextManager(backend=context_store_for(backend), persist_to_redis=False,
+                   snapshot_context_table=False)
+
+
 def test_the_isolated_arm_fires_no_collective():
     """A collective would make it a sharing arm, which is the thing it is the
     control for."""

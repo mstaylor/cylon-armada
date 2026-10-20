@@ -11,7 +11,7 @@ import pytest
 ray = pytest.importorskip("ray")
 np = pytest.importorskip("numpy")
 
-from ray_arm.native import ContextRegistry, RunBarrier, ShardActor
+from ray_arm.native import ContextRegistry, DriverShard, RunBarrier, ShardActor
 
 
 def _put(*objects):
@@ -105,41 +105,46 @@ def test_numpy_payload_survives_the_object_store_round_trip(local_ray):
 def test_drain_new_returns_only_contexts_since_the_last_drain(local_ray):
     """MemoryUpsert must see each epoch's new contributions exactly once. A
     second drain_new with nothing published in between must return empty,
-    not the same contexts again — that would double count store/ingest."""
+    not the same contexts again, or store and ingest would double count."""
     registry = ContextRegistry.remote()
-    rank0 = ShardActor.remote(0, 2, registry)
-    rank1 = ShardActor.remote(1, 2, registry)
+    rank0 = DriverShard(0, registry)
+    rank1 = DriverShard(1, registry)
 
-    ray.get(rank0.publish.remote(_put("epoch1-from-0")))
-    ray.get(rank0.flush.remote())
-    first = ray.get(rank1.drain_new.remote())
-    assert first == ["epoch1-from-0"]
+    rank0.publish("epoch1-from-0")
+    assert rank1.drain_new() == ["epoch1-from-0"]
+    assert rank1.drain_new() == []
 
-    again = ray.get(rank1.drain_new.remote())
-    assert again == []
-
-    ray.get(rank0.publish.remote(_put("epoch2-from-0")))
-    ray.get(rank0.flush.remote())
-    second = ray.get(rank1.drain_new.remote())
-    assert second == ["epoch2-from-0"]
+    rank0.publish("epoch2-from-0")
+    assert rank1.drain_new() == ["epoch2-from-0"]
 
 
-def test_drain_new_and_visible_contexts_read_independently(local_ray):
-    """Each read keeps its own log position, so interleaving them on one
-    shard neither replays nor skips anything for either."""
+def test_a_driver_shard_reads_peers_through_the_registry_and_object_store_alone(local_ray):
+    """The reader resolves references in its own process. Nothing but the
+    registry, which holds references only, sits between publisher and reader."""
     registry = ContextRegistry.remote()
-    rank0 = ShardActor.remote(0, 2, registry)
-    rank1 = ShardActor.remote(1, 2, registry)
+    rank0 = DriverShard(0, registry)
+    rank1 = DriverShard(1, registry)
+    array = np.arange(8, dtype=np.float32)
 
-    ray.get(rank0.publish.remote(_put("a")))
-    ray.get(rank0.flush.remote())
-    assert ray.get(rank1.drain_new.remote()) == ["a"]
+    rank0.publish(array)
+    drained = rank1.drain_new()
 
-    ray.get(rank0.publish.remote(_put("b")))
-    ray.get(rank0.flush.remote())
-    assert ray.get(rank1.visible_contexts.remote()) == ["a", "b"]
-    assert ray.get(rank1.drain_new.remote()) == ["b"]
-    assert ray.get(rank1.drain_new.remote()) == []
+    assert len(drained) == 1
+    np.testing.assert_array_equal(drained[0], array)
+    registered, _ = ray.get(registry.all_refs.remote(since=0))
+    assert len(registered) == 1
+
+
+def test_flush_waits_for_the_last_registration(local_ray):
+    registry = ContextRegistry.remote()
+    rank0 = DriverShard(0, registry)
+
+    rank0.flush()
+    rank0.publish("a")
+    rank0.publish("b")
+    rank0.flush()
+
+    assert ray.get(registry.count.remote()) == 2
 
 
 def test_publish_registers_the_callers_references_without_copying_them(local_ray):
@@ -160,14 +165,13 @@ def test_drain_new_skips_this_ranks_own_contributions(local_ray):
     """A rank's own rows are consumed locally in the epoch that produced
     them, so the drain returns only what other ranks published."""
     registry = ContextRegistry.remote()
-    rank0 = ShardActor.remote(0, 2, registry)
-    rank1 = ShardActor.remote(1, 2, registry)
+    rank0 = DriverShard(0, registry)
+    rank1 = DriverShard(1, registry)
 
-    ray.get(rank0.publish.remote(_put("own-0")))
-    ray.get(rank0.flush.remote())
+    rank0.publish("own-0")
 
-    assert ray.get(rank0.drain_new.remote()) == []
-    assert ray.get(rank1.drain_new.remote()) == ["own-0"]
+    assert rank0.drain_new() == []
+    assert rank1.drain_new() == ["own-0"]
 
 
 def test_run_barrier_holds_every_rank_until_the_last_arrives(local_ray):

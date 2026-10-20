@@ -56,7 +56,7 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
 _register_model_modules(); import sys; \
 assert 'NormalCell' in sys.modules and 'blocks.photoz' in sys.modules; \
 print('AstroMAE module aliases OK')"
-ARG RAY_VERSION=2.40.0
+ARG RAY_VERSION=2.49.2
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
@@ -71,11 +71,13 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     cd /cylon-armada/scripts && \
     python -c "import pycylon, ray, pyarrow, torch, timm; \
 assert ray.__version__ == '${RAY_VERSION}', ray.__version__; \
+from ray.util.collective.collective import torch_distributed_available; \
+assert torch_distributed_available(), 'ray.util.collective torch_gloo backend unavailable'; \
 from communicator.fmi_bridge import _import_fmi; \
 assert all(_import_fmi()), 'pycylon FMI not importable'; \
 from cylon_armada.context_table import ContextTable; \
 print('ContextTable', ContextTable(8).to_arrow().schema.field('embedding').type); \
-import armada.run_cosmic_local, armada.ray_native_executor, ray_arm.native, ray_arm.cluster, ray_arm.cylon_on_ray; \
+import armada.run_cosmic_local, armada.ray_native_executor, armada.ray_collective_executor, ray_arm.native, ray_arm.collective, ray_arm.cluster, ray_arm.cylon_on_ray; \
 print('ray', ray.__version__, 'pyarrow', pyarrow.__version__, 'torch', torch.__version__, 'timm', timm.__version__)" && \
     ray --version
 
