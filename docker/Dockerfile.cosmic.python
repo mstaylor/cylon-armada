@@ -60,9 +60,11 @@ ARG RAY_VERSION=2.49.2
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate cylon_dev && \
-    python -c "import pyarrow, google.protobuf, grpc; \
-open('/tmp/constraints.txt', 'w').write('pyarrow==%s\ngrpcio==%s\nprotobuf==%s\n' % \
-(pyarrow.__version__, grpc.__version__, google.protobuf.__version__))" && \
+    python -c "import importlib.metadata as m; \
+installed = {d.metadata['Name'].lower() for d in m.distributions()}; \
+open('/tmp/constraints.txt', 'w').write(''.join('%s==%s\n' % (p, m.version(p)) \
+for p in ('pyarrow', 'grpcio', 'protobuf') if p in installed))" && \
+    cat /tmp/constraints.txt && \
     pip install --no-cache-dir -c /tmp/constraints.txt "ray[default]==${RAY_VERSION}" && \
     rm -f /tmp/constraints.txt
 
