@@ -563,12 +563,20 @@ def collect_arm_timing(ecs, arns):
         return None
 
 
+def observes_ray_dashboard(args):
+    return bool(args.ray_dashboard or args.ray_dashboard_hold_s > 0)
+
+
 def sweep_matrix(args):
     """Every launch the sweep makes, in order, one row per arm-run.
 
     Pure, so the dry run and the live run walk the same rows. Warm-ups at a
-    world size precede its measured runs and are written under warmup<k>/.
+    world size precede its measured runs and are written under warmup<k>/. A
+    launch that observes the Ray dashboard writes its runs under dashboard<k>/,
+    because the exec agent, the page loads and the hold perturb rank 0 and the
+    scaling summary reads only run<k>/.
     """
+    measured_dir = "dashboard" if observes_ray_dashboard(args) else "run"
     rows = []
     for world_size in sorted(args.world_sizes):
         galaxies = galaxies_for(args.scaling, world_size, args.per_rank, args.total)
@@ -576,7 +584,7 @@ def sweep_matrix(args):
         phases = (("warmup", plan_warmups(args.backend, args.warmup_runs, arms)),
                   ("measured", plan_launches(args.backend, args.runs, arms)))
         for phase, launches in phases:
-            run_dir = "warmup" if phase == "warmup" else "run"
+            run_dir = "warmup" if phase == "warmup" else measured_dir
             for run_index, arm in launches:
                 rows.append({
                     "world_size": world_size, "galaxies": galaxies, "phase": phase,
@@ -812,6 +820,10 @@ def main():
         ray_security_groups = [resolve_ray_security_group(boto3.client("ec2", region_name=REGION))]
         logger.info("Ray arms launch in security group %s (%s)",
                     ray_security_groups[0], RAY_SECURITY_GROUP_NAME)
+
+    if observes_ray_dashboard(args):
+        logger.warning("Ray dashboard launch: runs are written under dashboard<k>/ and are "
+                       "excluded from the scaling summary")
 
     ecs = boto3.client("ecs", region_name=REGION)
     for i, world_size in enumerate(sorted(args.world_sizes)):

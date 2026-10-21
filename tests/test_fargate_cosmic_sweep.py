@@ -451,6 +451,27 @@ def test_warmups_precede_measured_runs_and_land_under_their_own_prefix():
     assert {r["arm"] for r in ws2} == {"armada", "ray-native", "ray-collective", "ray-cylon"}
 
 
+def test_a_dashboard_launch_never_lands_where_the_scaling_summary_reads():
+    m = _driver()
+    from results.exp_e_scaling import _RUN_DIR
+    for flags in (["--ray-dashboard"], ["--ray-dashboard-hold-s", "600"]):
+        args = m.build_parser().parse_args(
+            ["--dry-run", "--backend", "ray-comparison", "--runs", "2", "--warmup-runs", "1"]
+            + flags)
+        rows = m.sweep_matrix(args)
+        run_dirs = {r["s3_prefix"].rstrip("/").rsplit("/", 1)[1] for r in rows}
+        assert not any(_RUN_DIR.match(d) for d in run_dirs), (flags, run_dirs)
+        assert {d for d in run_dirs if not d.startswith("warmup")} == {"dashboard0", "dashboard1"}
+
+
+def test_a_plain_launch_still_lands_where_the_scaling_summary_reads():
+    m = _driver()
+    from results.exp_e_scaling import _RUN_DIR
+    args = m.build_parser().parse_args(["--dry-run", "--backend", "ray-comparison", "--runs", "1"])
+    measured = [r for r in m.sweep_matrix(args) if r["phase"] == "measured"]
+    assert all(_RUN_DIR.match(r["s3_prefix"].rstrip("/").rsplit("/", 1)[1]) for r in measured)
+
+
 def test_the_matrix_covers_every_world_size_and_counts_one_task_per_rank():
     m = _driver()
     args = m.build_parser().parse_args(["--dry-run", "--backend", "ray-comparison"])
