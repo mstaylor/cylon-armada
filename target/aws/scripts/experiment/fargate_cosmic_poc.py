@@ -49,6 +49,8 @@ import itertools
 import json
 import logging
 import math
+import shutil
+import subprocess
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -87,7 +89,7 @@ WAITER_DELAY_S = 5
 # hot-reloaded. cwd must be the scripts root: with armada/ as the working
 # directory, armada/operator.py shadows the stdlib `operator` module and breaks
 # almost every import.
-RUNNER_SCRIPT = """import os, subprocess, sys, boto3
+RUNNER_SCRIPT = """import os, subprocess, sys, time, boto3
 scripts = '/cylon-armada/scripts'
 s3 = boto3.client('s3')
 bucket = os.environ['ARTIFACT_BUCKET']
@@ -109,6 +111,10 @@ if os.path.exists('/tmp/result.json'):
     s3.upload_file('/tmp/result.json', os.environ['RESULTS_BUCKET'],
                    os.environ['S3_RESULTS_PREFIX'] + 'rank%s.json' % os.environ['RANK'])
     print('uploaded result for rank', os.environ['RANK'], flush=True)
+hold_s = int(os.environ.get('RAY_DASHBOARD_HOLD_S', '0'))
+if hold_s > 0:
+    print('holding the Ray head for the dashboard for', hold_s, 's', flush=True)
+    time.sleep(hold_s)
 sys.exit(result.returncode)
 """
 
@@ -308,6 +314,8 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
     ]
     if args.gloo_socket_ifname:
         environment.append({"name": "GLOO_SOCKET_IFNAME", "value": args.gloo_socket_ifname})
+    if rank == 0 and backend in RAY_ARMS and args.ray_dashboard_hold_s > 0:
+        environment.append({"name": "RAY_DASHBOARD_HOLD_S", "value": str(args.ray_dashboard_hold_s)})
     return {
         "containerOverrides": [
             {
@@ -360,7 +368,7 @@ def _capacity_retryable(failures):
 
 def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
                capacity_backoff_s, budget_s, task_definition=TASK_DEFINITION,
-               security_groups=None):
+               security_groups=None, execute_command_ranks=()):
     vpc_configuration = {"subnets": SUBNETS, "assignPublicIp": "ENABLED"}
     if security_groups:
         vpc_configuration["securityGroups"] = list(security_groups)
@@ -376,6 +384,7 @@ def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
                     launchType="FARGATE",
                     networkConfiguration={"awsvpcConfiguration": vpc_configuration},
                     overrides=overrides_for_rank(rank),
+                    enableExecuteCommand=rank in execute_command_ranks,
                 )
             except ClientError as exc:
                 code = exc.response.get("Error", {}).get("Code", "")
@@ -405,6 +414,70 @@ def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
     # communicator construction, so a straggler stalls every peer it pairs with.
     with ThreadPoolExecutor(max_workers=min(world_size, 16)) as pool:
         return list(pool.map(_launch, range(world_size)))
+
+
+def ray_dashboard_target(ecs, task_arn, timeout_s, sleep=time.sleep, poll_s=WAITER_DELAY_S):
+    """The SSM target for rank 0's container once its ECS Exec agent runs, else None.
+
+    Never raises: the dashboard is a convenience and must not cost the run.
+    """
+    try:
+        waited = 0.0
+        while True:
+            task = ecs.describe_tasks(cluster=CLUSTER, tasks=[task_arn])["tasks"][0]
+            container = (task.get("containers") or [{}])[0]
+            agent_running = any(agent.get("name") == "ExecuteCommandAgent"
+                                and agent.get("lastStatus") == "RUNNING"
+                                for agent in container.get("managedAgents", []))
+            if agent_running and container.get("runtimeId"):
+                task_id = task["taskArn"].rsplit("/", 1)[-1]
+                return f"ecs:{CLUSTER}_{task_id}_{container['runtimeId']}"
+            if task.get("lastStatus") in ("DEPROVISIONING", "STOPPED") or waited >= timeout_s:
+                return None
+            sleep(poll_s)
+            waited += poll_s
+    except Exception as exc:
+        logger.warning("could not locate rank 0 for the Ray dashboard: %s", exc)
+        return None
+
+
+def dashboard_tunnel_command(target, port):
+    return ["aws", "ssm", "start-session", "--region", REGION, "--target", target,
+            "--document-name", "AWS-StartPortForwardingSession",
+            "--parameters", json.dumps({"portNumber": [str(port)],
+                                        "localPortNumber": [str(port)]})]
+
+
+def open_dashboard_tunnel(target, port, which=shutil.which, popen=subprocess.Popen):
+    """Forward localhost:port to rank 0's dashboard through SSM, or None if it cannot."""
+    if not which("session-manager-plugin"):
+        logger.warning("  Ray dashboard: install the AWS Session Manager plugin to open it "
+                       "(https://docs.aws.amazon.com/systems-manager/latest/userguide/"
+                       "session-manager-working-with-install-plugin.html)")
+        return None
+    try:
+        return popen(dashboard_tunnel_command(target, port),
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        logger.warning("  Ray dashboard tunnel failed to start: %s", exc)
+        return None
+
+
+def _open_ray_dashboard(ecs, rank0_arn, args):
+    target = ray_dashboard_target(ecs, rank0_arn, args.arm_timeout_s)
+    if target is None:
+        logger.warning("  Ray dashboard unavailable: rank 0's exec agent never started")
+        return None
+    tunnel = open_dashboard_tunnel(target, args.ray_dashboard_port)
+    if tunnel is not None:
+        logger.info("  Ray dashboard: http://localhost:%d", args.ray_dashboard_port)
+    return tunnel
+
+
+def _close_ray_dashboard(tunnel):
+    if tunnel is not None and tunnel.poll() is None:
+        tunnel.terminate()
 
 
 def _wait_for_tasks(ecs, arns, timeout_s):
@@ -601,9 +674,15 @@ def launch_world_size(ecs, world_size, args, ray_security_groups=None):
             rank, world_size, comm_name, s3_prefix, point_args, arm),
             args.capacity_retries, args.capacity_backoff_s,
             capacity_budget_s(args.timeout_ms), task_definition=row["task_definition"],
-            security_groups=security_groups_for(arm, ray_security_groups))
+            security_groups=security_groups_for(arm, ray_security_groups),
+            execute_command_ranks=(0,) if args.ray_dashboard and arm in RAY_ARMS else ())
         logger.info("  launched %d tasks; waiting for the arm to finish", len(arns))
-        _wait_for_tasks(ecs, arns, args.arm_timeout_s)
+        tunnel = _open_ray_dashboard(ecs, arns[0], args) if (
+            args.ray_dashboard and arm in RAY_ARMS) else None
+        try:
+            _wait_for_tasks(ecs, arns, args.arm_timeout_s)
+        finally:
+            _close_ray_dashboard(tunnel)
         _record_arm_timing(ecs, arns, s3_prefix)
         all_arns.extend(arns)
     return all_arns
@@ -684,6 +763,16 @@ def build_parser():
                         help="override only: the network interface Gloo binds for "
                              "ray-collective. By default each exchanger derives it from the "
                              "interface holding its Ray node IP, so this is rarely needed")
+    parser.add_argument("--ray-dashboard", action="store_true",
+                        help="open each Ray arm's dashboard at http://localhost:<port> through "
+                             "an SSM tunnel to rank 0 (ECS Exec). Needs the AWS Session Manager "
+                             "plugin locally. Adds the SSM agent to rank 0 only")
+    parser.add_argument("--ray-dashboard-port", type=int, default=8265,
+                        help="Ray's dashboard port, forwarded to the same local port")
+    parser.add_argument("--ray-dashboard-hold-s", type=int, default=0,
+                        help="keep rank 0 of each Ray arm, and so the dashboard, up this many "
+                             "seconds after its result is uploaded. Measurements are unaffected, "
+                             "but each arm takes that much longer and bills one task for it")
     parser.add_argument("--listen-port", type=int, default=10000)
     parser.add_argument("--timeout-ms", type=int, default=120000)
     parser.add_argument("--arm-timeout-s", type=int, default=1800,
@@ -708,6 +797,9 @@ def main():
 
     if args.device != "cpu":
         parser.error("Fargate has no GPU support — use the ECS EC2 GPU arm for cuda")
+    if args.ray_dashboard_hold_s >= args.arm_timeout_s:
+        parser.error("--ray-dashboard-hold-s must be well below --arm-timeout-s, or the "
+                     "driver gives up on an arm while rank 0 is still holding")
     if 1 not in args.world_sizes or 2 not in args.world_sizes:
         logger.warning("world sizes %s omit 1 and/or 2 — the sweep convention requires both "
                        "as baseline points", args.world_sizes)

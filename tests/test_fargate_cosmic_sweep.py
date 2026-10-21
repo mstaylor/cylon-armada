@@ -12,6 +12,7 @@ Run: pytest tests/test_fargate_cosmic_sweep.py -v
 import argparse
 import importlib
 import importlib.util
+import json
 import os
 
 import pytest
@@ -53,7 +54,7 @@ def _shared_module(dotted):
 def _args(**overrides):
     base = dict(listen_port=10000, timeout_ms=120000, device="cpu", batch_size=32,
                 epoch_batch_size=4, live=True, galaxies=152,
-                reuse_tolerance=0.0091, outlier_threshold=0.027677, gloo_socket_ifname=None)
+                reuse_tolerance=0.0091, outlier_threshold=0.027677, gloo_socket_ifname=None, ray_dashboard_hold_s=0)
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -623,3 +624,92 @@ def test_the_gloo_interface_reaches_the_task_only_when_given():
     assert "GLOO_SOCKET_IFNAME" not in _env(m.build_overrides(0, 2, "c", "p/", _args(), "ray-collective"))
     named = _args(gloo_socket_ifname="eth1")
     assert _env(m.build_overrides(0, 2, "c", "p/", named, "ray-collective"))["GLOO_SOCKET_IFNAME"] == "eth1"
+
+
+def test_the_dashboard_hold_reaches_only_rank_zero_of_a_ray_arm():
+    """The hold keeps the Ray head, and with it the dashboard, up after the
+    rank has uploaded its result, so it never touches a measurement."""
+    m = _driver()
+    held = _args(ray_dashboard_hold_s=600)
+
+    assert m.build_parser().parse_args(["--dry-run"]).ray_dashboard_hold_s == 0
+    assert _env(m.build_overrides(0, 2, "c", "p/", held, "ray-native"))["RAY_DASHBOARD_HOLD_S"] == "600"
+    assert "RAY_DASHBOARD_HOLD_S" not in _env(m.build_overrides(1, 2, "c", "p/", held, "ray-native"))
+    assert "RAY_DASHBOARD_HOLD_S" not in _env(m.build_overrides(0, 2, "c", "p/", held, "armada"))
+    assert "RAY_DASHBOARD_HOLD_S" not in _env(m.build_overrides(0, 2, "c", "p/", _args(), "ray-native"))
+
+
+def test_the_runner_holds_rank_zero_only_after_uploading_its_result():
+    m = _driver()
+    script = m.RUNNER_SCRIPT
+    compile(script, "runner", "exec")
+    assert script.index("upload_file") < script.index("RAY_DASHBOARD_HOLD_S")
+
+
+def test_only_rank_zero_of_a_ray_arm_launches_with_execute_command_for_the_dashboard():
+    """The SSM agent ECS Exec adds is a process in the task, so it rides only
+    on rank 0, where the dashboard lives, and only when asked for."""
+    m = _driver()
+    ecs = _RecordingEcs()
+    m._run_tasks(ecs, 3, lambda rank: {"rank": rank}, 0, 1, 60, execute_command_ranks=(0,))
+    assert {call["overrides"]["rank"]: call.get("enableExecuteCommand", False)
+            for call in ecs.calls} == {0: True, 1: False, 2: False}
+
+    plain = _RecordingEcs()
+    m._run_tasks(plain, 2, lambda rank: {}, 0, 1, 60)
+    assert not any(call.get("enableExecuteCommand") for call in plain.calls)
+
+
+class _DescribingEcs:
+    def __init__(self, responses):
+        self.responses = list(responses)
+
+    def describe_tasks(self, cluster, tasks):
+        return self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
+
+
+def _exec_task(status, agent_status=None, runtime_id="rt-1"):
+    agents = [{"name": "ExecuteCommandAgent", "lastStatus": agent_status}] if agent_status else []
+    return {"tasks": [{"taskArn": "arn:aws:ecs:us-east-1:1:task/CylonFargateExperiments/abc123",
+                       "lastStatus": status,
+                       "containers": [{"runtimeId": runtime_id, "managedAgents": agents}]}]}
+
+
+def test_the_dashboard_target_is_rank_zeros_container_once_its_exec_agent_runs():
+    m = _driver()
+    ecs = _DescribingEcs([_exec_task("PENDING"), _exec_task("RUNNING", "PENDING"),
+                          _exec_task("RUNNING", "RUNNING")])
+
+    target = m.ray_dashboard_target(ecs, "arn:rank0", timeout_s=60, sleep=lambda s: None)
+
+    assert target == "ecs:CylonFargateExperiments_abc123_rt-1"
+
+
+def test_the_dashboard_target_is_none_when_rank_zero_stops_first_and_never_raises():
+    m = _driver()
+
+    class Broken:
+        def describe_tasks(self, **kw):
+            raise RuntimeError("throttled")
+
+    stopped = _DescribingEcs([_exec_task("STOPPED")])
+    assert m.ray_dashboard_target(stopped, "arn:rank0", timeout_s=60, sleep=lambda s: None) is None
+    assert m.ray_dashboard_target(Broken(), "arn:rank0", timeout_s=60, sleep=lambda s: None) is None
+
+
+def test_the_dashboard_tunnel_forwards_the_same_port_locally_through_ssm():
+    m = _driver()
+    command = m.dashboard_tunnel_command("ecs:c_t_r", 8265)
+    assert command[:3] == ["aws", "ssm", "start-session"]
+    assert command[command.index("--target") + 1] == "ecs:c_t_r"
+    assert command[command.index("--document-name") + 1] == "AWS-StartPortForwardingSession"
+    assert json.loads(command[command.index("--parameters") + 1]) == {
+        "portNumber": ["8265"], "localPortNumber": ["8265"]}
+
+
+def test_no_tunnel_is_opened_without_the_session_manager_plugin():
+    m = _driver()
+    opened = []
+    tunnel = m.open_dashboard_tunnel("ecs:c_t_r", 8265, which=lambda name: None,
+                                     popen=lambda *a, **k: opened.append(a))
+    assert tunnel is None and not opened
