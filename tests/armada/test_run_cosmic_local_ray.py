@@ -291,7 +291,8 @@ def test_ray_native_records_cluster_formation_and_teardown_barrier_apart(monkeyp
     record = json.load(open(out))
 
     assert record["ray_cluster_s"] == CLUSTER_S
-    assert record["establish_s"] == ESTABLISH_S + START_ALIGN_S
+    assert record["establish_s"] == ESTABLISH_S
+    assert record["start_barrier_s"] == START_ALIGN_S
     assert record["run_s"] == RUN_S
     assert record["teardown_barrier_s"] == TEARDOWN_S
     assert record["records_written"] == 6
@@ -356,9 +357,9 @@ def test_ray_collective_runs_through_the_collective_executor_with_its_handles(mo
     assert len(results) == 1
 
 
-def test_ray_collective_charges_group_setup_and_alignment_to_establish_s(monkeypatch, tmp_path):
-    """Group formation and start alignment are setup, as under ray-native. The
-    allgather already waits for every rank each epoch, so nothing is added
+def test_ray_collective_charges_group_setup_to_establish_s_and_alignment_apart(monkeypatch, tmp_path):
+    """Group formation is setup and start alignment is recorded apart, as
+    under ray-native. The allgather already waits for every rank each epoch, so nothing is added
     after the last epoch and the compared figure is run_s alone. The Arrow
     conversion is reported beside it."""
     ray = pytest.importorskip("ray")
@@ -397,7 +398,8 @@ def test_ray_collective_charges_group_setup_and_alignment_to_establish_s(monkeyp
     assert record["backend"] == "ray-collective"
     assert record["context_backend"] == "cylon"
     assert record["ray_cluster_s"] == CLUSTER_S
-    assert record["establish_s"] == ESTABLISH_S + START_ALIGN_S
+    assert record["establish_s"] == ESTABLISH_S
+    assert record["start_barrier_s"] == START_ALIGN_S
     assert record["run_s"] == RUN_S
     assert "teardown_barrier_s" not in record
     assert record["packed_bytes"] > 0

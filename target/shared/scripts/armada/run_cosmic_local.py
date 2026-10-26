@@ -24,7 +24,9 @@ Ray arms record ray_cluster_s (forming the cluster) apart from establish_s
 (the data plane's own setup), ray-native records teardown_barrier_s (the
 end-of-run barrier and late drain) apart from run_s, and ray-collective
 records its Arrow conversion (pack_s, unpack_s) apart from its exchange
-(exchange_s, collective_s), all inside run_s.
+(exchange_s, collective_s), all inside run_s. Every arm with a cross-rank
+channel waits for its peers after inference and before the run clock starts,
+recorded as start_barrier_s.
 
 Services are mocked by default: --live switches to real Bedrock/Redis/DynamoDB
 and therefore costs money on every rank (one embedding call and one LLM call per
@@ -63,8 +65,9 @@ from enum import Enum
 import numpy as np
 import pyarrow as pa
 
-from armada.cosmic_workflow import build_cosmic_workflow
+from armada.cosmic_workflow import COSMIC_MODEL_CALL_OPERATORS, build_cosmic_workflow
 from armada.epochs import epoch_count, plan_epochs
+from armada.exchange_schedule import OverlappedEpochs
 from armada.executor import ArmadaExecutor, InputPlacement, required_peer_map
 from armada.ray_collective_executor import ConversionTimings, RayCollectiveExecutor
 from armada.ray_native_executor import RayNativeExecutor
@@ -412,6 +415,34 @@ RAY_BACKENDS = (ExecutionBackend.RayNative, ExecutionBackend.RayCylon,
                 ExecutionBackend.RayCollective)
 
 
+class EpochSchedule(Enum):
+    """Where an arm's per-epoch AllGather sits relative to its model calls.
+
+    Synchronous blocks at the end of every epoch. Overlapped exchanges epoch
+    e-1 while epoch e's model calls run (armada.exchange_schedule), so it
+    applies only to arms that exchange every epoch.
+    """
+
+    Synchronous = "synchronous"
+    Overlapped = "overlapped"
+
+
+OVERLAPPABLE_BACKENDS = (ExecutionBackend.Armada, ExecutionBackend.RayCylon,
+                         ExecutionBackend.RayCollective)
+
+
+def overlapped_epochs_for(backend, bridge, ray_collective):
+    """OverlappedEpochs driving this arm's own exchange."""
+    if ray_collective is not None:
+        executor = RayCollectiveExecutor(ray_collective.exchanger, ray_collective.rank,
+                                         ray_collective.timings)
+        exchange = executor.exchange_peers
+    else:
+        executor = ArmadaExecutor(bridge)
+        exchange = lambda contribution: executor.exchange_peers(contribution, bridge._ctx)
+    return OverlappedEpochs(exchange, COSMIC_MODEL_CALL_OPERATORS)
+
+
 def context_store_for(backend):
     """The context store an arm runs on. The arm is its store: Armada on the
     Arrow ContextTable, LangChain on Redis, so this is not independently
@@ -569,9 +600,28 @@ def release_ray_collective_run(handles, rank, world_size, ray_api, timeout_s):
     _release_run(handles.barrier, (), rank, world_size, ray_api, timeout_s)
 
 
+def align_ranks_before_run(bridge, ray_native, ray_collective, timeout_s):
+    """Hold every rank until all have finished setup and inference.
+
+    Called immediately before the run clock starts, so a rank whose task came
+    up early or whose shard inferred first waits here, in start_barrier_s,
+    rather than inside run_s. Arms with no cross-rank channel do not wait.
+    """
+    if ray_native is not None:
+        RayNativeExecutor(ray_native.shard).start(ray_native.barrier, timeout_s)
+    elif ray_collective is not None:
+        RayCollectiveExecutor(ray_collective.exchanger, ray_collective.rank,
+                              ray_collective.timings).start(ray_collective.barrier, timeout_s)
+    elif bridge is not None:
+        bridge.barrier()
+
+
 def run_epochs(seq, shards, backend, bridge=None, ctx=None, root=0, shard=None,
-               ray_collective=None):
+               ray_collective=None, schedule=None):
     """Execute one epoch per shard, returning each epoch's result table.
+
+    With a schedule (EpochSchedule.Overlapped) every epoch goes through it and
+    the result is every upsert's ack table, ending with those from its drain.
 
     Under Armada and ray-cylon each epoch is one executor pass ending in
     MemoryUpsert's AllGather, moved over FMI either way — ray-cylon differs
@@ -583,6 +633,11 @@ def run_epochs(seq, shards, backend, bridge=None, ctx=None, root=0, shard=None,
     shared.
     """
     results = []
+    if schedule is not None:
+        for epoch_input in shards:
+            results.extend(schedule.run(seq, epoch_input))
+        results.extend(schedule.drain())
+        return results
     for epoch_input in shards:
         if backend in (ExecutionBackend.LangChain, ExecutionBackend.Isolated):
             results.append(seq.invoke(epoch_input))
@@ -653,7 +708,18 @@ def main(argv=None):
     parser.add_argument("--epoch-batch-size", type=int,
                         default=int(os.environ.get("EPOCH_BATCH_SIZE", 4)),
                         help="galaxies per epoch; identical across arms (env EPOCH_BATCH_SIZE)")
+    parser.add_argument("--epoch-schedule",
+                        default=os.environ.get("EPOCH_SCHEDULE", EpochSchedule.Synchronous.value),
+                        choices=[s.value for s in EpochSchedule],
+                        help="synchronous (block at every epoch's AllGather) or overlapped "
+                             "(exchange epoch e-1 during epoch e's model calls); overlapped "
+                             "applies to armada, ray-cylon and ray-collective (env EPOCH_SCHEDULE)")
     args = parser.parse_args(argv)
+    epoch_schedule = EpochSchedule(args.epoch_schedule)
+    if (epoch_schedule is EpochSchedule.Overlapped
+            and ExecutionBackend(args.backend) not in OVERLAPPABLE_BACKENDS):
+        parser.error(f"--epoch-schedule overlapped needs a per-epoch exchange; backend "
+                     f"{args.backend} has none")
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                         format="%(asctime)s %(levelname)s %(name)s — %(message)s")
@@ -728,14 +794,9 @@ def main(argv=None):
         true_rank = rank
         if backend is ExecutionBackend.RayNative:
             ray_native = ray_native_actors(true_rank, world_size, comm_name, ray)
-            RayNativeExecutor(ray_native.shard).start(ray_native.barrier,
-                                                      ray_barrier_timeout_s)
             channel = "ray-object-store"
         elif backend is ExecutionBackend.RayCollective:
             ray_collective = ray_collective_actors(true_rank, world_size, comm_name, ray)
-            RayCollectiveExecutor(ray_collective.exchanger, true_rank,
-                                  ray_collective.timings).start(ray_collective.barrier,
-                                                                ray_barrier_timeout_s)
             channel = "ray-collective-gloo"
         else:
             actor = CylonRayActor(rank=rank, world_size=world_size, comm_name=comm_name,
@@ -820,7 +881,8 @@ def main(argv=None):
               "inference_s": round(inference_s, 4), "galaxies": n_local,
               "shard": [start, stop],
               "epochs": len(shards), "epoch_batch_size": args.epoch_batch_size,
-              "placement": placement.value, "live": args.live,
+              "placement": placement.value, "epoch_schedule": epoch_schedule.value,
+              "live": args.live,
               "workload_hash": workload_hash(start, prompts, reuse_keys)}
     if args.real_inference:
         record["device"] = args.device
@@ -829,6 +891,13 @@ def main(argv=None):
     if ray_cluster_s is not None:
         record["ray_cluster_s"] = round(ray_cluster_s, 4)
 
+    t_align = time.perf_counter()
+    align_ranks_before_run(bridge, ray_native, ray_collective, ray_barrier_timeout_s)
+    record["start_barrier_s"] = round(time.perf_counter() - t_align, 4)
+
+    schedule = (overlapped_epochs_for(backend, bridge, ray_collective)
+                if epoch_schedule is EpochSchedule.Overlapped else None)
+
     results = []
     t1 = time.perf_counter()
     run_end = None
@@ -836,7 +905,7 @@ def main(argv=None):
         results = run_epochs(seq, shards, backend, bridge=bridge,
                              ctx=bridge._ctx if bridge is not None else None, root=root,
                              shard=ray_native.shard if ray_native else None,
-                             ray_collective=ray_collective)
+                             ray_collective=ray_collective, schedule=schedule)
         run_end = time.perf_counter()
         if ray_native is not None:
             late = RayNativeExecutor(ray_native.shard).finish(
@@ -848,6 +917,8 @@ def main(argv=None):
         record["error"] = f"{type(exc).__name__}: {exc}"
         raise
     finally:
+        if schedule is not None:
+            schedule.close()
         record["run_s"] = round((run_end or time.perf_counter()) - t1, 4)
         if ray_collective is not None:
             record.update(ray_collective.timings.as_record())

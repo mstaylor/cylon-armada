@@ -120,6 +120,8 @@ COSMIC_PATTERNS = {
     "MemoryUpsert": CollectivePattern.AllGather,
 }
 
+COSMIC_MODEL_CALL_OPERATORS = ("Reason", "Bind")
+
 
 def _canonical(dimensions: int) -> dict:
     return {op.name: op for op in canonical_operators(dimensions)}

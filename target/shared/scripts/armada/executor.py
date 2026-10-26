@@ -189,6 +189,14 @@ class ArmadaExecutor:
 
         return self._concat_or_empty(gathered, local_result.schema)
 
+    def exchange_peers(self, contribution, ctx):
+        """AllGather this rank's contribution and return every other rank's, in rank order."""
+        if self.bridge.world_size <= 1:
+            return []
+        gathered = self._from_transport(
+            self.bridge.allgather(self._for_transport(contribution, ctx)))
+        return [table for rank, table in enumerate(gathered) if rank != self.bridge.rank]
+
     def run(self, seq, input_tables, ctx, root=0, reduce_op="sum",
             placement=InputPlacement.Centralized):
         single_rank = self.bridge.world_size <= 1

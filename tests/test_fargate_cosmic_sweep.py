@@ -372,6 +372,39 @@ def test_ray_comparison_leaders_over_the_four_measured_runs():
         "armada", "ray-collective", "ray-collective", "ray-native"]
 
 
+def test_exp_e_selects_the_http_baseline_beside_armada_and_every_ray_arm():
+    """S(N) is defined against the HTTP orchestrator and Ray is the primary
+    parallel baseline, so one sweep must carry both rather than splicing arms
+    from separate runs. ray-comparison keeps its meaning for existing callers."""
+    m = _driver()
+    assert m._selected_arms("exp-e") == (
+        "armada", "langchain", "ray-native", "ray-collective", "ray-cylon",
+        "armada-overlap", "ray-collective-overlap")
+    assert m._selected_arms("ray-comparison") == (
+        "armada", "ray-native", "ray-collective", "ray-cylon")
+    assert m.build_parser().parse_args(["--backend", "exp-e"]).backend == "exp-e"
+
+
+def test_exp_e_gives_every_compared_arm_one_lead_over_the_four_measured_runs():
+    m = _driver()
+    arms = m._selected_arms("exp-e")
+    trimmed = tuple(arm for arm in arms if arm != "ray-cylon")
+    expected = ["armada", "langchain", "ray-native", "ray-collective"]
+    assert [m.order_for(trimmed, i)[0] for i in range(4)] == expected
+    assert [m.order_for(arms, i)[0] for i in range(4)] == expected
+
+
+def test_exp_e_runs_ray_cylon_only_at_its_portability_sizes():
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "exp-e", "--world-sizes", "1", "2", "64"])
+    arms = {n: {r["arm"] for r in m.sweep_matrix(args) if r["world_size"] == n}
+            for n in (1, 2, 64)}
+    compared = {"armada", "langchain", "ray-native", "ray-collective", "armada-overlap",
+                "ray-collective-overlap"}
+    assert arms == {1: compared, 2: compared | {"ray-cylon"}, 64: compared}
+
+
 @pytest.mark.parametrize("arms", [("armada", "langchain"), ("armada", "ray-native")])
 def test_two_arm_comparisons_alternate_who_leads(arms):
     """Filtering the five-arm cycle down to two arms let one arm lead three of
@@ -526,7 +559,7 @@ def test_driver_and_runner_agree_on_every_arms_context_store():
     run_cosmic_local = _shared_module("armada.run_cosmic_local")
 
     for arm in m.ARMS:
-        backend = run_cosmic_local.ExecutionBackend(arm)
+        backend = run_cosmic_local.ExecutionBackend(m.backend_for(arm))
         assert m._CONTEXT_STORE[arm] == run_cosmic_local._CONTEXT_STORE[backend], arm
 
 
@@ -681,6 +714,58 @@ def test_only_rank_zero_of_a_ray_arm_launches_with_execute_command_for_the_dashb
     assert not any(call.get("enableExecuteCommand") for call in plain.calls)
 
 
+def _capacity_by_rank(ecs):
+    return {call["overrides"]["rank"]: (call.get("launchType"),
+                                        call.get("capacityProviderStrategy"))
+            for call in ecs.calls}
+
+
+def test_ranks_from_the_spot_rank_launch_on_fargate_spot_and_the_rest_on_demand():
+    """Fargate Spot has its own vCPU quota, so ranks beyond what the on-demand
+    quota holds can still launch. run_task rejects launchType together with a
+    capacity provider strategy, so a Spot rank must carry only the strategy."""
+    m = _driver()
+    ecs = _RecordingEcs()
+    m._run_tasks(ecs, 4, lambda rank: {"rank": rank}, 0, 1, 60, spot_from_rank=2)
+
+    spot = [{"capacityProvider": "FARGATE_SPOT", "weight": 1}]
+    assert _capacity_by_rank(ecs) == {0: ("FARGATE", None), 1: ("FARGATE", None),
+                                      2: (None, spot), 3: (None, spot)}
+
+
+def test_without_a_spot_rank_every_task_launches_on_demand():
+    m = _driver()
+    assert m.build_parser().parse_args(["--dry-run"]).spot_from_rank is None
+    ecs = _RecordingEcs()
+    m._run_tasks(ecs, 3, lambda rank: {"rank": rank}, 0, 1, 60)
+    assert set(_capacity_by_rank(ecs).values()) == {("FARGATE", None)}
+
+
+def test_the_matrix_counts_spot_tasks_only_beyond_the_spot_rank():
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-comparison", "--world-sizes", "32", "64",
+         "--spot-from-rank", "34"])
+    spot = {r["world_size"]: r["spot_tasks"] for r in m.sweep_matrix(args)}
+    assert spot == {32: 0, 64: 30}
+
+
+def test_dry_run_reports_how_many_tasks_run_on_fargate_spot(capsys):
+    m = _driver()
+    args = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "ray-comparison", "--world-sizes", "1", "2",
+         "--spot-from-rank", "1"])
+    m.print_dry_run(args)
+    assert "20 on Fargate Spot" in capsys.readouterr().out
+
+
+def test_timing_records_which_capacity_each_rank_ran_on():
+    sweep = _driver()
+    task = {**_task(0, 5, 40, 45, 100, 105), "capacityProviderName": "FARGATE_SPOT"}
+    assert sweep.task_timing(task)["capacity_provider"] == "FARGATE_SPOT"
+    assert sweep.task_timing(_task(0, 5, 40, 45, 100, 105))["capacity_provider"] is None
+
+
 class _DescribingEcs:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -734,3 +819,129 @@ def test_no_tunnel_is_opened_without_the_session_manager_plugin():
     tunnel = m.open_dashboard_tunnel("ecs:c_t_r", 8265, which=lambda name: None,
                                      popen=lambda *a, **k: opened.append(a))
     assert tunnel is None and not opened
+
+
+@pytest.mark.parametrize("arm, backend, schedule", [
+    ("armada", "armada", "synchronous"),
+    ("armada-overlap", "armada", "overlapped"),
+    ("ray-collective", "ray-collective", "synchronous"),
+    ("ray-collective-overlap", "ray-collective", "overlapped"),
+    ("ray-native", "ray-native", "synchronous"),
+])
+def test_an_overlap_arm_launches_its_backend_with_the_overlapped_schedule(arm, backend, schedule):
+    m = _driver()
+    env = _env(m.build_overrides(0, 4, "c", "p/", _args(), backend=arm))
+
+    assert env["EXECUTION_BACKEND"] == backend
+    assert env["EPOCH_SCHEDULE"] == schedule
+
+
+def test_every_arm_maps_to_a_backend_and_schedule_the_runner_accepts():
+    """The runner refuses an overlapped schedule on a backend with no per-epoch
+    exchange, which would otherwise cost a Fargate launch per rank to find."""
+    m = _driver()
+    run_cosmic_local = _shared_module("armada.run_cosmic_local")
+
+    for arm in m.ARMS:
+        backend = run_cosmic_local.ExecutionBackend(m.backend_for(arm))
+        schedule = run_cosmic_local.EpochSchedule(m.epoch_schedule_for(arm))
+        if schedule is run_cosmic_local.EpochSchedule.Overlapped:
+            assert backend in run_cosmic_local.OVERLAPPABLE_BACKENDS, arm
+
+
+def test_the_ray_collective_overlap_arm_launches_in_the_ray_security_group():
+    m = _driver()
+    assert m.security_groups_for("ray-collective-overlap", ["sg-ray"]) == ["sg-ray"]
+    assert m.security_groups_for("armada-overlap", ["sg-ray"]) is None
+
+
+def test_exp_e_carries_both_schedules_of_each_collective_arm():
+    m = _driver()
+    arms = set(m._selected_arms("exp-e"))
+    assert {"armada", "armada-overlap", "ray-collective", "ray-collective-overlap"} <= arms
+
+
+class _LaunchingEcs:
+    """run_task hands out arns in order and describe_tasks reports each
+    launch's tasks with the stop details scripted for that launch."""
+
+    def __init__(self, world_size, launches):
+        self.world_size = world_size
+        self.launches = list(launches)
+        self.run_task_calls = []
+        self.stopped = {}
+
+    def run_task(self, **kwargs):
+        self.run_task_calls.append(kwargs)
+        index = len(self.run_task_calls) - 1
+        launch, slot = divmod(index, self.world_size)
+        arn = f"arn:task/{index}"
+        self.stopped[arn] = self.launches[min(launch, len(self.launches) - 1)][slot]
+        return {"tasks": [{"taskArn": arn}], "failures": []}
+
+    def get_waiter(self, name):
+        return type("Waiter", (), {"wait": lambda *a, **k: None})()
+
+    def describe_tasks(self, cluster, tasks):
+        return {"tasks": [{"taskArn": arn, **self.stopped[arn]} for arn in tasks]}
+
+
+_RAN = {"stopCode": "EssentialContainerExited"}
+_PULL_FAILED = {"stopCode": "TaskFailedToStart",
+                "stoppedReason": "CannotPullContainerError: i/o timeout"}
+
+
+def _launch_args(m, **overrides):
+    argv = ["--backend", "armada", "--runs", "1", "--warmup-runs", "0", "--world-sizes", "2"]
+    for flag, value in overrides.items():
+        argv += [flag, str(value)]
+    return m.build_parser().parse_args(argv)
+
+
+def _comm_names(ecs):
+    return [next(e["value"] for e in call["overrides"]["containerOverrides"][0]["environment"]
+                 if e["name"] == "COMM_NAME") for call in ecs.run_task_calls]
+
+
+def _record_timings(monkeypatch, m):
+    recorded = []
+    monkeypatch.setattr(m, "_record_arm_timing",
+                        lambda ecs, arns, s3_prefix, launch_attempts=1:
+                        recorded.append((list(arns), launch_attempts)))
+    return recorded
+
+
+def test_a_launch_that_failed_to_pull_its_image_is_relaunched_under_a_new_comm_name(monkeypatch):
+    m = _driver()
+    recorded = _record_timings(monkeypatch, m)
+    ecs = _LaunchingEcs(2, [[_RAN, _PULL_FAILED], [_RAN, _RAN]])
+
+    arns = m.launch_world_size(ecs, 2, _launch_args(m))
+
+    assert len(ecs.run_task_calls) == 4
+    names = _comm_names(ecs)
+    assert names[0] == names[1] and names[2] == names[3] and names[0] != names[2]
+    assert arns == ["arn:task/2", "arn:task/3"]
+    assert recorded == [(["arn:task/2", "arn:task/3"], 2)]
+
+
+def test_a_launch_whose_tasks_ran_is_not_relaunched_even_if_they_failed(monkeypatch):
+    m = _driver()
+    _record_timings(monkeypatch, m)
+    ecs = _LaunchingEcs(2, [[_RAN, {"stopCode": "EssentialContainerExited",
+                                     "stoppedReason": "exit 1"}]])
+
+    m.launch_world_size(ecs, 2, _launch_args(m))
+
+    assert len(ecs.run_task_calls) == 2
+
+
+def test_relaunches_stop_at_the_configured_limit(monkeypatch):
+    m = _driver()
+    recorded = _record_timings(monkeypatch, m)
+    ecs = _LaunchingEcs(2, [[_PULL_FAILED, _RAN]])
+
+    m.launch_world_size(ecs, 2, _launch_args(m, **{"--launch-retries": 2}))
+
+    assert len(ecs.run_task_calls) == 2 * 3
+    assert recorded[-1][1] == 3

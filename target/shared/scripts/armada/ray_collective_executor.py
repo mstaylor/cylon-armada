@@ -85,6 +85,10 @@ class RayCollectiveExecutor:
                          packed_bytes=int(payload.size))
         return [contribution, *peers]
 
+    def exchange_peers(self, contribution):
+        """Allgather this rank's contribution and return every other rank's."""
+        return self._exchange(contribution)[1:]
+
     def run(self, seq, input_tables):
         plan = lower(seq)
         current = input_tables

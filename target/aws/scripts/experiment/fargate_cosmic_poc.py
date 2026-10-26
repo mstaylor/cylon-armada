@@ -132,10 +132,24 @@ def galaxies_for(scaling, world_size, per_rank, total):
     return min(per_rank * world_size, total)
 
 
-ARMS = ("armada", "langchain", "isolated", "ray-native", "ray-cylon", "ray-collective")
+ARMS = ("armada", "langchain", "isolated", "ray-native", "ray-cylon", "ray-collective",
+        "armada-overlap", "ray-collective-overlap")
 
 ARMS_WITHOUT_EXECUTOR = ()
-RAY_ARMS = ("ray-native", "ray-cylon", "ray-collective")
+RAY_ARMS = ("ray-native", "ray-cylon", "ray-collective", "ray-collective-overlap")
+
+_OVERLAP_ARMS = {"armada-overlap": "armada", "ray-collective-overlap": "ray-collective"}
+
+
+def backend_for(arm):
+    """The runner backend an arm launches. An overlap arm is its backend run
+    with the overlapped epoch schedule, so both schedules of one runtime are
+    measured in the same sweep."""
+    return _OVERLAP_ARMS.get(arm, arm)
+
+
+def epoch_schedule_for(arm):
+    return "overlapped" if arm in _OVERLAP_ARMS else "synchronous"
 LAUNCHABLE_ARMS = tuple(arm for arm in ARMS if arm not in ARMS_WITHOUT_EXECUTOR)
 
 _ORDERS = tuple(itertools.permutations(ARMS))
@@ -203,6 +217,8 @@ _ARM_SELECTIONS = {
     "all": LAUNCHABLE_ARMS,
     "both": ("armada", "langchain"),
     "ray-comparison": ("armada", "ray-native", "ray-collective", "ray-cylon"),
+    "exp-e": ("armada", "langchain", "ray-native", "ray-collective", "ray-cylon",
+              "armada-overlap", "ray-collective-overlap"),
 }
 
 
@@ -285,7 +301,8 @@ def plan_launches(backend, runs, arms=None):
 
 
 _CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon",
-                  "ray-native": "cylon", "ray-cylon": "cylon", "ray-collective": "cylon"}
+                  "ray-native": "cylon", "ray-cylon": "cylon", "ray-collective": "cylon",
+                  "armada-overlap": "cylon", "ray-collective-overlap": "cylon"}
 
 
 def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
@@ -301,7 +318,8 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
         {"name": "FMI_MAX_TIMEOUT", "value": str(args.timeout_ms)},
         {"name": "RESULTS_BUCKET", "value": RESULTS_BUCKET},
         {"name": "S3_RESULTS_PREFIX", "value": s3_prefix},
-        {"name": "EXECUTION_BACKEND", "value": backend},
+        {"name": "EXECUTION_BACKEND", "value": backend_for(backend)},
+        {"name": "EPOCH_SCHEDULE", "value": epoch_schedule_for(backend)},
         {"name": "CONTEXT_BACKEND", "value": _CONTEXT_STORE[backend]},
         {"name": "CONTEXT_TABLE_SNAPSHOT", "value": "0"},
         {"name": "REUSE_KEY_TOLERANCE", "value": str(args.reuse_tolerance)},
@@ -366,9 +384,27 @@ def _capacity_retryable(failures):
     )
 
 
+SPOT_CAPACITY_PROVIDER = "FARGATE_SPOT"
+
+
+def runs_on_spot(rank, spot_from_rank):
+    return spot_from_rank is not None and rank >= spot_from_rank
+
+
+def spot_tasks(world_size, spot_from_rank):
+    return sum(1 for rank in range(world_size) if runs_on_spot(rank, spot_from_rank))
+
+
+def capacity_for_rank(rank, spot_from_rank):
+    if runs_on_spot(rank, spot_from_rank):
+        return {"capacityProviderStrategy": [{"capacityProvider": SPOT_CAPACITY_PROVIDER,
+                                              "weight": 1}]}
+    return {"launchType": "FARGATE"}
+
+
 def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
                capacity_backoff_s, budget_s, task_definition=TASK_DEFINITION,
-               security_groups=None, execute_command_ranks=()):
+               security_groups=None, execute_command_ranks=(), spot_from_rank=None):
     vpc_configuration = {"subnets": SUBNETS, "assignPublicIp": "ENABLED"}
     if security_groups:
         vpc_configuration["securityGroups"] = list(security_groups)
@@ -381,7 +417,7 @@ def _run_tasks(ecs, world_size, overrides_for_rank, capacity_retries,
                 resp = ecs.run_task(
                     cluster=CLUSTER,
                     taskDefinition=task_definition,
-                    launchType="FARGATE",
+                    **capacity_for_rank(rank, spot_from_rank),
                     networkConfiguration={"awsvpcConfiguration": vpc_configuration},
                     overrides=overrides_for_rank(rank),
                     enableExecuteCommand=rank in execute_command_ranks,
@@ -523,6 +559,7 @@ def task_timing(task):
         "run_s": span("startedAt", "stoppingAt"),
         "teardown_s": span("stoppingAt", "stoppedAt"),
         "total_s": span("createdAt", "stoppedAt"),
+        "capacity_provider": task.get("capacityProviderName"),
     }
 
 
@@ -548,10 +585,7 @@ def collect_arm_timing(ecs, arns):
     losing it must not cost the run's results.
     """
     try:
-        described = []
-        for i in range(0, len(arns), 100):
-            resp = ecs.describe_tasks(cluster=CLUSTER, tasks=arns[i:i + 100])
-            described.extend(resp.get("tasks", []))
+        described = _describe_tasks(ecs, arns)
         if not described:
             return None
         timings = [task_timing(task) for task in described]
@@ -589,6 +623,7 @@ def sweep_matrix(args):
                 rows.append({
                     "world_size": world_size, "galaxies": galaxies, "phase": phase,
                     "run": run_index, "arm": arm, "tasks": world_size,
+                    "spot_tasks": spot_tasks(world_size, args.spot_from_rank),
                     "task_definition": TASK_DEFINITION,
                     "security_group": (RAY_SECURITY_GROUP_NAME if arm in RAY_ARMS
                                        else "vpc default"),
@@ -630,11 +665,11 @@ def print_dry_run(args):
     def cost(cell):
         return estimate_cost_usd(cell, args.vcpu_hour_usd, args.gb_hour_usd)
 
-    print(f"{'N':>4} {'galaxies':>8} {'phase':>8} {'run':>3}  {'arm':<11} "
+    print(f"{'N':>4} {'galaxies':>8} {'phase':>8} {'run':>3}  {'arm':<22} "
           f"{'tasks':>5}  {'task definition':<20} security group")
     for row in rows:
         print(f"{row['world_size']:>4} {row['galaxies']:>8} {row['phase']:>8} {row['run']:>3}  "
-              f"{row['arm']:<11} {row['tasks']:>5}  {row['task_definition']:<20} "
+              f"{row['arm']:<22} {row['tasks']:>5}  {row['task_definition']:<20} "
               f"{row['security_group']}")
     print()
     print(f"{'N':>4} {'launches':>8} {'tasks':>6} {'task-hours':>11} {'USD':>9}")
@@ -650,6 +685,8 @@ def print_dry_run(args):
           f"{total['gb_hours']} GB-hours) at {args.est_task_minutes} min/task, "
           f"{args.task_vcpu} vCPU / {args.task_memory_gb} GB per task; "
           f"warm-ups account for {warmup['task_hours']} task-hours")
+    print(f"Capacity: {total['tasks'] - sum(r['spot_tasks'] for r in rows)} tasks on demand, "
+          f"{sum(r['spot_tasks'] for r in rows)} on Fargate Spot")
     print(f"Estimated Fargate cost: ${cost(total):.2f} (warm-ups ${cost(warmup):.2f}) at "
           f"${args.vcpu_hour_usd}/vCPU-hour and ${args.gb_hour_usd}/GB-hour; excludes Bedrock, "
           f"Redis, ECR and S3")
@@ -668,35 +705,78 @@ def launch_world_size(ecs, world_size, args, ray_security_groups=None):
     for row in rows:
         arm, run_index, s3_prefix = row["arm"], row["run"], row["s3_prefix"]
         phase_tag = "w" if row["phase"] == "warmup" else ""
-        comm_name = (f"cosmic_{args.scaling}_{arm}_{world_size}_{phase_tag}{run_index}_"
-                     f"{uuid.uuid4().hex[:8]}")
-        logger.info("  %s %d arm %s comm_name=%s -> s3://%s/%s",
-                    row["phase"], run_index, arm, comm_name, RESULTS_BUCKET, s3_prefix)
-        if args.dry_run:
-            overrides = build_overrides(0, world_size, comm_name, s3_prefix, point_args, arm)
-            logger.info("  [dry-run] rank 0 task_definition=%s env=%s", row["task_definition"],
-                        {e["name"]: e["value"] for e in
-                         overrides["containerOverrides"][0]["environment"]})
-            continue
-        arns = _run_tasks(ecs, world_size, lambda rank: build_overrides(
-            rank, world_size, comm_name, s3_prefix, point_args, arm),
-            args.capacity_retries, args.capacity_backoff_s,
-            capacity_budget_s(args.timeout_ms), task_definition=row["task_definition"],
-            security_groups=security_groups_for(arm, ray_security_groups),
-            execute_command_ranks=(0,) if args.ray_dashboard and arm in RAY_ARMS else ())
-        logger.info("  launched %d tasks; waiting for the arm to finish", len(arns))
-        tunnel = _open_ray_dashboard(ecs, arns[0], args) if (
-            args.ray_dashboard and arm in RAY_ARMS) else None
-        try:
-            _wait_for_tasks(ecs, arns, args.arm_timeout_s)
-        finally:
-            _close_ray_dashboard(tunnel)
-        _record_arm_timing(ecs, arns, s3_prefix)
-        all_arns.extend(arns)
+        for attempt in range(1, args.launch_retries + 2):
+            comm_name = (f"cosmic_{args.scaling}_{arm}_{world_size}_{phase_tag}{run_index}_"
+                         f"{uuid.uuid4().hex[:8]}")
+            logger.info("  %s %d arm %s comm_name=%s -> s3://%s/%s",
+                        row["phase"], run_index, arm, comm_name, RESULTS_BUCKET, s3_prefix)
+            if args.dry_run:
+                overrides = build_overrides(0, world_size, comm_name, s3_prefix, point_args, arm)
+                logger.info("  [dry-run] rank 0 task_definition=%s env=%s",
+                            row["task_definition"],
+                            {e["name"]: e["value"] for e in
+                             overrides["containerOverrides"][0]["environment"]})
+                break
+            arns = _launch_and_wait(ecs, world_size, row, comm_name, point_args, args,
+                                    ray_security_groups)
+            failed = tasks_failed_to_start(_describe_tasks(ecs, arns))
+            if not failed or attempt > args.launch_retries:
+                if failed:
+                    logger.error("  %d task(s) still failed to start after %d launches: %s",
+                                 len(failed), attempt, failed)
+                _record_arm_timing(ecs, arns, s3_prefix, launch_attempts=attempt)
+                all_arns.extend(arns)
+                break
+            logger.warning("  %d task(s) failed to start (%s); relaunching the whole arm, "
+                           "attempt %d of %d", len(failed), failed, attempt + 1,
+                           args.launch_retries + 1)
     return all_arns
 
 
-def _record_arm_timing(ecs, arns, s3_prefix):
+def _launch_and_wait(ecs, world_size, row, comm_name, point_args, args, ray_security_groups):
+    arm, s3_prefix = row["arm"], row["s3_prefix"]
+    arns = _run_tasks(ecs, world_size, lambda rank: build_overrides(
+        rank, world_size, comm_name, s3_prefix, point_args, arm),
+        args.capacity_retries, args.capacity_backoff_s,
+        capacity_budget_s(args.timeout_ms), task_definition=row["task_definition"],
+        security_groups=security_groups_for(arm, ray_security_groups),
+        execute_command_ranks=(0,) if args.ray_dashboard and arm in RAY_ARMS else (),
+        spot_from_rank=args.spot_from_rank)
+    logger.info("  launched %d tasks; waiting for the arm to finish", len(arns))
+    tunnel = _open_ray_dashboard(ecs, arns[0], args) if (
+        args.ray_dashboard and arm in RAY_ARMS) else None
+    try:
+        _wait_for_tasks(ecs, arns, args.arm_timeout_s)
+    finally:
+        _close_ray_dashboard(tunnel)
+    return arns
+
+
+TASK_FAILED_TO_START = "TaskFailedToStart"
+
+
+def tasks_failed_to_start(tasks):
+    """The stop reasons of tasks that never ran, such as a failed image pull.
+
+    Such a task never joined its cohort, so the peers that did start waited
+    out their timeouts and the launch measured nothing. Relaunching the whole
+    arm under a new comm_name is safe: nothing ran, and every rank rewrites its
+    record under the same prefix. A task that ran and then failed is a result,
+    not an infrastructure fault, and is never relaunched.
+    """
+    return [task.get("stoppedReason", "") for task in tasks
+            if task.get("stopCode") == TASK_FAILED_TO_START]
+
+
+def _describe_tasks(ecs, arns):
+    described = []
+    for i in range(0, len(arns), 100):
+        described.extend(ecs.describe_tasks(cluster=CLUSTER, tasks=arns[i:i + 100])
+                         .get("tasks", []))
+    return described
+
+
+def _record_arm_timing(ecs, arns, s3_prefix, launch_attempts=1):
     """Write this arm's startup breakdown beside its results.
 
     Runs immediately after the waiter because ECS retains stopped tasks for
@@ -706,6 +786,7 @@ def _record_arm_timing(ecs, arns, s3_prefix):
     summary = collect_arm_timing(ecs, arns)
     if summary is None:
         return
+    summary["launch_attempts"] = launch_attempts
     logger.info("  startup: pull %ss, provision %ss, teardown %ss, total %ss (slowest rank)",
                 summary.get("pull_s_max"), summary.get("provision_s_max"),
                 summary.get("teardown_s_max"), summary.get("total_s_max"))
@@ -791,6 +872,12 @@ def build_parser():
     parser.add_argument("--capacity-backoff-s", type=int, default=30,
                         help="base delay for exponential backoff between capacity "
                              f"retries, capped at {CAPACITY_RETRY_MAX_DELAY_S}s")
+    parser.add_argument("--launch-retries", type=int, default=2,
+                        help="relaunches of an arm whose tasks stopped with TaskFailedToStart "
+                             "(for example a failed image pull) before recording it as failed")
+    parser.add_argument("--spot-from-rank", type=int, default=None,
+                        help="ranks at or above this launch on Fargate Spot, whose vCPU quota "
+                             "is separate from on-demand; unset launches every rank on demand")
     parser.add_argument("--live", action="store_true",
                         help="real Bedrock on every rank — costs money per galaxy")
     parser.add_argument("--dry-run", action="store_true")

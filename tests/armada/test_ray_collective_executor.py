@@ -12,6 +12,7 @@ import pytest
 
 ray = pytest.importorskip("ray")
 
+from armada.exchange_schedule import OverlappedEpochs
 from armada.operator import ArmadaOperator
 from armada.ray_collective_executor import ConversionTimings, RayCollectiveExecutor
 from cylon_armada.dag_compiler import CollectivePattern
@@ -115,3 +116,33 @@ def test_timings_accumulate_across_epochs():
 
     assert timings.as_record() == {"pack_s": 1.0, "unpack_s": 0.5, "exchange_s": 4.0,
                                    "collective_s": 2.0, "packed_bytes": 16}
+
+
+def _overlapped_sequence(seen):
+    reason = ArmadaOperator("Reason", CollectivePattern.PointToPoint, VALUE_SCHEMA, VALUE_SCHEMA,
+                            fn=lambda t: t)
+    return reason | _recording_upsert(seen)
+
+
+def test_overlapped_epochs_deliver_every_row_once_to_both_ranks(local_ray):
+    """Two ranks run three epochs with the exchange deferred one epoch. A rank
+    with an empty trailing epoch still joins every exchange, and after drain
+    each rank has stored every row exactly once."""
+    exchangers = _group("exec-overlap")
+    seen = {0: [], 1: []}
+    epochs = {0: [[1], [2], [3]], 1: [[10, 11], [12], []]}
+
+    def run_rank(rank):
+        executor = RayCollectiveExecutor(exchangers[rank], rank, ConversionTimings())
+        schedule = OverlappedEpochs(executor.exchange_peers, ("Reason",))
+        seq = _overlapped_sequence(seen[rank])
+        for values in epochs[rank]:
+            schedule.run(seq, pa.table({"value": values}, schema=VALUE_SCHEMA))
+        schedule.drain()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        [future.result(timeout=60) for future in [pool.submit(run_rank, r) for r in (0, 1)]]
+
+    everything = [1, 2, 3, 10, 11, 12]
+    assert sorted(v for batch in seen[0] for v in batch) == everything
+    assert sorted(v for batch in seen[1] for v in batch) == everything
