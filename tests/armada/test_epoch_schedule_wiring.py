@@ -136,6 +136,7 @@ def test_the_record_carries_the_effective_reuse_settings_and_launch_attempt(monk
     monkeypatch.setenv("REUSE_KEY_TOLERANCE", "0.0005")
     monkeypatch.setenv("OUTLIER_RESIDUAL_THRESHOLD", "0.027677")
     monkeypatch.setenv("LAUNCH_ATTEMPT", "2")
+    monkeypatch.setenv("S3_SCRIPTS_PREFIX", "cylon-armada/scripts-expE/")
     bridge = MagicMock(rank=0, world_size=1, available=True, channel_type="direct-redis",
                        _ctx=None)
     monkeypatch.setattr(mod, "FMIBridge", lambda **kwargs: bridge)
@@ -147,3 +148,4 @@ def test_the_record_carries_the_effective_reuse_settings_and_launch_attempt(monk
     assert record["reuse_key_tolerance"] == 0.0005
     assert record["outlier_threshold"] == 0.027677
     assert record["launch_attempt"] == 2
+    assert record["scripts_source"] == "cylon-armada/scripts-expE/"

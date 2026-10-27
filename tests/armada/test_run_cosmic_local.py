@@ -320,6 +320,12 @@ def test_workload_hash_ignores_last_bit_differences_in_a_reuse_key():
     assert workload_hash(0, ["p"], [key]) == workload_hash(0, ["p"], [nudged])
 
 
+def test_workload_hash_ignores_float32_inference_jitter_in_a_reuse_key():
+    from armada.run_cosmic_local import workload_hash
+
+    assert workload_hash(0, ["p"], [0.12345671]) == workload_hash(0, ["p"], [0.12345674])
+
+
 def test_workload_hash_still_separates_keys_that_differ_meaningfully():
     from armada.run_cosmic_local import workload_hash
 

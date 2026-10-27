@@ -242,12 +242,13 @@ def workload_hash(start, prompts, reuse_keys):
     return digest.hexdigest()[:16]
 
 
-WORKLOAD_KEY_SIGNIFICANT_DIGITS = 12
+WORKLOAD_KEY_SIGNIFICANT_DIGITS = 6
 
 
 def _canonical_key(key):
-    """A reuse key as the hash sees it: floats at a fixed precision, so a
-    last-bit difference from CPU inference is not read as a new workload."""
+    """A reuse key as the hash sees it: floats at float32 precision. AstroMAE
+    predicts in float32 and CPU inference varies at that precision between
+    runs, far below the reuse tolerance, which must not read as a new workload."""
     if isinstance(key, float):
         return format(key, f".{WORKLOAD_KEY_SIGNIFICANT_DIGITS}g")
     return repr(key)
@@ -897,6 +898,7 @@ def main(argv=None):
                                       if os.environ.get("REUSE_KEY_TOLERANCE") else None),
               "outlier_threshold": float(outlier_threshold),
               "launch_attempt": int(os.environ.get("LAUNCH_ATTEMPT", 1)),
+              "scripts_source": os.environ.get("S3_SCRIPTS_PREFIX") or "image",
               "live": args.live,
               "workload_hash": workload_hash(start, prompts, reuse_keys)}
     if args.real_inference:

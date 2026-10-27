@@ -93,6 +93,14 @@ RUNNER_SCRIPT = """import os, subprocess, sys, time, boto3
 scripts = '/cylon-armada/scripts'
 s3 = boto3.client('s3')
 bucket = os.environ['ARTIFACT_BUCKET']
+if os.environ.get('S3_SCRIPTS_PREFIX'):
+    sys.path.insert(0, '/cylon-armada')
+    from s3_loader import load_scripts
+    if not load_scripts(bucket, os.environ['S3_SCRIPTS_PREFIX'], '/tmp/armada_scripts'):
+        print('could not load scripts from s3://%s/%s' % (bucket, os.environ['S3_SCRIPTS_PREFIX']),
+              flush=True)
+        sys.exit(3)
+    scripts = '/tmp/armada_scripts'
 for key, dest in ((os.environ['ASTROMAE_MODEL_KEY'], os.environ['ASTROMAE_MODEL_PATH']),
                   (os.environ['ASTROMAE_DATA_KEY'], os.environ['ASTROMAE_DATA_PATH'])):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -334,6 +342,8 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend, attem
     ]
     if args.gloo_socket_ifname:
         environment.append({"name": "GLOO_SOCKET_IFNAME", "value": args.gloo_socket_ifname})
+    if getattr(args, "scripts_prefix", None):
+        environment.append({"name": "S3_SCRIPTS_PREFIX", "value": args.scripts_prefix})
     if rank == 0 and backend in RAY_ARMS and args.ray_dashboard_hold_s > 0:
         environment.append({"name": "RAY_DASHBOARD_HOLD_S", "value": str(args.ray_dashboard_hold_s)})
     return {
@@ -907,6 +917,10 @@ def build_parser():
     parser.add_argument("--capacity-backoff-s", type=int, default=30,
                         help="base delay for exponential backoff between capacity "
                              f"retries, capped at {CAPACITY_RETRY_MAX_DELAY_S}s")
+    parser.add_argument("--scripts-prefix", default=None,
+                        help="S3 prefix in the artifact bucket holding target/shared/scripts; "
+                             "tasks download and run that copy instead of the image's, and fail "
+                             "rather than fall back if it cannot be loaded")
     parser.add_argument("--results-prefix", default=RESULTS_PREFIX,
                         help="S3 prefix the results are written under; give a smoke run its own "
                              "so it never overwrites a sweep's records")

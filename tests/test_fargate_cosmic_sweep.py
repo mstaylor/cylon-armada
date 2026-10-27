@@ -14,6 +14,7 @@ import importlib
 import importlib.util
 import json
 import os
+import sys
 
 import pytest
 
@@ -1006,3 +1007,80 @@ def test_every_task_is_told_which_launch_attempt_it_belongs_to(monkeypatch):
     attempts = [next(e["value"] for e in call["overrides"]["containerOverrides"][0]["environment"]
                      if e["name"] == "LAUNCH_ATTEMPT") for call in ecs.run_task_calls]
     assert attempts == ["1", "1", "2", "2"]
+
+
+def _run_runner_script(monkeypatch, tmp_path, env, load_result=True):
+    """Execute the task's runner script with S3, the loader and the subprocess faked."""
+    import subprocess
+    import types
+
+    m = _driver()
+    model, data = tmp_path / "model.pt", tmp_path / "data.pt"
+    model.write_text("m")
+    data.write_text("d")
+    base = {"ARTIFACT_BUCKET": "bucket", "ASTROMAE_MODEL_KEY": "k1",
+            "ASTROMAE_MODEL_PATH": str(model), "ASTROMAE_DATA_KEY": "k2",
+            "ASTROMAE_DATA_PATH": str(data), "RESULTS_BUCKET": "results",
+            "S3_RESULTS_PREFIX": "p/", "RANK": "0"}
+    for key, value in {**base, **env}.items():
+        monkeypatch.setenv(key, value)
+    loads, runs = [], []
+    loader = types.ModuleType("s3_loader")
+    loader.load_scripts = lambda bucket, prefix, local_dir: loads.append(
+        (bucket, prefix, local_dir)) or load_result
+    fake_boto3 = types.ModuleType("boto3")
+    fake_boto3.client = lambda name: types.SimpleNamespace(
+        download_file=lambda *a: None, upload_file=lambda *a: None)
+    monkeypatch.setitem(sys.modules, "s3_loader", loader)
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+    monkeypatch.setattr(subprocess, "run", lambda cmd, cwd, env: runs.append((cwd, env)) or
+                        types.SimpleNamespace(returncode=0))
+    monkeypatch.setattr(os.path, "exists", lambda path, _real=os.path.exists:
+                        False if path == "/tmp/result.json" else _real(path))
+    code = 0
+    try:
+        exec(compile(m.RUNNER_SCRIPT, "runner", "exec"), {"__name__": "__main__"})
+    except SystemExit as exc:
+        code = exc.code
+    return loads, runs, code
+
+
+def test_tasks_run_the_scripts_synced_to_s3_when_a_prefix_is_given(monkeypatch, tmp_path):
+    loads, runs, code = _run_runner_script(
+        monkeypatch, tmp_path, {"S3_SCRIPTS_PREFIX": "cylon-armada/scripts-expE/"})
+
+    assert loads == [("bucket", "cylon-armada/scripts-expE/", "/tmp/armada_scripts")]
+    assert runs[0][0] == "/tmp/armada_scripts"
+    assert runs[0][1]["PYTHONPATH"].startswith("/tmp/armada_scripts:")
+    assert code in (0, None)
+
+
+def test_a_failed_s3_script_load_stops_the_task_rather_than_running_baked_in_code(
+        monkeypatch, tmp_path):
+    """Silently falling back to the image's scripts is the stale-code failure
+    the S3 path exists to prevent."""
+    loads, runs, code = _run_runner_script(
+        monkeypatch, tmp_path, {"S3_SCRIPTS_PREFIX": "cylon-armada/scripts-expE/"},
+        load_result=False)
+
+    assert runs == []
+    assert code not in (0, None)
+
+
+def test_tasks_run_the_baked_in_scripts_without_a_prefix(monkeypatch, tmp_path):
+    monkeypatch.delenv("S3_SCRIPTS_PREFIX", raising=False)
+    loads, runs, code = _run_runner_script(monkeypatch, tmp_path, {})
+
+    assert loads == []
+    assert runs[0][0] == "/cylon-armada/scripts"
+
+
+def test_the_scripts_prefix_reaches_every_task_only_when_given():
+    m = _driver()
+    with_prefix = _env(m.build_overrides(0, 4, "c", "p/", _args(
+        scripts_prefix="cylon-armada/scripts-expE/"), backend="armada"))
+    without = _env(m.build_overrides(0, 4, "c", "p/", _args(scripts_prefix=None),
+                                     backend="armada"))
+
+    assert with_prefix["S3_SCRIPTS_PREFIX"] == "cylon-armada/scripts-expE/"
+    assert "S3_SCRIPTS_PREFIX" not in without
