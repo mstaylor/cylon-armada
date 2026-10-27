@@ -238,8 +238,19 @@ def workload_hash(start, prompts, reuse_keys):
 
     digest = hashlib.sha256()
     for offset, (prompt, key) in enumerate(zip(prompts, reuse_keys)):
-        digest.update(f"{start + offset}\x1f{prompt}\x1f{key!r}\x1e".encode())
+        digest.update(f"{start + offset}\x1f{prompt}\x1f{_canonical_key(key)}\x1e".encode())
     return digest.hexdigest()[:16]
+
+
+WORKLOAD_KEY_SIGNIFICANT_DIGITS = 12
+
+
+def _canonical_key(key):
+    """A reuse key as the hash sees it: floats at a fixed precision, so a
+    last-bit difference from CPU inference is not read as a new workload."""
+    if isinstance(key, float):
+        return format(key, f".{WORKLOAD_KEY_SIGNIFICANT_DIGITS}g")
+    return repr(key)
 
 
 def enforce_isolation(backend):
@@ -882,6 +893,10 @@ def main(argv=None):
               "shard": [start, stop],
               "epochs": len(shards), "epoch_batch_size": args.epoch_batch_size,
               "placement": placement.value, "epoch_schedule": epoch_schedule.value,
+              "reuse_key_tolerance": (float(os.environ["REUSE_KEY_TOLERANCE"])
+                                      if os.environ.get("REUSE_KEY_TOLERANCE") else None),
+              "outlier_threshold": float(outlier_threshold),
+              "launch_attempt": int(os.environ.get("LAUNCH_ATTEMPT", 1)),
               "live": args.live,
               "workload_hash": workload_hash(start, prompts, reuse_keys)}
     if args.real_inference:

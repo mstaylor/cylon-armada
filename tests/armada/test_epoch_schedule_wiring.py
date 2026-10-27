@@ -129,3 +129,21 @@ def test_overlap_is_refused_where_there_is_no_per_epoch_exchange(monkeypatch, tm
         mod.main(["--backend", backend, "--epoch-schedule", "overlapped", "--galaxies", "6",
                   "--result-path", out])
 
+
+
+def test_the_record_carries_the_effective_reuse_settings_and_launch_attempt(monkeypatch, tmp_path):
+    out = _main_env(monkeypatch, tmp_path, "armada-provenance")
+    monkeypatch.setenv("REUSE_KEY_TOLERANCE", "0.0005")
+    monkeypatch.setenv("OUTLIER_RESIDUAL_THRESHOLD", "0.027677")
+    monkeypatch.setenv("LAUNCH_ATTEMPT", "2")
+    bridge = MagicMock(rank=0, world_size=1, available=True, channel_type="direct-redis",
+                       _ctx=None)
+    monkeypatch.setattr(mod, "FMIBridge", lambda **kwargs: bridge)
+    monkeypatch.setattr(mod, "required_peer_map", lambda seq, world_size: "")
+
+    assert mod.main(["--backend", "armada", "--galaxies", "6", "--result-path", out]) == 0
+    record = json.load(open(out))
+
+    assert record["reuse_key_tolerance"] == 0.0005
+    assert record["outlier_threshold"] == 0.027677
+    assert record["launch_attempt"] == 2

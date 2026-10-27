@@ -903,6 +903,23 @@ def _comm_names(ecs):
                  if e["name"] == "COMM_NAME") for call in ecs.run_task_calls]
 
 
+class _FakeS3:
+    def __init__(self, objects=None):
+        self.objects = dict(objects or {})
+        self.copies = []
+
+    def list_objects_v2(self, Bucket, Prefix, **kwargs):
+        keys = sorted(k for k in self.objects if k.startswith(Prefix))
+        return {"Contents": [{"Key": k} for k in keys], "IsTruncated": False}
+
+    def copy_object(self, Bucket, Key, CopySource):
+        self.copies.append((CopySource["Key"], Key))
+        self.objects[Key] = self.objects[CopySource["Key"]]
+
+    def delete_object(self, Bucket, Key):
+        del self.objects[Key]
+
+
 def _record_timings(monkeypatch, m):
     recorded = []
     monkeypatch.setattr(m, "_record_arm_timing",
@@ -916,7 +933,7 @@ def test_a_launch_that_failed_to_pull_its_image_is_relaunched_under_a_new_comm_n
     recorded = _record_timings(monkeypatch, m)
     ecs = _LaunchingEcs(2, [[_RAN, _PULL_FAILED], [_RAN, _RAN]])
 
-    arns = m.launch_world_size(ecs, 2, _launch_args(m))
+    arns = m.launch_world_size(ecs, 2, _launch_args(m), s3=_FakeS3())
 
     assert len(ecs.run_task_calls) == 4
     names = _comm_names(ecs)
@@ -931,7 +948,7 @@ def test_a_launch_whose_tasks_ran_is_not_relaunched_even_if_they_failed(monkeypa
     ecs = _LaunchingEcs(2, [[_RAN, {"stopCode": "EssentialContainerExited",
                                      "stoppedReason": "exit 1"}]])
 
-    m.launch_world_size(ecs, 2, _launch_args(m))
+    m.launch_world_size(ecs, 2, _launch_args(m), s3=_FakeS3())
 
     assert len(ecs.run_task_calls) == 2
 
@@ -941,7 +958,7 @@ def test_relaunches_stop_at_the_configured_limit(monkeypatch):
     recorded = _record_timings(monkeypatch, m)
     ecs = _LaunchingEcs(2, [[_PULL_FAILED, _RAN]])
 
-    m.launch_world_size(ecs, 2, _launch_args(m, **{"--launch-retries": 2}))
+    m.launch_world_size(ecs, 2, _launch_args(m, **{"--launch-retries": 2}), s3=_FakeS3())
 
     assert len(ecs.run_task_calls) == 2 * 3
     assert recorded[-1][1] == 3
@@ -959,3 +976,33 @@ def test_a_smoke_writes_under_its_own_results_prefix_and_a_sweep_keeps_the_defau
         "cylon-armada/results/exp_e_cosmic_smoke"}
     assert {row["s3_prefix"].split("/weak/")[0] for row in m.sweep_matrix(sweep)} == {
         m.RESULTS_PREFIX}
+
+
+def test_a_failed_attempts_records_move_aside_before_the_relaunch(monkeypatch):
+    """A relaunch writes to the same run directory, so a rank file left by the
+    failed attempt could pass for part of the new cohort."""
+    m = _driver()
+    _record_timings(monkeypatch, m)
+    args = _launch_args(m)
+    prefix = m.sweep_matrix(args)[0]["s3_prefix"]
+    s3 = _FakeS3({prefix + "rank0.json": "stale", "other/keep.json": "x"})
+    ecs = _LaunchingEcs(2, [[_RAN, _PULL_FAILED], [_RAN, _RAN]])
+
+    m.launch_world_size(ecs, 2, args, s3=s3)
+
+    archived = prefix.replace(args.results_prefix, args.results_prefix + "_failed_attempts", 1)
+    assert prefix + "rank0.json" not in s3.objects
+    assert s3.objects[archived + "attempt1/rank0.json"] == "stale"
+    assert s3.objects["other/keep.json"] == "x"
+
+
+def test_every_task_is_told_which_launch_attempt_it_belongs_to(monkeypatch):
+    m = _driver()
+    _record_timings(monkeypatch, m)
+    ecs = _LaunchingEcs(2, [[_RAN, _PULL_FAILED], [_RAN, _RAN]])
+
+    m.launch_world_size(ecs, 2, _launch_args(m), s3=_FakeS3())
+
+    attempts = [next(e["value"] for e in call["overrides"]["containerOverrides"][0]["environment"]
+                     if e["name"] == "LAUNCH_ATTEMPT") for call in ecs.run_task_calls]
+    assert attempts == ["1", "1", "2", "2"]

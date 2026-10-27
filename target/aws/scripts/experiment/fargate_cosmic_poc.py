@@ -306,7 +306,7 @@ _CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon",
                   "armada-overlap": "cylon", "ray-collective-overlap": "cylon"}
 
 
-def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
+def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend, attempt=1):
     environment = [
         {"name": "RANK", "value": str(rank)},
         {"name": "WORLD_SIZE", "value": str(world_size)},
@@ -321,6 +321,7 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend):
         {"name": "S3_RESULTS_PREFIX", "value": s3_prefix},
         {"name": "EXECUTION_BACKEND", "value": backend_for(backend)},
         {"name": "EPOCH_SCHEDULE", "value": epoch_schedule_for(backend)},
+        {"name": "LAUNCH_ATTEMPT", "value": str(attempt)},
         {"name": "CONTEXT_BACKEND", "value": _CONTEXT_STORE[backend]},
         {"name": "CONTEXT_TABLE_SNAPSHOT", "value": "0"},
         {"name": "REUSE_KEY_TOLERANCE", "value": str(args.reuse_tolerance)},
@@ -694,7 +695,7 @@ def print_dry_run(args):
     return rows
 
 
-def launch_world_size(ecs, world_size, args, ray_security_groups=None):
+def launch_world_size(ecs, world_size, args, ray_security_groups=None, s3=None):
     rows = [row for row in sweep_matrix(args) if row["world_size"] == world_size]
     galaxies = galaxies_for(args.scaling, world_size, args.per_rank, args.total)
     point_args = argparse.Namespace(**{**vars(args), "galaxies": galaxies})
@@ -719,7 +720,7 @@ def launch_world_size(ecs, world_size, args, ray_security_groups=None):
                              overrides["containerOverrides"][0]["environment"]})
                 break
             arns = _launch_and_wait(ecs, world_size, row, comm_name, point_args, args,
-                                    ray_security_groups)
+                                    ray_security_groups, attempt)
             failed = tasks_failed_to_start(_describe_tasks(ecs, arns))
             if not failed or attempt > args.launch_retries:
                 if failed:
@@ -731,13 +732,17 @@ def launch_world_size(ecs, world_size, args, ray_security_groups=None):
             logger.warning("  %d task(s) failed to start (%s); relaunching the whole arm, "
                            "attempt %d of %d", len(failed), failed, attempt + 1,
                            args.launch_retries + 1)
+            s3 = s3 or boto3.client("s3", region_name=REGION)
+            moved = archive_failed_attempt(s3, s3_prefix, args.results_prefix, attempt)
+            logger.warning("  moved %d record(s) of attempt %d aside", moved, attempt)
     return all_arns
 
 
-def _launch_and_wait(ecs, world_size, row, comm_name, point_args, args, ray_security_groups):
+def _launch_and_wait(ecs, world_size, row, comm_name, point_args, args, ray_security_groups,
+                     attempt):
     arm, s3_prefix = row["arm"], row["s3_prefix"]
     arns = _run_tasks(ecs, world_size, lambda rank: build_overrides(
-        rank, world_size, comm_name, s3_prefix, point_args, arm),
+        rank, world_size, comm_name, s3_prefix, point_args, arm, attempt),
         args.capacity_retries, args.capacity_backoff_s,
         capacity_budget_s(args.timeout_ms), task_definition=row["task_definition"],
         security_groups=security_groups_for(arm, ray_security_groups),
@@ -754,6 +759,35 @@ def _launch_and_wait(ecs, world_size, row, comm_name, point_args, args, ray_secu
 
 
 TASK_FAILED_TO_START = "TaskFailedToStart"
+FAILED_ATTEMPTS_SUFFIX = "_failed_attempts"
+
+
+def archive_failed_attempt(s3, s3_prefix, results_prefix, attempt):
+    """Move a failed attempt's records out of the run directory before a relaunch.
+
+    The relaunch writes to the same directory, so a rank file the failed attempt
+    left behind could otherwise pass for part of the new cohort. The records go
+    to a sibling prefix, outside the tree the scaling summary walks, and are kept
+    rather than deleted. Returns how many objects moved.
+    """
+    archive = (results_prefix + FAILED_ATTEMPTS_SUFFIX + s3_prefix[len(results_prefix):]
+               + f"attempt{attempt}/")
+    moved = 0
+    token = None
+    while True:
+        kwargs = {"Bucket": RESULTS_BUCKET, "Prefix": s3_prefix}
+        if token:
+            kwargs["ContinuationToken"] = token
+        page = s3.list_objects_v2(**kwargs)
+        for item in page.get("Contents", []):
+            key = item["Key"]
+            s3.copy_object(Bucket=RESULTS_BUCKET, Key=archive + key[len(s3_prefix):],
+                           CopySource={"Bucket": RESULTS_BUCKET, "Key": key})
+            s3.delete_object(Bucket=RESULTS_BUCKET, Key=key)
+            moved += 1
+        if not page.get("IsTruncated"):
+            return moved
+        token = page.get("NextContinuationToken")
 
 
 def tasks_failed_to_start(tasks):

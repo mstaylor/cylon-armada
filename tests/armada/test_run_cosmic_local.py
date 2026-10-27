@@ -305,3 +305,23 @@ def test_live_services_threads_dimensions_into_bedrock_config(monkeypatch):
         live_services(512)
 
     assert resolved["embedding_dimensions"] == 512
+
+def test_workload_hash_ignores_last_bit_differences_in_a_reuse_key():
+    """CPU inference can differ in a predicted redshift's last bit between
+    runs. That is far below any reuse tolerance and must not read as a
+    different workload."""
+    from armada.run_cosmic_local import workload_hash
+
+    import math
+
+    key = 0.123456789012345
+    nudged = math.nextafter(key, 1.0)
+    assert nudged != key
+    assert workload_hash(0, ["p"], [key]) == workload_hash(0, ["p"], [nudged])
+
+
+def test_workload_hash_still_separates_keys_that_differ_meaningfully():
+    from armada.run_cosmic_local import workload_hash
+
+    assert workload_hash(0, ["p"], [0.1234]) != workload_hash(0, ["p"], [0.1239])
+    assert workload_hash(0, ["p"], [None]) != workload_hash(0, ["p"], [0.0])
