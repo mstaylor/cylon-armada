@@ -1240,3 +1240,24 @@ def test_bind_without_photometry_features_column_is_unaffected():
     envelope = json.loads(op.fn(table).column("kv_pairs").to_pylist()[0]["v"])
 
     assert "reuse_key" not in envelope
+
+
+def test_reason_hands_each_calls_server_latency_and_retries_to_the_metrics():
+    from armada.run_metrics import RunMetrics
+
+    chain_executor = MagicMock()
+    chain_executor.execute.return_value = {
+        "response": "the answer", "input_tokens": 1, "output_tokens": 2, "latency_ms": 3000.0,
+        "model_id": "mock-model", "server_latency_ms": 2800.0, "retry_attempts": 1,
+        "started_at": 50.0,
+    }
+    metrics = RunMetrics()
+    op = build_reason_operator(chain_executor, dimensions=D, metrics=metrics)
+    struct_type = op.schema_in.field(0).type
+    ctx = pa.array([{"doc": "", "score": 0.0}], type=struct_type)
+    op.fn(pa.table({"context": ctx}, schema=op.schema_in))
+
+    summary = metrics.summary()
+    assert summary["llm_server_latencies_ms"] == [2800.0]
+    assert summary["llm_retry_attempts_total"] == 1
+    assert summary["llm_call_started_at"] == [50.0]

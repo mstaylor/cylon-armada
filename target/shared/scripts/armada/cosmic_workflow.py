@@ -388,7 +388,10 @@ def build_reason_operator(chain_executor, dimensions: int = 1024, metrics=None,
                 metrics.record_llm_call(result.get("latency_ms"),
                                         input_tokens=result.get("input_tokens", 0),
                                         output_tokens=result.get("output_tokens", 0),
-                                        cost_usd=result["cost_usd"])
+                                        cost_usd=result["cost_usd"],
+                                        server_latency_ms=result.get("server_latency_ms"),
+                                        retry_attempts=result.get("retry_attempts", 0),
+                                        started_at=result.get("started_at"))
             results.append(result)
             reused.append(False)
         out = {"response": pa.array([r["response"] for r in results], type=response_type)}

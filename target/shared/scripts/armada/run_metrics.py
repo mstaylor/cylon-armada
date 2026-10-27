@@ -67,6 +67,10 @@ class RunMetrics:
         self.cost_usd_total = 0.0
         self.unpriced_calls = 0
         self.synthesis_fallbacks = 0
+        self.llm_latencies_ms = []
+        self.llm_server_latencies_ms = []
+        self.llm_call_started_at = []
+        self.llm_retry_attempts_total = 0
 
     def record_retrieval(self, hit):
         self.retrievals += 1
@@ -89,7 +93,8 @@ class RunMetrics:
             self.cache_hits -= 1
         self.synthesis_fallbacks += 1
 
-    def record_llm_call(self, latency_ms, input_tokens=0, output_tokens=0, cost_usd=0.0):
+    def record_llm_call(self, latency_ms, input_tokens=0, output_tokens=0, cost_usd=0.0,
+                        server_latency_ms=None, retry_attempts=0, started_at=None):
         """Count a call; fold its latency into the mean only if one was reported.
 
         A call that reports no latency is counted separately rather than as
@@ -112,6 +117,10 @@ class RunMetrics:
         self.input_tokens_total += int(input_tokens or 0)
         self.output_tokens_total += int(output_tokens or 0)
         self.cost_usd_total += float(cost_usd or 0.0)
+        self.llm_latencies_ms.append(None if latency_ms is None else float(latency_ms))
+        self.llm_server_latencies_ms.append(server_latency_ms)
+        self.llm_call_started_at.append(started_at)
+        self.llm_retry_attempts_total += int(retry_attempts or 0)
 
     def record_store(self):
         """Count a context this rank originated."""
@@ -174,4 +183,8 @@ class RunMetrics:
                               if self.llm_calls else 0.0),
             "unpriced_calls": self.unpriced_calls,
             "synthesis_fallbacks": self.synthesis_fallbacks,
+            "llm_latencies_ms": list(self.llm_latencies_ms),
+            "llm_server_latencies_ms": list(self.llm_server_latencies_ms),
+            "llm_call_started_at": list(self.llm_call_started_at),
+            "llm_retry_attempts_total": self.llm_retry_attempts_total,
         }

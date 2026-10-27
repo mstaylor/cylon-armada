@@ -96,3 +96,78 @@ class TestChainExecutor:
         result = executor.execute("test")
 
         assert result["latency_ms"] >= 0
+
+def _stubbed_bedrock_llm(converse_response, calls_client=True):
+    import boto3
+    from botocore.stub import Stubber
+    from langchain_core.messages import AIMessage
+
+    client = boto3.client("bedrock-runtime", region_name="us-east-1",
+                          aws_access_key_id="testing", aws_secret_access_key="testing")
+    stubber = Stubber(client)
+    stubber.add_response("converse", converse_response)
+    stubber.activate()
+
+    class StubbedLlm:
+        def __init__(self):
+            self.client = client
+
+        def invoke(self, messages):
+            if calls_client:
+                client.converse(modelId="m",
+                                messages=[{"role": "user", "content": [{"text": "q"}]}])
+            return AIMessage(content="answer",
+                             usage_metadata={"input_tokens": 3, "output_tokens": 4,
+                                             "total_tokens": 7})
+
+    return StubbedLlm()
+
+
+_CONVERSE = {
+    "output": {"message": {"role": "assistant", "content": [{"text": "answer"}]}},
+    "stopReason": "end_turn",
+    "usage": {"inputTokens": 3, "outputTokens": 4, "totalTokens": 7},
+    "metrics": {"latencyMs": 812},
+}
+
+
+@patch("chain.executor.ChatBedrock")
+def test_bedrocks_own_latency_and_retries_are_reported_beside_the_wall_time(mock_chat_bedrock):
+    from chain.executor import ChainExecutor
+
+    mock_chat_bedrock.return_value = _stubbed_bedrock_llm(
+        {**_CONVERSE, "ResponseMetadata": {"RetryAttempts": 2}})
+
+    result = ChainExecutor(config=BedrockConfig()).execute("task")
+
+    assert result["server_latency_ms"] == 812.0
+    assert result["retry_attempts"] == 2
+    assert result["latency_ms"] >= 0.0
+    assert result["started_at"] > 0.0
+
+
+@patch("chain.executor.ChatBedrock")
+def test_a_call_without_server_metrics_reports_none_not_a_stale_value(mock_chat_bedrock):
+    from chain.executor import ChainExecutor
+
+    llm = _stubbed_bedrock_llm(_CONVERSE)
+    mock_chat_bedrock.return_value = llm
+    executor = ChainExecutor(config=BedrockConfig())
+    executor.execute("task")
+    llm_without_call = _stubbed_bedrock_llm(_CONVERSE, calls_client=False)
+    executor.llm.invoke = llm_without_call.invoke
+
+    result = executor.execute("task")
+
+    assert result["server_latency_ms"] is None
+    assert result["retry_attempts"] == 0
+
+
+def test_invoke_model_latency_comes_from_its_response_header():
+    from types import SimpleNamespace
+
+    from chain.executor import server_latency_ms
+
+    response = SimpleNamespace(headers={"x-amzn-bedrock-invocation-latency": "640"})
+    assert server_latency_ms(response, {}) == 640.0
+    assert server_latency_ms(SimpleNamespace(headers={}), {}) is None

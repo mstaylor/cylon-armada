@@ -945,3 +945,17 @@ def test_relaunches_stop_at_the_configured_limit(monkeypatch):
 
     assert len(ecs.run_task_calls) == 2 * 3
     assert recorded[-1][1] == 3
+
+
+def test_a_smoke_writes_under_its_own_results_prefix_and_a_sweep_keeps_the_default():
+    m = _driver()
+    smoke = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "armada", "--world-sizes", "8", "--scaling", "weak",
+         "--results-prefix", "cylon-armada/results/exp_e_cosmic_smoke"])
+    sweep = m.build_parser().parse_args(
+        ["--dry-run", "--backend", "armada", "--world-sizes", "8", "--scaling", "weak"])
+
+    assert {row["s3_prefix"].split("/weak/")[0] for row in m.sweep_matrix(smoke)} == {
+        "cylon-armada/results/exp_e_cosmic_smoke"}
+    assert {row["s3_prefix"].split("/weak/")[0] for row in m.sweep_matrix(sweep)} == {
+        m.RESULTS_PREFIX}

@@ -219,6 +219,7 @@ _ARM_SELECTIONS = {
     "ray-comparison": ("armada", "ray-native", "ray-collective", "ray-cylon"),
     "exp-e": ("armada", "langchain", "ray-native", "ray-collective", "ray-cylon",
               "armada-overlap", "ray-collective-overlap"),
+    "overlap-check": ("armada", "armada-overlap", "ray-collective", "ray-collective-overlap"),
 }
 
 
@@ -627,7 +628,7 @@ def sweep_matrix(args):
                     "task_definition": TASK_DEFINITION,
                     "security_group": (RAY_SECURITY_GROUP_NAME if arm in RAY_ARMS
                                        else "vpc default"),
-                    "s3_prefix": (f"{RESULTS_PREFIX}/{args.scaling}/{arm}/ws{world_size}/"
+                    "s3_prefix": (f"{args.results_prefix}/{args.scaling}/{arm}/ws{world_size}/"
                                   f"{run_dir}{run_index}/"),
                 })
     return rows
@@ -872,6 +873,9 @@ def build_parser():
     parser.add_argument("--capacity-backoff-s", type=int, default=30,
                         help="base delay for exponential backoff between capacity "
                              f"retries, capped at {CAPACITY_RETRY_MAX_DELAY_S}s")
+    parser.add_argument("--results-prefix", default=RESULTS_PREFIX,
+                        help="S3 prefix the results are written under; give a smoke run its own "
+                             "so it never overwrites a sweep's records")
     parser.add_argument("--launch-retries", type=int, default=2,
                         help="relaunches of an arm whose tasks stopped with TaskFailedToStart "
                              "(for example a failed image pull) before recording it as failed")
@@ -921,7 +925,7 @@ def main():
     if args.dry_run:
         logger.info("dry run complete — nothing launched")
     else:
-        logger.info("results land under s3://%s/%s", RESULTS_BUCKET, RESULTS_PREFIX)
+        logger.info("results land under s3://%s/%s", RESULTS_BUCKET, args.results_prefix)
 
 
 if __name__ == "__main__":

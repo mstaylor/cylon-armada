@@ -163,3 +163,19 @@ def test_gate_rejections_are_counted_apart_from_misses():
 
     assert summary["gate_rejections"] == 1
     assert summary["cache_hits"] == 0
+
+
+def test_every_calls_wall_and_server_latency_are_kept_in_call_order():
+    """A rank's slow total cannot be split into Bedrock time and time spent
+    waiting in the process without each call's two latencies."""
+    m = RunMetrics()
+    m.record_llm_call(3000.0, server_latency_ms=2900.0, retry_attempts=0, started_at=100.0)
+    m.record_llm_call(65000.0, server_latency_ms=3100.0, retry_attempts=1, started_at=104.0)
+    m.record_llm_call(None)
+
+    summary = m.summary()
+
+    assert summary["llm_latencies_ms"] == [3000.0, 65000.0, None]
+    assert summary["llm_server_latencies_ms"] == [2900.0, 3100.0, None]
+    assert summary["llm_call_started_at"] == [100.0, 104.0, None]
+    assert summary["llm_retry_attempts_total"] == 1
