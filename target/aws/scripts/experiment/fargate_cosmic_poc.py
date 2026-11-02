@@ -56,7 +56,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, WaiterError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -141,23 +141,25 @@ def galaxies_for(scaling, world_size, per_rank, total):
 
 
 ARMS = ("armada", "langchain", "isolated", "ray-native", "ray-cylon", "ray-collective",
-        "armada-overlap", "ray-collective-overlap")
+        "armada-overlap", "ray-collective-overlap", "armada-async")
 
 ARMS_WITHOUT_EXECUTOR = ()
 RAY_ARMS = ("ray-native", "ray-cylon", "ray-collective", "ray-collective-overlap")
 
-_OVERLAP_ARMS = {"armada-overlap": "armada", "ray-collective-overlap": "ray-collective"}
+_SCHEDULED_ARMS = {"armada-overlap": ("armada", "overlapped"),
+                   "ray-collective-overlap": ("ray-collective", "overlapped"),
+                   "armada-async": ("armada", "async")}
 
 
 def backend_for(arm):
-    """The runner backend an arm launches. An overlap arm is its backend run
-    with the overlapped epoch schedule, so both schedules of one runtime are
-    measured in the same sweep."""
-    return _OVERLAP_ARMS.get(arm, arm)
+    """The runner backend an arm launches. An overlap or async arm is its
+    backend run with another epoch schedule, so every schedule of one runtime
+    is measured in the same sweep."""
+    return _SCHEDULED_ARMS.get(arm, (arm, None))[0]
 
 
 def epoch_schedule_for(arm):
-    return "overlapped" if arm in _OVERLAP_ARMS else "synchronous"
+    return _SCHEDULED_ARMS.get(arm, (arm, "synchronous"))[1]
 LAUNCHABLE_ARMS = tuple(arm for arm in ARMS if arm not in ARMS_WITHOUT_EXECUTOR)
 
 _ORDERS = tuple(itertools.permutations(ARMS))
@@ -228,6 +230,7 @@ _ARM_SELECTIONS = {
     "exp-e": ("armada", "langchain", "ray-native", "ray-collective", "ray-cylon",
               "armada-overlap", "ray-collective-overlap"),
     "overlap-check": ("armada", "armada-overlap", "ray-collective", "ray-collective-overlap"),
+    "async-check": ("armada-overlap", "armada-async", "ray-native"),
 }
 
 
@@ -311,7 +314,8 @@ def plan_launches(backend, runs, arms=None):
 
 _CONTEXT_STORE = {"armada": "cylon", "langchain": "redis", "isolated": "cylon",
                   "ray-native": "cylon", "ray-cylon": "cylon", "ray-collective": "cylon",
-                  "armada-overlap": "cylon", "ray-collective-overlap": "cylon"}
+                  "armada-overlap": "cylon", "ray-collective-overlap": "cylon",
+                  "armada-async": "cylon"}
 
 
 def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend, attempt=1):
@@ -329,6 +333,8 @@ def build_overrides(rank, world_size, comm_name, s3_prefix, args, backend, attem
         {"name": "S3_RESULTS_PREFIX", "value": s3_prefix},
         {"name": "EXECUTION_BACKEND", "value": backend_for(backend)},
         {"name": "EPOCH_SCHEDULE", "value": epoch_schedule_for(backend)},
+        {"name": "ARMADA_ASYNC_POLL_S", "value": str(args.async_poll_s)},
+        {"name": "ARMADA_ASYNC_SETTLE_S", "value": str(args.async_settle_s)},
         {"name": "LAUNCH_ATTEMPT", "value": str(attempt)},
         {"name": "CONTEXT_BACKEND", "value": _CONTEXT_STORE[backend]},
         {"name": "CONTEXT_TABLE_SNAPSHOT", "value": "0"},
@@ -713,10 +719,22 @@ def launch_world_size(ecs, world_size, args, ray_security_groups=None, s3=None):
                 world_size, args.scaling, galaxies,
                 [f"{row['phase']}{row['run']}:{row['arm']}" for row in rows])
 
+    resuming = args.resume and not args.dry_run
+    if resuming:
+        s3 = s3 or boto3.client("s3", region_name=REGION)
     all_arns = []
     for row in rows:
         arm, run_index, s3_prefix = row["arm"], row["run"], row["s3_prefix"]
         phase_tag = "w" if row["phase"] == "warmup" else ""
+        if resuming:
+            if launch_completed(s3, s3_prefix):
+                logger.info("  resume: %s %d arm %s already complete, skipping",
+                            row["phase"], run_index, arm)
+                continue
+            moved = archive_records(s3, s3_prefix, args.results_prefix, INTERRUPTED_FOLDER)
+            if moved:
+                logger.warning("  resume: moved %d record(s) of an interrupted launch aside",
+                               moved)
         for attempt in range(1, args.launch_retries + 2):
             comm_name = (f"cosmic_{args.scaling}_{arm}_{world_size}_{phase_tag}{run_index}_"
                          f"{uuid.uuid4().hex[:8]}")
@@ -729,9 +747,11 @@ def launch_world_size(ecs, world_size, args, ray_security_groups=None, s3=None):
                             {e["name"]: e["value"] for e in
                              overrides["containerOverrides"][0]["environment"]})
                 break
-            arns = _launch_and_wait(ecs, world_size, row, comm_name, point_args, args,
-                                    ray_security_groups, attempt)
+            arns, timed_out = _launch_and_wait(ecs, world_size, row, comm_name, point_args,
+                                               args, ray_security_groups, attempt)
             failed = tasks_failed_to_start(_describe_tasks(ecs, arns))
+            if timed_out:
+                failed.append(f"arm still running after {args.arm_timeout_s}s; stopped")
             if not failed or attempt > args.launch_retries:
                 if failed:
                     logger.error("  %d task(s) still failed to start after %d launches: %s",
@@ -739,7 +759,7 @@ def launch_world_size(ecs, world_size, args, ray_security_groups=None, s3=None):
                 _record_arm_timing(ecs, arns, s3_prefix, launch_attempts=attempt)
                 all_arns.extend(arns)
                 break
-            logger.warning("  %d task(s) failed to start (%s); relaunching the whole arm, "
+            logger.warning("  %d problem(s) with the launch (%s); relaunching the whole arm, "
                            "attempt %d of %d", len(failed), failed, attempt + 1,
                            args.launch_retries + 1)
             s3 = s3 or boto3.client("s3", region_name=REGION)
@@ -761,11 +781,31 @@ def _launch_and_wait(ecs, world_size, row, comm_name, point_args, args, ray_secu
     logger.info("  launched %d tasks; waiting for the arm to finish", len(arns))
     tunnel = _open_ray_dashboard(ecs, arns[0], args) if (
         args.ray_dashboard and arm in RAY_ARMS) else None
+    timed_out = False
     try:
         _wait_for_tasks(ecs, arns, args.arm_timeout_s)
+    except WaiterError:
+        timed_out = True
+        logger.error("  arm %s still running after %ds; stopping its tasks", arm,
+                     args.arm_timeout_s)
+        stop_tasks(ecs, arns, f"arm exceeded {args.arm_timeout_s}s")
+        try:
+            _wait_for_tasks(ecs, arns, args.stop_wait_s)
+        except WaiterError:
+            logger.error("  arm %s tasks did not stop within %ds", arm, args.stop_wait_s)
     finally:
         _close_ray_dashboard(tunnel)
-    return arns
+    return arns, timed_out
+
+
+
+def stop_tasks(ecs, arns, reason):
+    """Stop every task of a hung arm. Never raises: a task may already be gone."""
+    for arn in arns:
+        try:
+            ecs.stop_task(cluster=CLUSTER, task=arn, reason=reason)
+        except ClientError as exc:
+            logger.warning("  could not stop %s: %s", arn, exc)
 
 
 TASK_FAILED_TO_START = "TaskFailedToStart"
@@ -780,8 +820,23 @@ def archive_failed_attempt(s3, s3_prefix, results_prefix, attempt):
     to a sibling prefix, outside the tree the scaling summary walks, and are kept
     rather than deleted. Returns how many objects moved.
     """
+    return archive_records(s3, s3_prefix, results_prefix, f"attempt{attempt}")
+
+
+INTERRUPTED_FOLDER = "interrupted"
+
+
+def launch_completed(s3, s3_prefix):
+    """A launch is complete once the driver has written its _timing.json."""
+    key = s3_prefix + "_timing.json"
+    page = s3.list_objects_v2(Bucket=RESULTS_BUCKET, Prefix=key)
+    return any(item["Key"] == key for item in page.get("Contents", []))
+
+
+def archive_records(s3, s3_prefix, results_prefix, folder):
+    """Move every object under s3_prefix to <folder>/ in the failed-attempts tree."""
     archive = (results_prefix + FAILED_ATTEMPTS_SUFFIX + s3_prefix[len(results_prefix):]
-               + f"attempt{attempt}/")
+               + f"{folder}/")
     moved = 0
     token = None
     while True:
@@ -908,9 +963,18 @@ def build_parser():
                              "seconds after its result is uploaded. Measurements are unaffected, "
                              "but each arm takes that much longer and bills one task for it")
     parser.add_argument("--listen-port", type=int, default=10000)
+    parser.add_argument("--async-poll-s", type=float, default=0.005,
+                        help="how often armada-async progresses its exchange while a rank's model "
+                             "calls run")
+    parser.add_argument("--async-settle-s", type=float, default=1.0,
+                        help="longest armada-async keeps progressing after a publish, until its "
+                             "sends complete and no peer table is half received")
     parser.add_argument("--timeout-ms", type=int, default=120000)
     parser.add_argument("--arm-timeout-s", type=int, default=1800,
                         help="how long to wait for one arm's tasks to stop before the next")
+    parser.add_argument("--stop-wait-s", type=int, default=300,
+                        help="after stopping a hung arm, how long to wait for its tasks to stop "
+                             "before relaunching")
     parser.add_argument("--capacity-retries", type=int, default=6,
                         help="per-rank retries on a transient Fargate 'Capacity is "
                              "unavailable' run_task failure before giving up")
@@ -927,6 +991,9 @@ def build_parser():
     parser.add_argument("--launch-retries", type=int, default=2,
                         help="relaunches of an arm whose tasks stopped with TaskFailedToStart "
                              "(for example a failed image pull) before recording it as failed")
+    parser.add_argument("--resume", action="store_true",
+                        help="skip launches whose run directory already has _timing.json, and "
+                             "move aside records of a launch that started but never finished")
     parser.add_argument("--spot-from-rank", type=int, default=None,
                         help="ranks at or above this launch on Fargate Spot, whose vCPU quota "
                              "is separate from on-demand; unset launches every rank on demand")

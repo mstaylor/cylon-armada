@@ -82,24 +82,31 @@ class OverlappedEpochs:
         return [upsert.fn(ArmadaExecutor._concat_or_empty(peers, contribution.schema))]
 
     def _split(self, seq):
-        operators = _operators(seq)
-        plan = lower(seq)
-        upsert = operators[-1]
-        if plan.assignments[upsert.name] != CollectivePattern.AllGather:
-            raise ValueError(f"the last operator {upsert.name!r} must be an AllGather")
-        names = [op.name for op in operators[:-1]]
-        start = len(names) - len(self._offloaded)
-        if start < 0 or tuple(names[start:]) != self._offloaded:
+        return split_at_final_allgather(seq, self._offloaded)
+
+
+def split_at_final_allgather(seq, offloaded):
+    """(leading, offloaded, upsert): the local operators run on the calling
+    thread, the model-call operators a worker runs, and the final AllGather."""
+    offloaded = tuple(offloaded)
+    operators = _operators(seq)
+    plan = lower(seq)
+    upsert = operators[-1]
+    if plan.assignments[upsert.name] != CollectivePattern.AllGather:
+        raise ValueError(f"the last operator {upsert.name!r} must be an AllGather")
+    names = [op.name for op in operators[:-1]]
+    start = len(names) - len(offloaded)
+    if start < 0 or tuple(names[start:]) != offloaded:
+        raise ValueError(
+            f"offloaded operators {list(offloaded)} must sit directly before "
+            f"{upsert.name!r}; the sequence is {names}")
+    leading = operators[:start]
+    for op in leading + operators[start:-1]:
+        if plan.assignments[op.name] not in LOCAL_PATTERNS:
             raise ValueError(
-                f"offloaded operators {list(self._offloaded)} must sit directly before "
-                f"{upsert.name!r}; the sequence is {names}")
-        leading = operators[:start]
-        for op in leading + operators[start:-1]:
-            if plan.assignments[op.name] not in LOCAL_PATTERNS:
-                raise ValueError(
-                    f"operator {op.name!r} has pattern {plan.assignments[op.name]!r}; only "
-                    f"local operators may precede the final AllGather")
-        return leading, operators[start:-1], upsert
+                f"operator {op.name!r} has pattern {plan.assignments[op.name]!r}; only "
+                f"local operators may precede the final AllGather")
+    return leading, operators[start:-1], upsert
 
 
 def _apply(operators, table):

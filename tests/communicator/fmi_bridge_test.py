@@ -262,3 +262,33 @@ class TestTcpunchPairingNamesFit:
 
         FMIBridge(world_size=11, rank=0, channel_type="direct-redis", comm_name=self.LONG_COMM_NAME)
         mock_fmi_config.assert_called_once()
+
+
+class TestAsyncExchange:
+    """async_exchange hands the bridge's own CylonContext to pycylon's AsyncTableExchange."""
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_async_exchange_is_built_on_the_bridge_context(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge
+
+        mock_env = MagicMock()
+        mock_import_fmi.return_value = (MagicMock(), MagicMock(return_value=mock_env), MagicMock())
+        exchange_module = MagicMock()
+        schema = object()
+
+        bridge = FMIBridge(world_size=2, rank=0, channel_type="direct-redis")
+        with patch.dict(sys.modules, {"pycylon.net.async_table_exchange": exchange_module}):
+            exchange = bridge.async_exchange(schema)
+
+        exchange_module.AsyncTableExchange.assert_called_once_with(mock_env.context, schema)
+        assert exchange is exchange_module.AsyncTableExchange.return_value
+
+    @patch('communicator.fmi_bridge._import_fmi')
+    def test_async_exchange_without_a_communicator_raises(self, mock_import_fmi):
+        from communicator.fmi_bridge import FMIBridge
+
+        mock_import_fmi.return_value = (None, None, None)
+        bridge = FMIBridge(world_size=2, rank=0, channel_type="direct-redis")
+
+        with pytest.raises(RuntimeError):
+            bridge.async_exchange(object())

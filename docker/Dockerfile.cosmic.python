@@ -79,7 +79,7 @@ from communicator.fmi_bridge import _import_fmi; \
 assert all(_import_fmi()), 'pycylon FMI not importable'; \
 from cylon_armada.context_table import ContextTable; \
 print('ContextTable', ContextTable(8).to_arrow().schema.field('embedding').type); \
-import armada.run_cosmic_local, armada.ray_native_executor, armada.ray_collective_executor, ray_arm.native, ray_arm.collective, ray_arm.cluster, ray_arm.cylon_on_ray; \
+import pycylon.net.async_table_exchange, armada.async_executor, armada.run_cosmic_local, armada.ray_native_executor, armada.ray_collective_executor, ray_arm.native, ray_arm.collective, ray_arm.cluster, ray_arm.cylon_on_ray; \
 print('ray', ray.__version__, 'pyarrow', pyarrow.__version__, 'torch', torch.__version__, 'timm', timm.__version__)" && \
     ray --version
 

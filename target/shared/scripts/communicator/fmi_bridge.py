@@ -322,6 +322,13 @@ class FMIBridge:
             raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")
         return self._comm.allgather(table)
 
+    def async_exchange(self, schema):
+        """Publish-on-completion exchange of pyarrow tables with every peer over this context."""
+        if not self.available:
+            raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")
+        from pycylon.net.async_table_exchange import AsyncTableExchange
+        return AsyncTableExchange(self._ctx, schema)
+
     def broadcast(self, table, root=0):
         if not self.available:
             raise RuntimeError(f"FMI not available (rank={self.rank}, world_size={self.world_size})")

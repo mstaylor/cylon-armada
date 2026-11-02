@@ -65,6 +65,25 @@ def lower(seq):
     return compile_workflow(dag)
 
 
+def run_from_allgather(seq, tables):
+    """Run `tables` through the first AllGather operator and every one after it.
+
+    Used for contributions that arrive after a rank's last epoch, so they are
+    stored exactly as an epoch's gathered rows are. None when the sequence has
+    no AllGather.
+    """
+    plan = lower(seq)
+    operators = _operators(seq)
+    start = next((index for index, op in enumerate(operators)
+                  if plan.assignments[op.name] == CollectivePattern.AllGather), None)
+    if start is None:
+        return None
+    current = ArmadaExecutor._concat_or_empty(tables, tables[0].schema)
+    for op in operators[start:]:
+        current = op.fn(current)
+    return current
+
+
 def required_peer_map(seq, world_size, roots=(0,)):
     """Serialized FMI_REQUIRED_PEERS map for the collectives this sequence compiles to.
 

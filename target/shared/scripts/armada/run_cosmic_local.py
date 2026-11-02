@@ -37,6 +37,9 @@ REDIS_PORT, FMI_LISTEN_PORT. Ray arms also read RAY_PORT,
 RAY_RENDEZVOUS_TIMEOUT_S, RAY_CLUSTER_TIMEOUT_S, RAY_BARRIER_TIMEOUT_S and
 RAY_NAMESPACE. ray-collective also reads RAY_COLLECTIVE_TIMEOUT_S,
 RAY_COLLECTIVE_POLL_S, RAY_COLLECTIVE_BACKEND and GLOO_SOCKET_IFNAME.
+armada under the async epoch schedule reads ARMADA_ASYNC_POLL_S and
+ARMADA_ASYNC_SETTLE_S, and finishes within RAY_BARRIER_TIMEOUT_S, the bound
+ray-native's end-of-run barrier uses.
 
 Rank identity differs by arm. Under the armada and ray-cylon backends the rank
 is the one the FMI channel negotiates through Redis INCR (bridge.rank), which
@@ -65,6 +68,7 @@ from enum import Enum
 import numpy as np
 import pyarrow as pa
 
+from armada.async_executor import ArmadaAsyncExecutor, NoPeersExchange
 from armada.cosmic_workflow import COSMIC_MODEL_CALL_OPERATORS, build_cosmic_workflow
 from armada.epochs import epoch_count, plan_epochs
 from armada.exchange_schedule import OverlappedEpochs
@@ -432,15 +436,20 @@ class EpochSchedule(Enum):
 
     Synchronous blocks at the end of every epoch. Overlapped exchanges epoch
     e-1 while epoch e's model calls run (armada.exchange_schedule), so it
-    applies only to arms that exchange every epoch.
+    applies only to arms that exchange every epoch. Async publishes each
+    epoch's contribution as it completes and reads whatever peers have sent, as
+    ray-native does (armada.async_executor), with one wait for every peer at
+    the end of the run.
     """
 
     Synchronous = "synchronous"
     Overlapped = "overlapped"
+    Async = "async"
 
 
 OVERLAPPABLE_BACKENDS = (ExecutionBackend.Armada, ExecutionBackend.RayCylon,
                          ExecutionBackend.RayCollective)
+ASYNC_BACKENDS = (ExecutionBackend.Armada,)
 
 
 def overlapped_epochs_for(backend, bridge, ray_collective):
@@ -453,6 +462,15 @@ def overlapped_epochs_for(backend, bridge, ray_collective):
         executor = ArmadaExecutor(bridge)
         exchange = lambda contribution: executor.exchange_peers(contribution, bridge._ctx)
     return OverlappedEpochs(exchange, COSMIC_MODEL_CALL_OPERATORS)
+
+
+def armada_async_executor_for(bridge, poll_s, settle_s):
+    """ArmadaAsyncExecutor over this rank's bridge, or with no peers when there is no channel."""
+    if bridge.available:
+        factory = bridge.async_exchange
+    else:
+        factory = lambda schema: NoPeersExchange()
+    return ArmadaAsyncExecutor(factory, COSMIC_MODEL_CALL_OPERATORS, poll_s, settle_s)
 
 
 def context_store_for(backend):
@@ -723,14 +741,20 @@ def main(argv=None):
     parser.add_argument("--epoch-schedule",
                         default=os.environ.get("EPOCH_SCHEDULE", EpochSchedule.Synchronous.value),
                         choices=[s.value for s in EpochSchedule],
-                        help="synchronous (block at every epoch's AllGather) or overlapped "
-                             "(exchange epoch e-1 during epoch e's model calls); overlapped "
-                             "applies to armada, ray-cylon and ray-collective (env EPOCH_SCHEDULE)")
+                        help="synchronous (block at every epoch's AllGather), overlapped "
+                             "(exchange epoch e-1 during epoch e's model calls) or async "
+                             "(publish each epoch on completion, as ray-native does); overlapped "
+                             "applies to armada, ray-cylon and ray-collective, async to armada "
+                             "(env EPOCH_SCHEDULE)")
     args = parser.parse_args(argv)
     epoch_schedule = EpochSchedule(args.epoch_schedule)
     if (epoch_schedule is EpochSchedule.Overlapped
             and ExecutionBackend(args.backend) not in OVERLAPPABLE_BACKENDS):
         parser.error(f"--epoch-schedule overlapped needs a per-epoch exchange; backend "
+                     f"{args.backend} has none")
+    if (epoch_schedule is EpochSchedule.Async
+            and ExecutionBackend(args.backend) not in ASYNC_BACKENDS):
+        parser.error(f"--epoch-schedule async runs over Cylon's AsyncTableExchange; backend "
                      f"{args.backend} has none")
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -781,7 +805,8 @@ def main(argv=None):
         # Derived before the bridge exists: the channel establishes its
         # connections while the communicator is built, so the topology has to
         # be known first.
-        peers = required_peer_map(build_for(rank), world_size)
+        peers = (None if epoch_schedule is EpochSchedule.Async
+                 else required_peer_map(build_for(rank), world_size))
         t0 = time.perf_counter()
         bridge = FMIBridge(
             world_size=world_size, rank=rank, channel_type="direct-redis",
@@ -912,8 +937,16 @@ def main(argv=None):
     align_ranks_before_run(bridge, ray_native, ray_collective, ray_barrier_timeout_s)
     record["start_barrier_s"] = round(time.perf_counter() - t_align, 4)
 
-    schedule = (overlapped_epochs_for(backend, bridge, ray_collective)
-                if epoch_schedule is EpochSchedule.Overlapped else None)
+    async_poll_s = float(os.environ.get("ARMADA_ASYNC_POLL_S", 0.005))
+    async_settle_s = float(os.environ.get("ARMADA_ASYNC_SETTLE_S", 1.0))
+    if epoch_schedule is EpochSchedule.Overlapped:
+        schedule = overlapped_epochs_for(backend, bridge, ray_collective)
+    elif epoch_schedule is EpochSchedule.Async:
+        schedule = armada_async_executor_for(bridge, async_poll_s, async_settle_s)
+        record["async_poll_s"] = async_poll_s
+        record["async_settle_s"] = async_settle_s
+    else:
+        schedule = None
 
     results = []
     t1 = time.perf_counter()
@@ -927,6 +960,11 @@ def main(argv=None):
         if ray_native is not None:
             late = RayNativeExecutor(ray_native.shard).finish(
                 seq, ray_native.barrier, ray_barrier_timeout_s)
+            record["teardown_barrier_s"] = round(time.perf_counter() - run_end, 4)
+            if late is not None:
+                results.append(late)
+        elif epoch_schedule is EpochSchedule.Async:
+            late = schedule.finish(seq, ray_barrier_timeout_s)
             record["teardown_barrier_s"] = round(time.perf_counter() - run_end, 4)
             if late is not None:
                 results.append(late)

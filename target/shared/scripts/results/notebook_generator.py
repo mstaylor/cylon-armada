@@ -98,10 +98,8 @@ fig, ax = plt.subplots()
 for i, cb in enumerate(backends):
     rates = [reuse_df[(reuse_df['similarity_threshold'] == th) & (reuse_df['context_backend'] == cb)]['reuse_rate_mean'].mean()
              for th in thresholds]
-    errs = [reuse_df[(reuse_df['similarity_threshold'] == th) & (reuse_df['context_backend'] == cb)]['reuse_rate_std'].mean()
-            for th in thresholds]
-    ax.bar(x + i*width, rates, width, yerr=errs, label=cb,
-           color=CONTEXT_BACKEND_COLORS.get(cb, f'C{i}'), alpha=0.8, capsize=3)
+    ax.bar(x + i*width, rates, width, label=cb,
+           color=CONTEXT_BACKEND_COLORS.get(cb, f'C{i}'), alpha=0.8)
 ax.set_xlabel('Similarity Threshold'); ax.set_ylabel('Reuse Rate (%)')
 ax.set_title('Context Reuse Rate by Threshold and Backend')
 ax.set_xticks(x + width*(len(backends)-1)/2)
@@ -537,14 +535,13 @@ width = 0.35
 fig, ax = plt.subplots(figsize=(10, 6))
 for i, plat in enumerate(PLATFORM_ORDER):
     style = PLATFORM_STYLE[plat]
-    lat, err = [], []
+    lat = []
     for n in ns:
         cell = bar[(bar['platform'] == plat) & (bar['N'] == n)]
         lat.append(cell['latency_p50_ms'].iloc[0] if len(cell) else 0.0)
-        err.append(cell['latency_p50_ms_std'].iloc[0] if len(cell) and 'latency_p50_ms_std' in cell.columns else 0.0)
     offset = (i - 0.5) * width
-    ax.bar(x + offset, lat, width=width, yerr=err if any(e > 0 for e in err) else None,
-          color=style['color'], alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW, capsize=5, label=style['label'])
+    ax.bar(x + offset, lat, width=width,
+          color=style['color'], alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW, label=style['label'])
 ax.set_xticks(x); ax.set_xticklabels([str(n) for n in ns])
 ax.set_xlabel('World size N'); ax.set_ylabel('Barrier P50 latency (ms)')
 ax.set_title('Barrier synchronization latency vs N — Rivanna vs Fargate')

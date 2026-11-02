@@ -34,7 +34,7 @@ without Ray.
 
 from cylon_armada.dag_compiler import CollectivePattern
 
-from armada.executor import ArmadaExecutor, _operators, lower
+from armada.executor import ArmadaExecutor, _operators, lower, run_from_allgather
 
 STARTED_PHASE = "started"
 PUBLISHED_PHASE = "published"
@@ -100,13 +100,4 @@ class RayNativeExecutor:
 
     @staticmethod
     def _upsert_late(seq, late):
-        plan = lower(seq)
-        operators = _operators(seq)
-        start = next((index for index, op in enumerate(operators)
-                      if plan.assignments[op.name] == CollectivePattern.AllGather), None)
-        if start is None:
-            return None
-        current = ArmadaExecutor._concat_or_empty(late, late[0].schema)
-        for op in operators[start:]:
-            current = op.fn(current)
-        return current
+        return run_from_allgather(seq, late)

@@ -196,17 +196,16 @@ def chart_barrier_vs_n_compare(rows, output_dir, chart_format, chart_dpi):
     fig, ax = plt.subplots(figsize=(10, 6))
     for i, plat in enumerate(PLATFORM_ORDER):
         style = PLATFORM_STYLE[plat]
-        lat, err = [], []
+        lat = []
         for n in ns:
             cell = [r for r in rows if r["collective"] == "barrier" and r["platform"] == plat
                     and int(r["N"]) == n]
             lat.append(_num(cell[0], "latency_p50_ms") if cell else 0.0)
-            err.append(_num(cell[0], "latency_p50_ms_std") if cell else 0.0)
         offset = (i - 0.5) * width
         xs = [xi + offset for xi in x]
-        ax.bar(xs, lat, width=width, yerr=err if any(err) else None,
+        ax.bar(xs, lat, width=width,
                color=style["color"], alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW,
-               capsize=5, label=style["label"])
+               label=style["label"])
     ax.set_xticks(list(x))
     ax.set_xticklabels([str(n) for n in ns])
     ax.set_xlabel("World size N", fontsize=FONT_SIZE)

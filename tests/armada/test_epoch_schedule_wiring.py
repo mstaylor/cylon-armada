@@ -149,3 +149,94 @@ def test_the_record_carries_the_effective_reuse_settings_and_launch_attempt(monk
     assert record["outlier_threshold"] == 0.027677
     assert record["launch_attempt"] == 2
     assert record["scripts_source"] == "cylon-armada/scripts-expE/"
+
+
+def _capture_bridge_kwargs(monkeypatch, available=False):
+    captured = {}
+
+    def bridge_factory(**kwargs):
+        captured.update(kwargs)
+        return MagicMock(rank=0, world_size=1, available=available, channel_type="direct-redis",
+                         _ctx=None)
+
+    monkeypatch.setattr(mod, "FMIBridge", bridge_factory)
+    monkeypatch.setattr(mod, "required_peer_map", lambda seq, world_size: "0:;")
+    return captured
+
+
+def test_armada_async_builds_a_full_mesh_bridge(monkeypatch, tmp_path):
+    out = _main_env(monkeypatch, tmp_path, "armada-async-mesh")
+    captured = _capture_bridge_kwargs(monkeypatch)
+
+    assert mod.main(["--backend", "armada", "--epoch-schedule", "async", "--galaxies", "6",
+                     "--result-path", out]) == 0
+
+    assert captured["required_peers"] is None
+
+
+def test_armada_overlap_still_passes_its_peer_map(monkeypatch, tmp_path):
+    out = _main_env(monkeypatch, tmp_path, "armada-overlap-peers")
+    captured = _capture_bridge_kwargs(monkeypatch)
+
+    assert mod.main(["--backend", "armada", "--epoch-schedule", "overlapped", "--galaxies", "6",
+                     "--result-path", out]) == 0
+
+    assert captured["required_peers"] == "0:;"
+
+
+def test_armada_async_records_teardown_and_poll_interval(monkeypatch, tmp_path):
+    out = _main_env(monkeypatch, tmp_path, "armada-async-record")
+    monkeypatch.setenv("ARMADA_ASYNC_POLL_S", "0.02")
+    monkeypatch.setenv("ARMADA_ASYNC_SETTLE_S", "0.5")
+    _capture_bridge_kwargs(monkeypatch)
+
+    assert mod.main(["--backend", "armada", "--epoch-schedule", "async", "--galaxies", "6",
+                     "--result-path", out]) == 0
+    record = json.load(open(out))
+
+    assert record["epoch_schedule"] == "async"
+    assert record["async_poll_s"] == 0.02
+    assert record["async_settle_s"] == 0.5
+    assert "teardown_barrier_s" in record
+    assert "error" not in record
+
+
+def test_armada_async_at_one_rank_uses_no_channel(monkeypatch, tmp_path):
+    out = _main_env(monkeypatch, tmp_path, "armada-async-one")
+    _capture_bridge_kwargs(monkeypatch, available=False)
+
+    assert mod.main(["--backend", "armada", "--epoch-schedule", "async", "--galaxies", "6",
+                     "--result-path", out]) == 0
+    record = json.load(open(out))
+
+    assert record["records_written"] == 6
+    assert record["acks_visible"] == 6
+
+
+@pytest.mark.parametrize("backend", ["langchain", "isolated", "ray-native", "ray-collective",
+                                     "ray-cylon"])
+def test_async_is_refused_for_every_backend_but_armada(monkeypatch, tmp_path, backend):
+    out = _main_env(monkeypatch, tmp_path, f"{backend}-async")
+
+    with pytest.raises(SystemExit):
+        mod.main(["--backend", backend, "--epoch-schedule", "async", "--galaxies", "6",
+                  "--result-path", out])
+
+
+def test_armada_async_finishes_within_the_ray_barrier_timeout(monkeypatch, tmp_path):
+    out = _main_env(monkeypatch, tmp_path, "armada-async-timeout")
+    monkeypatch.setenv("RAY_BARRIER_TIMEOUT_S", "42")
+    _capture_bridge_kwargs(monkeypatch)
+    timeouts = []
+    real_finish = mod.ArmadaAsyncExecutor.finish
+
+    def recording_finish(self, seq, timeout_s):
+        timeouts.append(timeout_s)
+        return real_finish(self, seq, timeout_s)
+
+    monkeypatch.setattr(mod.ArmadaAsyncExecutor, "finish", recording_finish)
+
+    assert mod.main(["--backend", "armada", "--epoch-schedule", "async", "--galaxies", "6",
+                     "--result-path", out]) == 0
+
+    assert timeouts == [42.0]

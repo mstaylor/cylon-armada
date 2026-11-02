@@ -161,7 +161,8 @@ def test_the_results_pipeline_runs_the_scaling_summary(tmp_path, monkeypatch):
     assert os.path.exists(os.path.join(out, "exp_e_scaling_discarded.json"))
     charts = sorted(os.listdir(os.path.join(out, "charts")))
     assert any(name.startswith("exp_e_strong_comparable_time.") for name in charts)
-    assert any(name.startswith("exp_e_strong_ray_cluster_formation.") for name in charts)
+    assert any(name.startswith("exp_e_strong_framework_setup.") for name in charts)
+    assert any(name.startswith("exp_e_strong_time_to_result.") for name in charts)
 
 
 def _captured_figures(monkeypatch, tmp_path):
@@ -186,7 +187,8 @@ def test_charts_follow_the_quals_notebook_style(monkeypatch, tmp_path):
     """Box frame, no gridlines, major ticks only, legend boxed below, error
     bars with caps (CLAUDE.md chart conventions)."""
     figures = _captured_figures(monkeypatch, tmp_path)
-    assert set(figures) == {"exp_e_strong_comparable_time", "exp_e_strong_ray_cluster_formation"}
+    assert set(figures) == {"exp_e_strong_comparable_time", "exp_e_strong_framework_setup",
+                            "exp_e_strong_time_to_result"}
 
     for fig in figures.values():
         ax = fig.axes[0]
@@ -206,7 +208,13 @@ def test_charts_follow_the_quals_notebook_style(monkeypatch, tmp_path):
     caps = [c for c in line_ax.containers if hasattr(c, "lines")]
     assert caps and all(c.lines[1] for c in caps)
 
-    bars = [p for p in figures["exp_e_strong_ray_cluster_formation"].axes[0].patches]
+    for name in ("exp_e_strong_comparable_time", "exp_e_strong_time_to_result"):
+        ax = figures[name].axes[0]
+        assert ax.get_yscale() == "linear"
+        assert ax.get_ylim()[0] == 0
+        assert [t.get_text() for t in ax.get_yticklabels() if t.get_text()]
+
+    bars = [p for p in figures["exp_e_strong_framework_setup"].axes[0].patches]
     assert bars and all(p.get_edgecolor()[:3] == (0.0, 0.0, 0.0) for p in bars)
     import matplotlib.pyplot as plt
     for fig in figures.values():
@@ -325,3 +333,128 @@ def test_ray_collective_conversion_and_exchange_are_summarised_beside_the_time(t
     assert by_arm["armada"]["pack_s_mean"] is None
     assert by_arm["ray-collective"]["llm_calls_matched_runs"] == 2
     assert {row["arm"] for row in parity} == {"armada", "ray-collective"}
+
+
+def test_framework_setup_is_the_last_arriving_ranks_setup(tmp_path):
+    """The last rank to arrive finds every peer up, so its setup is the
+    framework's own cost; earlier ranks also wait for Fargate to start peers."""
+    root = str(tmp_path)
+    for run_index, late in enumerate((0.01, 0.03)):
+        _write(root, "weak", "armada", 2, f"run{run_index}",
+               [_record(0, 2, "armada", 3.0, establish_s=7.0),
+                _record(1, 2, "armada", 3.0, establish_s=late)])
+        _write(root, "weak", "ray-collective", 2, f"run{run_index}",
+               [_record(r, 2, "ray-collective", 3.0, establish_s=0.5, ray_cluster_s=10.0 + 5 * r)
+                for r in range(2)])
+
+    rows, _ = summarize(load_runs(root))
+    by_arm = {row["arm"]: row for row in rows}
+
+    assert by_arm["armada"]["framework_setup_s_mean"] == pytest.approx(0.02)
+    assert by_arm["ray-collective"]["framework_setup_s_mean"] == pytest.approx(10.5)
+
+
+def test_time_to_result_adds_the_framework_setup_to_the_comparable_time(tmp_path):
+    root = str(tmp_path)
+    _write(root, "weak", "ray-native", 2, "run0",
+           [_record(r, 2, "ray-native", 3.0 + r, teardown_barrier_s=0.5, establish_s=0.0,
+                    ray_cluster_s=12.0 - r) for r in range(2)])
+
+    rows, _ = summarize(load_runs(root))
+
+    assert rows[0]["time_to_result_s_mean"] == pytest.approx(11.0 + 4.5)
+
+
+def test_time_per_model_call_divides_the_slowest_rank_by_its_own_calls(tmp_path):
+    """An arm whose reuse saved a call finishes sooner for a workload reason;
+    per call, the arms are compared on the same footing."""
+    root = str(tmp_path)
+    _write(root, "weak", "armada", 2, "run0",
+           [_record(0, 2, "armada", 30.0, llm_calls=10, cache_hits=0),
+            _record(1, 2, "armada", 36.0, llm_calls=12, cache_hits=0)])
+
+    rows, _ = summarize(load_runs(root))
+
+    assert rows[0]["comparable_s_per_call_mean"] == pytest.approx(3.0)
+
+
+def test_every_exp_e_subexperiment_is_drawn_distinctly():
+    from results.chart_exp_e_scaling import ARM_STYLE
+
+    arms = ("armada", "armada-overlap", "ray-collective", "ray-collective-overlap",
+            "ray-native", "ray-cylon", "langchain")
+    styles = [ARM_STYLE[arm] for arm in arms]
+    assert len({(s["color"], s["marker"], s.get("linestyle", "-")) for s in styles}) == len(arms)
+    assert len({s["label"] for s in styles}) == len(arms)
+
+
+def test_a_setup_bar_too_small_to_see_is_labelled_with_its_value(monkeypatch, tmp_path):
+    """Armada's setup is milliseconds; an unlabelled zero-height bar reads as missing data."""
+    from results import chart_exp_e_scaling
+
+    figures = {}
+    monkeypatch.setattr(chart_exp_e_scaling, "_save",
+                        lambda fig, output_dir, name, fmt, dpi: figures.setdefault(name, fig))
+    root = str(tmp_path / "in")
+    for run_index in range(2):
+        _write(root, "weak", "armada", 2, f"run{run_index}",
+               [_record(r, 2, "armada", 3.0, establish_s=0.01) for r in range(2)])
+        _write(root, "weak", "ray-collective", 2, f"run{run_index}",
+               [_record(r, 2, "ray-collective", 3.0, establish_s=0.5, ray_cluster_s=14.0)
+                for r in range(2)])
+    csv_path, _, _ = write_summary(root, str(tmp_path / "out"))
+
+    chart_exp_e_scaling.generate_exp_e_scaling_charts(csv_path, str(tmp_path / "charts"))
+
+    texts = [t.get_text() for t in figures["exp_e_weak_framework_setup"].axes[0].texts]
+    assert texts == ["0.01"]
+    import matplotlib.pyplot as plt
+    for fig in figures.values():
+        plt.close(fig)
+
+
+def test_bar_charts_carry_no_error_bars_even_when_runs_vary(monkeypatch, tmp_path):
+    from results import chart_exp_e_scaling
+
+    figures = {}
+    monkeypatch.setattr(chart_exp_e_scaling, "_save",
+                        lambda fig, output_dir, name, fmt, dpi: figures.setdefault(name, fig))
+    root = str(tmp_path / "in")
+    for run_index, cluster_s in enumerate((8.0, 14.0, 20.0)):
+        _write(root, "weak", "ray-collective", 2, f"run{run_index}",
+               [_record(r, 2, "ray-collective", 3.0, establish_s=0.5, ray_cluster_s=cluster_s)
+                for r in range(2)])
+    csv_path, _, _ = write_summary(root, str(tmp_path / "out"))
+
+    chart_exp_e_scaling.generate_exp_e_scaling_charts(csv_path, str(tmp_path / "charts"))
+
+    ax = figures["exp_e_weak_framework_setup"].axes[0]
+    from matplotlib.container import BarContainer
+    assert ax.containers and all(isinstance(c, BarContainer) and c.errorbar is None
+                                 for c in ax.containers)
+    assert not ax.collections
+    import matplotlib.pyplot as plt
+    for fig in figures.values():
+        plt.close(fig)
+
+
+def test_armada_async_comparable_includes_the_teardown_barrier():
+    record = _record(0, 2, "armada", 40.0, epoch_schedule="async", teardown_barrier_s=1.5)
+    assert comparable_s(record) == 41.5
+
+
+def test_armada_async_without_teardown_is_refused():
+    with pytest.raises(ValueError):
+        comparable_s(_record(0, 2, "armada", 40.0, epoch_schedule="async"))
+
+
+def test_armada_overlap_comparable_is_run_s_alone():
+    assert comparable_s(_record(0, 2, "armada", 40.0, epoch_schedule="overlapped")) == 40.0
+
+
+def test_armada_async_has_its_own_chart_style():
+    from results.chart_exp_e_scaling import ARM_ORDER, ARM_STYLE, COMPARABLE_LABEL
+
+    assert ARM_STYLE["armada-async"]["linestyle"] == ":"
+    assert ARM_ORDER.index("armada-async") == ARM_ORDER.index("armada-overlap") + 1
+    assert COMPARABLE_LABEL["armada-async"] == "run + teardown barrier"

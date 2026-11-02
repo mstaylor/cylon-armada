@@ -1,9 +1,10 @@
 """Experiment E scaling charts from exp_e_scaling.write_summary's CSV.
 
-Per scaling mode: the end-to-end comparable time against N, one line per arm,
-and the Ray cluster formation time against N for the Ray arms, which is kept
-out of the comparable time and so has to be shown on its own. Mean with
-sample-std error bars across the measured runs, in the quals notebook style.
+Per scaling mode: the end-to-end comparable time against N, one line per arm;
+each arm's framework setup (the last rank to arrive), which is kept out of the
+comparable time and so has to be shown on its own; and the time to result,
+the two added. Mean with sample-std error bars across the measured runs, in
+the quals notebook style.
 
 Usage:
     python -m results.chart_exp_e_scaling --summary <dir>/exp_e_scaling_summary.csv \
@@ -35,16 +36,28 @@ plt.rcParams.update({
 BAR_EDGE = "black"
 BAR_LW = 0.8
 
-ARM_ORDER = ("armada", "ray-cylon", "ray-native", "langchain", "isolated")
+ARM_ORDER = ("armada", "armada-overlap", "armada-async", "ray-collective",
+             "ray-collective-overlap", "ray-cylon", "ray-native", "langchain", "isolated")
 ARM_STYLE = {
     "armada": {"label": "Armada (Cylon collectives)", "color": "#2ca02c", "marker": "o"},
+    "armada-overlap": {"label": "Armada, overlapped epochs", "color": "#2ca02c", "marker": "o",
+                       "linestyle": "--", "hatch": "//"},
+    "armada-async": {"label": "Armada, publish on completion", "color": "#2ca02c", "marker": "o",
+                     "linestyle": ":", "hatch": "xx"},
+    "ray-collective": {"label": "Ray collectives (Gloo)", "color": "#9467bd", "marker": "P"},
+    "ray-collective-overlap": {"label": "Ray collectives (Gloo), overlapped epochs",
+                               "color": "#9467bd", "marker": "P", "linestyle": "--",
+                               "hatch": "//"},
     "ray-cylon": {"label": "Ray + Cylon collectives", "color": "#1f77b4", "marker": "s"},
     "ray-native": {"label": "Ray native (object store)", "color": "#ff7f0e", "marker": "^"},
     "langchain": {"label": "LangChain (Redis store)", "color": "#d62728", "marker": "D"},
     "isolated": {"label": "Isolated (no sharing)", "color": "#7f7f7f", "marker": "v"},
 }
+DEFAULT_STYLE = {"color": "#333333", "marker": "o"}
+VISIBLE_BAR_FRACTION = 0.02
 COMPARABLE_LABEL = {
     "ray-native": "run + teardown barrier",
+    "armada-async": "run + teardown barrier",
 }
 
 
@@ -96,56 +109,83 @@ def _log2_world_size_axis(ax, world_sizes):
     ax.set_xlabel("World size N (Fargate tasks)", fontsize=FONT_SIZE)
 
 
-def chart_comparable_time(rows, scaling, output_dir, chart_format, chart_dpi):
-    """End-to-end comparable time against N, one line per arm (log-log)."""
+def _style(arm):
+    return ARM_STYLE.get(arm, {**DEFAULT_STYLE, "label": arm})
+
+
+def _line_chart(rows, metric, ylabel, title, name, output_dir, chart_format, chart_dpi,
+                comparable_labels=False):
+    """One line per arm against N, linear time axis from zero."""
     fig, ax = plt.subplots(figsize=(10, 6))
     world_sizes = sorted({row["world_size"] for row in rows})
     for arm in _arms(rows):
-        xs, ys, errs = _series(rows, arm, "comparable_s")
+        xs, ys, errs = _series(rows, arm, metric)
         if not xs:
             continue
-        style = ARM_STYLE.get(arm, {"label": arm, "color": "#333333", "marker": "o"})
+        style = _style(arm)
         label = style["label"]
-        if arm in COMPARABLE_LABEL:
+        if comparable_labels and arm in COMPARABLE_LABEL:
             label = f"{label}, {COMPARABLE_LABEL[arm]}"
         ax.errorbar(xs, ys, yerr=errs if any(errs) else None, marker=style["marker"],
-                    color=style["color"], ecolor=style["color"], lw=2, capsize=5, label=label)
+                    linestyle=style.get("linestyle", "-"), color=style["color"],
+                    ecolor=style["color"], lw=2, capsize=5, label=label)
     _log2_world_size_axis(ax, world_sizes)
-    ax.set_yscale("log")
+    ax.set_ylim(bottom=0)
     ax.minorticks_off()
-    ax.set_ylabel("End-to-end time, slowest rank (s, log scale)", fontsize=FONT_SIZE)
-    ax.set_title(f"Experiment E end-to-end time vs N ({scaling} scaling)", fontsize=TITLE_SIZE)
+    ax.set_ylabel(ylabel, fontsize=FONT_SIZE)
+    ax.set_title(title, fontsize=TITLE_SIZE)
     _legend_below(ax)
-    return _save(fig, output_dir, f"exp_e_{scaling}_comparable_time", chart_format, chart_dpi)
+    return _save(fig, output_dir, name, chart_format, chart_dpi)
 
 
-def chart_ray_cluster_formation(rows, scaling, output_dir, chart_format, chart_dpi):
-    """Ray cluster formation time against N for each Ray arm, grouped bars."""
-    arms = [arm for arm in _arms(rows) if _series(rows, arm, "ray_cluster_s")[0]]
+def chart_comparable_time(rows, scaling, output_dir, chart_format, chart_dpi):
+    """End-to-end comparable time against N, one line per arm."""
+    return _line_chart(rows, "comparable_s", "End-to-end time, slowest rank (s)",
+                       f"Experiment E end-to-end time vs N ({scaling} scaling)",
+                       f"exp_e_{scaling}_comparable_time", output_dir, chart_format,
+                       chart_dpi, comparable_labels=True)
+
+
+def chart_time_to_result(rows, scaling, output_dir, chart_format, chart_dpi):
+    """Framework setup plus end-to-end time against N, one line per arm."""
+    return _line_chart(rows, "time_to_result_s", "Framework setup + end-to-end time (s)",
+                       f"Experiment E time to result vs N ({scaling} scaling)",
+                       f"exp_e_{scaling}_time_to_result", output_dir, chart_format,
+                       chart_dpi, comparable_labels=True)
+
+
+def chart_framework_setup(rows, scaling, output_dir, chart_format, chart_dpi):
+    """Each arm's framework setup against N, measured on the last rank to arrive."""
+    arms = [arm for arm in _arms(rows) if _series(rows, arm, "framework_setup_s")[0]]
     if not arms:
         return None
     world_sizes = sorted({row["world_size"] for row in rows if row["arm"] in arms})
     width = 0.8 / len(arms)
     fig, ax = plt.subplots(figsize=(10, 6))
+    drawn = []
     for i, arm in enumerate(arms):
-        by_n = {x: (y, e) for x, y, e in zip(*_series(rows, arm, "ray_cluster_s"))}
+        by_n = {x: (y, e) for x, y, e in zip(*_series(rows, arm, "framework_setup_s"))}
         positions = [j + (i - (len(arms) - 1) / 2) * width
                      for j, n in enumerate(world_sizes) if n in by_n]
         heights = [by_n[n][0] for n in world_sizes if n in by_n]
-        errs = [by_n[n][1] for n in world_sizes if n in by_n]
-        style = ARM_STYLE.get(arm, {"label": arm, "color": "#333333"})
-        ax.bar(positions, heights, width, yerr=errs if any(errs) else None, capsize=5,
-               color=style["color"], alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW,
-               label=style["label"])
+        style = _style(arm)
+        ax.bar(positions, heights, width,
+               color=style["color"], hatch=style.get("hatch"), alpha=0.9,
+               edgecolor=BAR_EDGE, linewidth=BAR_LW, label=style["label"])
+        drawn.extend(zip(positions, heights))
+    top = ax.get_ylim()[1]
+    for position, height in drawn:
+        if height < VISIBLE_BAR_FRACTION * top:
+            ax.text(position, height + VISIBLE_BAR_FRACTION * top, f"{height:.2f}",
+                    ha="center", va="bottom", rotation=90, fontsize=TICK_SIZE - 2)
     ax.set_xticks(range(len(world_sizes)))
     ax.set_xticklabels([str(n) for n in world_sizes], fontsize=TICK_SIZE)
     ax.set_xlabel("World size N (Fargate tasks)", fontsize=FONT_SIZE)
-    ax.set_ylabel("Ray cluster formation, slowest rank (s)", fontsize=FONT_SIZE)
-    ax.set_title(f"Ray cluster formation vs N ({scaling} scaling, not in end-to-end time)",
+    ax.set_ylabel("Framework setup, last rank to arrive (s)", fontsize=FONT_SIZE)
+    ax.set_title(f"Experiment E framework setup vs N ({scaling} scaling)",
                  fontsize=TITLE_SIZE)
     _legend_below(ax)
-    return _save(fig, output_dir, f"exp_e_{scaling}_ray_cluster_formation",
-                 chart_format, chart_dpi)
+    return _save(fig, output_dir, f"exp_e_{scaling}_framework_setup", chart_format, chart_dpi)
 
 
 def generate_exp_e_scaling_charts(summary_csv, output_dir, chart_format="png", chart_dpi=300):
@@ -154,10 +194,10 @@ def generate_exp_e_scaling_charts(summary_csv, output_dir, chart_format="png", c
     for scaling in sorted({row["scaling"] for row in rows}):
         subset = [row for row in rows if row["scaling"] == scaling]
         paths.append(chart_comparable_time(subset, scaling, output_dir, chart_format, chart_dpi))
-        formation = chart_ray_cluster_formation(subset, scaling, output_dir, chart_format,
-                                                chart_dpi)
-        if formation:
-            paths.append(formation)
+        setup = chart_framework_setup(subset, scaling, output_dir, chart_format, chart_dpi)
+        if setup:
+            paths.append(setup)
+        paths.append(chart_time_to_result(subset, scaling, output_dir, chart_format, chart_dpi))
     return paths
 
 

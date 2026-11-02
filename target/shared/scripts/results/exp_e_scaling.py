@@ -29,9 +29,19 @@ that wait moves to the end-of-run barrier, so its comparable figure is
 run_s + teardown_barrier_s. ray_cluster_s, forming the Ray cluster, is reported
 separately and never folded into either. ray-collective's allgather waits for
 every rank each epoch, as Armada's does, so its comparable figure is run_s.
+armada-async (backend armada, epoch_schedule async) shares contexts as
+ray-native does and waits for its peers only at the end of the run, so it is
+accounted the same way, run_s + teardown_barrier_s.
 Its Arrow conversion (pack_s, unpack_s) and its exchange (exchange_s, and
 collective_s inside it) are reported beside it, because that conversion is
 the copy the zero-copy claim is about.
+
+framework_setup_s is the setup of the last rank to arrive, ray_cluster_s plus
+establish_s: that rank finds every peer already up, so its setup is the
+framework's own cost, where an earlier rank's also includes waiting for Fargate
+to start its peers. time_to_result_s adds it to comparable_s.
+comparable_s_per_call divides the slowest rank's comparable time by that rank's
+own model calls.
 
 Model calls and cache hits are reported beside the times, summed over ranks
 and as a per-rank mean, because an arm that reuses less calls the model more
@@ -49,8 +59,10 @@ import statistics
 from results.exp_e_gate import check_arms
 
 ARMS_WITH_TEARDOWN_BARRIER = ("ray-native",)
+SCHEDULES_WITH_TEARDOWN_BARRIER = ("async",)
 METRICS = ("comparable_s", "run_s", "teardown_barrier_s", "establish_s", "ray_cluster_s",
-           "pack_s", "unpack_s", "exchange_s", "collective_s")
+           "pack_s", "unpack_s", "exchange_s", "collective_s", "framework_setup_s",
+           "time_to_result_s", "comparable_s_per_call")
 COUNTS = ("llm_calls", "cache_hits")
 COUNT_STATS = tuple(f"{count}_{reduction}" for count in COUNTS for reduction in ("total", "per_rank"))
 PARITY_COLUMNS = ("scaling", "world_size", "run", "arm", "llm_calls_total", "cache_hits_total",
@@ -63,7 +75,8 @@ _RANK_FILE = re.compile(r"^rank\d+\.json$")
 
 def comparable_s(record):
     """The end-to-end time this rank's arm is compared on."""
-    if record.get("backend") in ARMS_WITH_TEARDOWN_BARRIER:
+    if (record.get("backend") in ARMS_WITH_TEARDOWN_BARRIER
+            or record.get("epoch_schedule") in SCHEDULES_WITH_TEARDOWN_BARRIER):
         if "teardown_barrier_s" not in record:
             raise ValueError(
                 f"{record.get('backend')} rank {record.get('rank')} has no teardown_barrier_s; "
@@ -103,9 +116,27 @@ def load_runs(root):
     return dict(sorted(runs.items()))
 
 
-def _slowest(records, metric):
+def framework_setup_s(record):
+    """This rank's setup outside run_s: Ray cluster formation plus establishment."""
+    return (record.get("ray_cluster_s") or 0.0) + (record.get("establish_s") or 0.0)
+
+
+def _per_call(records):
+    slowest = max(records, key=comparable_s)
+    calls = slowest.get("llm_calls")
+    return comparable_s(slowest) / calls if calls else None
+
+
+def _run_value(records, metric):
     if metric == "comparable_s":
         return max(comparable_s(r) for r in records)
+    if metric == "framework_setup_s":
+        return min(framework_setup_s(r) for r in records)
+    if metric == "time_to_result_s":
+        return (min(framework_setup_s(r) for r in records)
+                + max(comparable_s(r) for r in records))
+    if metric == "comparable_s_per_call":
+        return _per_call(records)
     values = [r[metric] for r in records if r.get(metric) is not None]
     return max(values) if values else None
 
@@ -160,7 +191,7 @@ def summarize(runs):
             cell = per_cell.setdefault((scaling, arm, world_size),
                                        {m: [] for m in METRICS + COUNT_STATS})
             for metric in METRICS:
-                value = _slowest(records, metric)
+                value = _run_value(records, metric)
                 if value is not None:
                     cell[metric].append(value)
             for stat, value in _counts(records).items():

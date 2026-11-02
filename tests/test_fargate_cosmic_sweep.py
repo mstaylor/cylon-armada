@@ -55,7 +55,8 @@ def _shared_module(dotted):
 def _args(**overrides):
     base = dict(listen_port=10000, timeout_ms=120000, device="cpu", batch_size=32,
                 epoch_batch_size=4, live=True, galaxies=152,
-                reuse_tolerance=0.0091, outlier_threshold=0.027677, gloo_socket_ifname=None, ray_dashboard_hold_s=0)
+                reuse_tolerance=0.0091, outlier_threshold=0.027677, gloo_socket_ifname=None, ray_dashboard_hold_s=0,
+                async_poll_s=0.005, async_settle_s=1.0)
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -828,6 +829,7 @@ def test_no_tunnel_is_opened_without_the_session_manager_plugin():
     ("ray-collective", "ray-collective", "synchronous"),
     ("ray-collective-overlap", "ray-collective", "overlapped"),
     ("ray-native", "ray-native", "synchronous"),
+    ("armada-async", "armada", "async"),
 ])
 def test_an_overlap_arm_launches_its_backend_with_the_overlapped_schedule(arm, backend, schedule):
     m = _driver()
@@ -848,6 +850,8 @@ def test_every_arm_maps_to_a_backend_and_schedule_the_runner_accepts():
         schedule = run_cosmic_local.EpochSchedule(m.epoch_schedule_for(arm))
         if schedule is run_cosmic_local.EpochSchedule.Overlapped:
             assert backend in run_cosmic_local.OVERLAPPABLE_BACKENDS, arm
+        if schedule is run_cosmic_local.EpochSchedule.Async:
+            assert backend in run_cosmic_local.ASYNC_BACKENDS, arm
 
 
 def test_the_ray_collective_overlap_arm_launches_in_the_ray_security_group():
@@ -866,11 +870,13 @@ class _LaunchingEcs:
     """run_task hands out arns in order and describe_tasks reports each
     launch's tasks with the stop details scripted for that launch."""
 
-    def __init__(self, world_size, launches):
+    def __init__(self, world_size, launches, hung_launches=()):
         self.world_size = world_size
         self.launches = list(launches)
+        self.hung_launches = set(hung_launches)
         self.run_task_calls = []
         self.stopped = {}
+        self.stop_task_calls = []
 
     def run_task(self, **kwargs):
         self.run_task_calls.append(kwargs)
@@ -880,8 +886,20 @@ class _LaunchingEcs:
         self.stopped[arn] = self.launches[min(launch, len(self.launches) - 1)][slot]
         return {"tasks": [{"taskArn": arn}], "failures": []}
 
+    def stop_task(self, cluster, task, reason):
+        self.stop_task_calls.append(task)
+        self.stopped[task] = {"stopCode": "UserInitiated", "stoppedReason": reason}
+
     def get_waiter(self, name):
-        return type("Waiter", (), {"wait": lambda *a, **k: None})()
+        ecs = self
+
+        def wait(cluster, tasks, WaiterConfig):
+            launch = int(tasks[0].rsplit("/", 1)[-1]) // ecs.world_size
+            if launch in ecs.hung_launches and tasks[0] not in ecs.stop_task_calls:
+                from botocore.exceptions import WaiterError
+                raise WaiterError("TasksStopped", "Max attempts exceeded", {})
+
+        return type("Waiter", (), {"wait": staticmethod(wait)})()
 
     def describe_tasks(self, cluster, tasks):
         return {"tasks": [{"taskArn": arn, **self.stopped[arn]} for arn in tasks]}
@@ -997,6 +1015,64 @@ def test_a_failed_attempts_records_move_aside_before_the_relaunch(monkeypatch):
     assert s3.objects["other/keep.json"] == "x"
 
 
+def test_a_launch_that_outlives_the_arm_timeout_is_stopped_and_relaunched(monkeypatch):
+    m = _driver()
+    recorded = _record_timings(monkeypatch, m)
+    ecs = _LaunchingEcs(2, [[_RAN, _RAN]], hung_launches={0})
+
+    arns = m.launch_world_size(ecs, 2, _launch_args(m), s3=_FakeS3())
+
+    assert ecs.stop_task_calls == ["arn:task/0", "arn:task/1"]
+    assert arns == ["arn:task/2", "arn:task/3"]
+    assert recorded == [(["arn:task/2", "arn:task/3"], 2)]
+
+
+def test_a_launch_that_always_hangs_is_recorded_and_the_sweep_moves_on(monkeypatch):
+    m = _driver()
+    recorded = _record_timings(monkeypatch, m)
+    ecs = _LaunchingEcs(2, [[_RAN, _RAN]], hung_launches={0, 1, 2})
+
+    m.launch_world_size(ecs, 2, _launch_args(m, **{"--launch-retries": 2}), s3=_FakeS3())
+
+    assert len(ecs.run_task_calls) == 2 * 3
+    assert recorded[-1][1] == 3
+
+
+def test_resume_skips_launches_that_already_wrote_their_timing_record(monkeypatch):
+    m = _driver()
+    recorded = _record_timings(monkeypatch, m)
+    args = _launch_args(m, **{"--runs": 2})
+    args.resume = True
+    first, second = [row["s3_prefix"] for row in m.sweep_matrix(args)]
+    s3 = _FakeS3({first + "_timing.json": "{}", first + "rank0.json": "done"})
+    ecs = _LaunchingEcs(2, [[_RAN, _RAN]])
+
+    m.launch_world_size(ecs, 2, args, s3=s3)
+
+    assert len(ecs.run_task_calls) == 2
+    assert {e["value"] for call in ecs.run_task_calls
+            for e in call["overrides"]["containerOverrides"][0]["environment"]
+            if e["name"] == "S3_RESULTS_PREFIX"} == {second}
+    assert s3.objects[first + "rank0.json"] == "done"
+
+
+def test_resume_moves_aside_records_of_a_launch_that_never_finished(monkeypatch):
+    m = _driver()
+    _record_timings(monkeypatch, m)
+    args = _launch_args(m)
+    args.resume = True
+    prefix = m.sweep_matrix(args)[0]["s3_prefix"]
+    s3 = _FakeS3({prefix + "rank1.json": "interrupted"})
+    ecs = _LaunchingEcs(2, [[_RAN, _RAN]])
+
+    m.launch_world_size(ecs, 2, args, s3=s3)
+
+    archived = prefix.replace(args.results_prefix, args.results_prefix + "_failed_attempts", 1)
+    assert s3.objects[archived + "interrupted/rank1.json"] == "interrupted"
+    assert prefix + "rank1.json" not in s3.objects
+    assert len(ecs.run_task_calls) == 2
+
+
 def test_every_task_is_told_which_launch_attempt_it_belongs_to(monkeypatch):
     m = _driver()
     _record_timings(monkeypatch, m)
@@ -1084,3 +1160,38 @@ def test_the_scripts_prefix_reaches_every_task_only_when_given():
 
     assert with_prefix["S3_SCRIPTS_PREFIX"] == "cylon-armada/scripts-expE/"
     assert "S3_SCRIPTS_PREFIX" not in without
+
+
+def test_build_overrides_passes_the_async_poll_interval():
+    m = _driver()
+    env = _env(m.build_overrides(0, 4, "c", "p/", _args(async_poll_s=0.02, async_settle_s=0.5),
+                                 backend="armada-async"))
+
+    assert env["ARMADA_ASYNC_POLL_S"] == "0.02"
+    assert env["ARMADA_ASYNC_SETTLE_S"] == "0.5"
+    assert env["CONTEXT_BACKEND"] == "cylon"
+
+
+def test_the_driver_defaults_the_async_poll_interval_to_five_milliseconds():
+    m = _driver()
+    args = m.build_parser().parse_args(["--backend", "armada-async", "--dry-run"])
+
+    assert args.async_poll_s == 0.005
+    assert args.async_settle_s == 1.0
+
+
+def test_existing_selections_keep_their_arms():
+    m = _driver()
+
+    assert m._selected_arms("exp-e") == ("armada", "langchain", "ray-native", "ray-collective",
+                                         "ray-cylon", "armada-overlap", "ray-collective-overlap")
+    assert m._selected_arms("overlap-check") == ("armada", "armada-overlap", "ray-collective",
+                                                 "ray-collective-overlap")
+    assert m._selected_arms("ray-comparison") == ("armada", "ray-native", "ray-collective",
+                                                  "ray-cylon")
+
+
+def test_async_check_compares_publish_on_completion_with_ray_native():
+    m = _driver()
+
+    assert m._selected_arms("async-check") == ("armada-overlap", "armada-async", "ray-native")

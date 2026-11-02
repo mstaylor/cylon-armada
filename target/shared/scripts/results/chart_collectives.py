@@ -233,7 +233,7 @@ def chart_barrier_vs_n(rows, output_dir, chart_format, chart_dpi):
     """Barrier latency vs N — the pure synchronization overhead (~log2 N)."""
     rows = _measured(rows)
     pts = sorted(
-        ((int(r["N"]), _num(r, "latency_p50_ms"), _num(r, "latency_p50_ms_std"))
+        ((int(r["N"]), _num(r, "latency_p50_ms"))
          for r in rows if r["collective"] == "barrier"),
         key=lambda t: t[0],
     )
@@ -241,11 +241,10 @@ def chart_barrier_vs_n(rows, output_dir, chart_format, chart_dpi):
         return None
     ns = [str(p[0]) for p in pts]
     lat = [p[1] for p in pts]
-    err = [p[2] for p in pts]
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(ns, lat, yerr=err if any(err) else None, color=COLLECTIVE_COLORS["barrier"],
-           alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW, capsize=5)
+    ax.bar(ns, lat, color=COLLECTIVE_COLORS["barrier"],
+           alpha=0.9, edgecolor=BAR_EDGE, linewidth=BAR_LW)
     ax.set_ylabel("Barrier P50 latency (ms)", fontsize=FONT_SIZE)
     ax.set_xlabel("World size N", fontsize=FONT_SIZE)
     ax.set_title("Barrier synchronization latency vs N", fontsize=TITLE_SIZE)
