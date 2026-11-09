@@ -38,6 +38,7 @@ mpi4py.rc.initialize = False
 mpi4py.rc.finalize = False
 
 import argparse
+import functools
 import logging
 import os
 import statistics
@@ -143,6 +144,7 @@ def measure_collective(
     payload_builder=None,
     world_size=1,
     rank=0,
+    inner_seconds=None,
 ):
     """Time one collective at one message size. Returns a metrics dict.
 
@@ -156,6 +158,10 @@ def measure_collective(
     `(payload, payload_bytes)` or `None` for an unsupported (channel, collective)
     pair. Raising `UnsupportedCollective` mid-measure is also honored. Either way the
     caller records an `unsupported` row rather than a fabricated timing.
+
+    `inner_seconds()`, when given, is read after each timed invoke and returns the
+    seconds that invoke spent inside the transport, or None. Its p50/p99 become
+    `latency_inner_p50_ms`/`latency_inner_p99_ms`, blank when absent.
     """
     if payload_builder is None:
         payload_builder = build_cylon_payload
@@ -170,6 +176,7 @@ def measure_collective(
             _invoke(comm, ctx, name, payload, root, reduce_op)
 
         lat_ms = []
+        inner_ms = []
         for _ in range(reps):
             if name != "barrier":
                 # Enter the timed region together; for barrier itself the invoke IS
@@ -178,6 +185,9 @@ def measure_collective(
             t0 = time.perf_counter()
             _invoke(comm, ctx, name, payload, root, reduce_op)
             lat_ms.append((time.perf_counter() - t0) * 1e3)
+            if inner_seconds is not None:
+                inner = inner_seconds()
+                inner_ms.append(None if inner is None else inner * 1e3)
     except UnsupportedCollective:
         return _unsupported_metrics(name, msg_size)
 
@@ -192,6 +202,7 @@ def measure_collective(
         else 0.0
     )
 
+    has_inner = bool(inner_ms) and None not in inner_ms
     return {
         "collective": name,
         "msg_size": msg_size,
@@ -201,6 +212,8 @@ def measure_collective(
         "latency_mean_ms": round(mean, 6),
         "throughput_MBps": round(throughput, 4),
         "barrier_latency_ms": round(p50, 6) if name == "barrier" else 0.0,
+        "latency_inner_p50_ms": round(statistics.median(inner_ms), 6) if has_inner else "",
+        "latency_inner_p99_ms": round(_percentile(inner_ms, 99), 6) if has_inner else "",
         "reps": reps,
         "unsupported": False,
     }
@@ -217,6 +230,8 @@ def _unsupported_metrics(name, msg_size):
         "latency_mean_ms": 0.0,
         "throughput_MBps": 0.0,
         "barrier_latency_ms": 0.0,
+        "latency_inner_p50_ms": "",
+        "latency_inner_p99_ms": "",
         "reps": 0,
         "unsupported": True,
     }
@@ -247,11 +262,13 @@ def run(config):
     reps = config.get("reps", 20)
     root = config.get("root", 0)
     channel = config.get("channel", "unknown")
+    payload_kind = config.get("payload", "float32")
     rank = config.get("rank", 0)
     world_size = config.get("world_size", 1)
     run_id = config.get("run_id", 1)
     reduce_op = config.get("reduce_op")
     payload_builder = config.get("payload_builder")
+    inner_seconds = config.get("inner_seconds")
 
     rows = []
     for name in collectives:
@@ -274,10 +291,12 @@ def run(config):
                 payload_builder=payload_builder,
                 world_size=world_size,
                 rank=rank,
+                inner_seconds=inner_seconds,
             )
             metrics.update(
                 {
                     "channel": channel,
+                    "payload": payload_kind,
                     "rank": rank,
                     "world_size": world_size,
                     "N": world_size,
@@ -299,63 +318,35 @@ def run(config):
     return rows
 
 
-def build_cylon_payload(name, msg_size, ctx, world_size, rank, root):
+def build_cylon_payload(name, msg_size, ctx, world_size, rank, root, payload_kind="float32"):
     """Build the pycylon payload for one collective/message-size cell.
 
     Returns `(payload, payload_bytes)` or `None` if the collective is unsupported on
-    this build. Imports pycylon/pyarrow lazily so the timing core stays testable
-    without the native stack. `payload_bytes` is the per-rank message size used for
-    throughput (msg_size), independent of the table's exact on-wire footprint.
+    this build. The Arrow tables come from exp_b_payloads, shared with the Ray
+    channels, and are wrapped as pycylon Tables here. Imports pycylon lazily so the
+    timing core stays testable without the native stack.
     """
-    import numpy as np
-    import pyarrow as pa
     from pycylon import Table
 
-    # float32 column sized so N*4 == msg_size (min one element for the tiny sizes).
-    n_elems = max(1, msg_size // 4)
+    from experiment.exp_b_payloads import payload_table_builder
 
-    def _table(fill):
-        arr = np.full(n_elems, fill, dtype=np.float32)
-        return Table.from_arrow(ctx, pa.table({"v": pa.array(arr)}))
-
-    if name == "barrier":
-        return (None, 0)
-
-    if name in ("reduce", "allreduce"):
-        # SP1's reduce/allreduce reduce a single Arrow scalar (root-delivering /
-        # all-delivering respectively), not a column — one 8-byte value per rank.
-        return (float(rank + 1), SCALAR_BYTES)
-
+    built = payload_table_builder(payload_kind)(name, msg_size, ctx, world_size, rank, root)
+    if built is None:
+        return None
+    payload, payload_bytes = built
     if name in ("broadcast", "gather", "allgather"):
-        return (_table(float(rank + 1)), msg_size)
-
-    if name == "scatter":
-        # Root supplies world_size equal shards; non-root ranks supply an empty list.
-        if rank == root:
-            return ([_table(float(i + 1)) for i in range(world_size)], msg_size)
-        return ([], msg_size)
-
-    if name == "scatterv":
-        # Uneven shards: shard i has (i+1) base elements. Throughput uses this rank's
-        # own shard size for a fair per-rank number.
-        base = max(1, n_elems // max(1, world_size))
-        if rank == root:
-            shards = []
-            for i in range(world_size):
-                arr = np.full(base * (i + 1), float(i + 1), dtype=np.float32)
-                shards.append(Table.from_arrow(ctx, pa.table({"v": pa.array(arr)})))
-            return (shards, base * (rank + 1) * 4)
-        return ([], base * (rank + 1) * 4)
-
-    return None
+        return (Table.from_arrow(ctx, payload), payload_bytes)
+    if name in ("scatter", "scatterv"):
+        return ([Table.from_arrow(ctx, shard) for shard in payload], payload_bytes)
+    return built
 
 
 # Stable CSV column order for the per-run results.
 _CSV_FIELDS = [
-    "channel", "collective", "msg_size", "payload_bytes",
+    "channel", "payload", "collective", "msg_size", "payload_bytes",
     "latency_p50_ms", "latency_p99_ms", "latency_mean_ms",
-    "throughput_MBps", "barrier_latency_ms", "reps", "unsupported",
-    "rank", "world_size", "N", "run_id",
+    "throughput_MBps", "barrier_latency_ms", "latency_inner_p50_ms", "latency_inner_p99_ms",
+    "reps", "unsupported", "rank", "world_size", "N", "run_id",
 ]
 
 
@@ -444,6 +435,7 @@ def main():
     parser = argparse.ArgumentParser(description="Experiment B collective benchmark (per rank)")
     parser.add_argument("--channel", default="ucc",
                         choices=["ucc", "fmi-redis", "fmi-direct", "fmi-direct-redis"])
+    parser.add_argument("--payload", default="float32", choices=["float32", "kv_pairs"])
     parser.add_argument("--collectives", nargs="+", default=DEFAULT_COLLECTIVES)
     parser.add_argument("--msg-sizes", type=int, nargs="+", default=DEFAULT_MSG_SIZES)
     parser.add_argument("--warmup", type=int, default=3)
@@ -492,6 +484,9 @@ def main():
             "world_size": world_size,
             "run_id": run_idx,
             "reduce_op": ReduceOp.SUM,
+            "payload": args.payload,
+            "payload_builder": functools.partial(build_cylon_payload,
+                                                 payload_kind=args.payload),
         }
         rows = run(config)
         env.barrier()

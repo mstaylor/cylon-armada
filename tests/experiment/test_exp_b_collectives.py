@@ -172,3 +172,53 @@ def test_run_sweeps_collectives_and_sizes_with_metadata():
     assert sorted(r["msg_size"] for r in bcast_rows) == [8, 4096]
     barrier_rows = [r for r in rows if r["collective"] == "barrier"]
     assert len(barrier_rows) == 1 and barrier_rows[0]["msg_size"] == 0
+
+def test_inner_seconds_are_reported_alongside_driver_latency():
+    comm, ctx = MockComm(sleep_s=0.002), MockCtx()
+    m = ebc.measure_collective(
+        comm, ctx, "allgather", msg_size=4096, warmup=1, reps=5,
+        payload_builder=_dummy_builder, world_size=2, rank=0,
+        inner_seconds=lambda: 0.0005,
+    )
+    assert m["latency_inner_p50_ms"] == 0.5
+    assert m["latency_inner_p99_ms"] == 0.5
+    assert m["latency_p50_ms"] >= 2.0
+
+
+def test_rows_without_an_inner_timer_leave_inner_columns_blank():
+    comm, ctx = MockComm(sleep_s=0.0), MockCtx()
+    m = ebc.measure_collective(
+        comm, ctx, "allgather", msg_size=64, warmup=0, reps=2,
+        payload_builder=_dummy_builder, world_size=2, rank=0,
+    )
+    assert m["latency_inner_p50_ms"] == ""
+    assert m["latency_inner_p99_ms"] == ""
+
+
+def test_inner_callable_is_read_once_per_timed_rep_not_per_warmup():
+    reads = []
+    comm, ctx = MockComm(sleep_s=0.0), MockCtx()
+    ebc.measure_collective(
+        comm, ctx, "broadcast", msg_size=64, warmup=3, reps=5,
+        payload_builder=_dummy_builder, world_size=2, rank=0,
+        inner_seconds=lambda: reads.append(1) or 0.001,
+    )
+    assert len(reads) == 5
+
+
+def test_unsupported_rows_leave_inner_columns_blank():
+    m = ebc.measure_collective(
+        MockComm(), MockCtx(), "scatter", msg_size=64, warmup=0, reps=2,
+        payload_builder=lambda *a: None, inner_seconds=lambda: 0.001,
+    )
+    assert m["unsupported"] is True
+    assert m["latency_inner_p50_ms"] == ""
+
+
+def test_run_passes_the_configured_inner_timer_to_every_cell():
+    rows = ebc.run({
+        "comm": MockComm(sleep_s=0.0), "ctx": MockCtx(), "collectives": ["allgather", "barrier"],
+        "msg_sizes": [64], "warmup": 0, "reps": 2, "payload_builder": _dummy_builder,
+        "inner_seconds": lambda: 0.002,
+    })
+    assert [r["latency_inner_p50_ms"] for r in rows] == [2.0, 2.0]

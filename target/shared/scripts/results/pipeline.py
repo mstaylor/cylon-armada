@@ -275,17 +275,21 @@ def aggregate_collectives_runs(results_dir: str) -> bool:
             reader = csv.DictReader(f)
             header = reader.fieldnames
             for r in reader:
-                agg.setdefault((r["channel"], r["collective"], r["msg_size"], r["N"]), []).append(r)
+                r["payload"] = r.get("payload") or "float32"
+                agg.setdefault((r["channel"], r["payload"], r["collective"], r["msg_size"], r["N"]),
+                               []).append(r)
 
     # Identity / constant columns carried through unchanged (not averaged). run_id is
     # meaningless post-aggregation, so keep it fixed rather than averaging it to a
     # fractional value.
-    keep = {"channel", "collective", "msg_size", "payload_bytes", "reps",
+    keep = {"channel", "payload", "collective", "msg_size", "payload_bytes", "reps",
             "unsupported", "rank", "world_size", "N", "run_id"}
     # Metrics that get a cross-run sample-std column for error bars.
-    std_cols = ["latency_p50_ms", "throughput_MBps"]
+    std_cols = ["latency_p50_ms", "throughput_MBps", "latency_inner_p50_ms"]
 
     out_header = list(header)
+    if "payload" not in out_header:
+        out_header.insert(out_header.index("channel") + 1, "payload")
     for sc in std_cols:
         if f"{sc}_std" not in out_header:
             out_header.append(f"{sc}_std")
@@ -311,14 +315,15 @@ def aggregate_collectives_runs(results_dir: str) -> bool:
             svals = []
             for c in cells:
                 try:
-                    svals.append(float(c[sc]))
+                    svals.append(float(c.get(sc)))
                 except (ValueError, TypeError):
                     svals = None
                     break
             m[f"{sc}_std"] = round(statistics.stdev(svals), 6) if (svals and len(svals) >= 2) else 0.0
         rows.append(m)
 
-    rows.sort(key=lambda r: (r["channel"], r["collective"], int(r["N"]), int(r["msg_size"])))
+    rows.sort(key=lambda r: (r["channel"], r["payload"], r["collective"], int(r["N"]),
+                             int(r["msg_size"])))
 
     with open(os.path.join(results_dir, "exp_b_collectives_results.csv"), "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=out_header)

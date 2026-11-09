@@ -54,7 +54,6 @@ ARM_STYLE = {
     "isolated": {"label": "Isolated (no sharing)", "color": "#7f7f7f", "marker": "v"},
 }
 DEFAULT_STYLE = {"color": "#333333", "marker": "o"}
-VISIBLE_BAR_FRACTION = 0.02
 COMPARABLE_LABEL = {
     "ray-native": "run + teardown barrier",
     "armada-async": "run + teardown barrier",
@@ -156,13 +155,12 @@ def chart_time_to_result(rows, scaling, output_dir, chart_format, chart_dpi):
 
 def chart_framework_setup(rows, scaling, output_dir, chart_format, chart_dpi):
     """Each arm's framework setup against N, measured on the last rank to arrive."""
-    arms = [arm for arm in _arms(rows) if _series(rows, arm, "framework_setup_s")[0]]
+    arms = [arm for arm in _arms(rows) if any(_series(rows, arm, "framework_setup_s")[1])]
     if not arms:
         return None
     world_sizes = sorted({row["world_size"] for row in rows if row["arm"] in arms})
     width = 0.8 / len(arms)
     fig, ax = plt.subplots(figsize=(10, 6))
-    drawn = []
     for i, arm in enumerate(arms):
         by_n = {x: (y, e) for x, y, e in zip(*_series(rows, arm, "framework_setup_s"))}
         positions = [j + (i - (len(arms) - 1) / 2) * width
@@ -172,12 +170,8 @@ def chart_framework_setup(rows, scaling, output_dir, chart_format, chart_dpi):
         ax.bar(positions, heights, width,
                color=style["color"], hatch=style.get("hatch"), alpha=0.9,
                edgecolor=BAR_EDGE, linewidth=BAR_LW, label=style["label"])
-        drawn.extend(zip(positions, heights))
-    top = ax.get_ylim()[1]
-    for position, height in drawn:
-        if height < VISIBLE_BAR_FRACTION * top:
-            ax.text(position, height + VISIBLE_BAR_FRACTION * top, f"{height:.2f}",
-                    ha="center", va="bottom", rotation=90, fontsize=TICK_SIZE - 2)
+    ax.set_yscale("log")
+    ax.minorticks_off()
     ax.set_xticks(range(len(world_sizes)))
     ax.set_xticklabels([str(n) for n in world_sizes], fontsize=TICK_SIZE)
     ax.set_xlabel("World size N (Fargate tasks)", fontsize=FONT_SIZE)

@@ -146,6 +146,51 @@ class CollectiveExchanger:
         buffers = [g.numpy()[:length] for g, length in zip(gathered, lengths)]
         return buffers, time.perf_counter() - started
 
+    def broadcast(self, payload, root):
+        """Root's buffer on every rank, and the seconds spent inside the two
+        broadcasts. Non-root ranks pass None."""
+        import torch
+        from ray.util import collective
+
+        started = time.perf_counter()
+        size = torch.tensor([payload.size if self.rank == root else 0], dtype=torch.int64)
+        collective.broadcast(size, src_rank=root, group_name=self.group_name)
+        buffer = torch.zeros(int(size.item()), dtype=torch.uint8)
+        if self.rank == root:
+            buffer.numpy()[:] = payload
+        collective.broadcast(buffer, src_rank=root, group_name=self.group_name)
+        return buffer.numpy(), time.perf_counter() - started
+
+    def reduce(self, value, root):
+        """The sum of every rank's scalar on root, None elsewhere, and the
+        seconds spent inside the reduce."""
+        import torch
+        from ray.util import collective
+
+        started = time.perf_counter()
+        tensor = torch.tensor([value], dtype=torch.float64)
+        collective.reduce(tensor, dst_rank=root, group_name=self.group_name)
+        elapsed = time.perf_counter() - started
+        return (float(tensor.item()) if self.rank == root else None), elapsed
+
+    def allreduce(self, value):
+        """The sum of every rank's scalar, and the seconds spent inside the allreduce."""
+        import torch
+        from ray.util import collective
+
+        started = time.perf_counter()
+        tensor = torch.tensor([value], dtype=torch.float64)
+        collective.allreduce(tensor, group_name=self.group_name)
+        return float(tensor.item()), time.perf_counter() - started
+
+    def barrier(self):
+        """None, and the seconds spent inside the barrier."""
+        from ray.util import collective
+
+        started = time.perf_counter()
+        collective.barrier(group_name=self.group_name)
+        return None, time.perf_counter() - started
+
 
 def _await_exchangers(world_size, group_name, namespace, ray_api, timeout_s, poll_s):
     deadline = time.monotonic() + timeout_s

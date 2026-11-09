@@ -388,8 +388,7 @@ def test_every_exp_e_subexperiment_is_drawn_distinctly():
     assert len({s["label"] for s in styles}) == len(arms)
 
 
-def test_a_setup_bar_too_small_to_see_is_labelled_with_its_value(monkeypatch, tmp_path):
-    """Armada's setup is milliseconds; an unlabelled zero-height bar reads as missing data."""
+def test_the_setup_chart_prints_no_values_in_its_body(monkeypatch, tmp_path):
     from results import chart_exp_e_scaling
 
     figures = {}
@@ -406,8 +405,62 @@ def test_a_setup_bar_too_small_to_see_is_labelled_with_its_value(monkeypatch, tm
 
     chart_exp_e_scaling.generate_exp_e_scaling_charts(csv_path, str(tmp_path / "charts"))
 
-    texts = [t.get_text() for t in figures["exp_e_weak_framework_setup"].axes[0].texts]
-    assert texts == ["0.01"]
+    assert len(figures["exp_e_weak_framework_setup"].axes[0].texts) == 0
+    import matplotlib.pyplot as plt
+    for fig in figures.values():
+        plt.close(fig)
+
+
+def test_the_setup_chart_draws_only_bars_on_a_log_axis_so_sub_second_setup_stays_visible(
+        monkeypatch, tmp_path):
+    from results import chart_exp_e_scaling
+
+    figures = {}
+    monkeypatch.setattr(chart_exp_e_scaling, "_save",
+                        lambda fig, output_dir, name, fmt, dpi: figures.setdefault(name, fig))
+    root = str(tmp_path / "in")
+    for run_index in range(2):
+        _write(root, "weak", "armada", 2, f"run{run_index}",
+               [_record(r, 2, "armada", 3.0, establish_s=0.01) for r in range(2)])
+        _write(root, "weak", "ray-collective", 2, f"run{run_index}",
+               [_record(r, 2, "ray-collective", 3.0, establish_s=0.5, ray_cluster_s=14.0)
+                for r in range(2)])
+    csv_path, _, _ = write_summary(root, str(tmp_path / "out"))
+
+    chart_exp_e_scaling.generate_exp_e_scaling_charts(csv_path, str(tmp_path / "charts"))
+
+    ax = figures["exp_e_weak_framework_setup"].axes[0]
+    assert ax.get_yscale() == "log"
+    assert not ax.lines and not ax.collections
+    assert ax.get_ylim()[0] < 0.01
+    import matplotlib.pyplot as plt
+    for fig in figures.values():
+        plt.close(fig)
+
+
+def test_an_arm_with_no_framework_setup_at_any_n_is_left_out_of_the_setup_chart(monkeypatch,
+                                                                                 tmp_path):
+    from results import chart_exp_e_scaling
+
+    figures = {}
+    monkeypatch.setattr(chart_exp_e_scaling, "_save",
+                        lambda fig, output_dir, name, fmt, dpi: figures.setdefault(name, fig))
+    root = str(tmp_path / "in")
+    for run_index in range(2):
+        _write(root, "weak", "armada", 2, f"run{run_index}",
+               [_record(r, 2, "armada", 3.0, establish_s=0.01) for r in range(2)])
+        _write(root, "weak", "langchain", 2, f"run{run_index}",
+               [_record(r, 2, "langchain", 3.0, establish_s=0.0) for r in range(2)])
+        _write(root, "weak", "ray-collective", 2, f"run{run_index}",
+               [_record(r, 2, "ray-collective", 3.0, establish_s=0.5, ray_cluster_s=14.0)
+                for r in range(2)])
+    csv_path, _, _ = write_summary(root, str(tmp_path / "out"))
+
+    chart_exp_e_scaling.generate_exp_e_scaling_charts(csv_path, str(tmp_path / "charts"))
+
+    ax = figures["exp_e_weak_framework_setup"].axes[0]
+    legend = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert not any("LangChain" in label for label in legend)
     import matplotlib.pyplot as plt
     for fig in figures.values():
         plt.close(fig)

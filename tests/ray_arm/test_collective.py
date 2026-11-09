@@ -142,3 +142,61 @@ def test_a_single_rank_group_returns_its_own_contribution(local_ray):
 def test_rank_zero_refuses_to_wait_forever_for_a_peer_that_never_appears(local_ray):
     with pytest.raises(TimeoutError, match="coll-missing"):
         form_collective_group(0, 2, "coll-missing", "coll-test", ray, timeout_s=0.3, poll_s=0.05)
+
+
+def _pair(group):
+    rank1 = form_collective_group(1, 2, group, "coll-test", ray, timeout_s=30.0, poll_s=0.05)
+    rank0 = form_collective_group(0, 2, group, "coll-test", ray, timeout_s=30.0, poll_s=0.05)
+    return rank0, rank1
+
+
+def _together(calls):
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        futures = [pool.submit(ray.get, call) for call in calls]
+        return [future.result(timeout=60) for future in futures]
+
+
+def test_broadcast_delivers_roots_bytes_to_every_rank(local_ray):
+    rank0, rank1 = _pair("coll-bcast")
+    payload = pack_table(_rows(3, "root"))
+
+    results = _together([rank0.broadcast.remote(None, 1), rank1.broadcast.remote(payload, 1)])
+
+    for received, inner_s in results:
+        assert unpack_buffer(received).equals(unpack_buffer(payload))
+        assert inner_s >= 0.0
+
+
+def test_allreduce_sums_scalars_on_every_rank(local_ray):
+    rank0, rank1 = _pair("coll-allreduce")
+
+    results = _together([rank0.allreduce.remote(1.0), rank1.allreduce.remote(2.0)])
+
+    assert [value for value, _ in results] == [3.0, 3.0]
+
+
+def test_reduce_delivers_the_sum_only_to_root(local_ray):
+    rank0, rank1 = _pair("coll-reduce")
+
+    results = _together([rank0.reduce.remote(1.0, 0), rank1.reduce.remote(2.0, 0)])
+
+    assert [value for value, _ in results] == [3.0, None]
+
+
+def test_barrier_returns_with_a_nonnegative_inner_time(local_ray):
+    rank0, rank1 = _pair("coll-barrier")
+
+    results = _together([rank0.barrier.remote(), rank1.barrier.remote()])
+
+    assert all(value is None and inner_s >= 0.0 for value, inner_s in results)
+
+
+def test_single_member_group_supports_every_new_method(local_ray):
+    solo = form_collective_group(0, 1, "coll-solo-new", "coll-test", ray, timeout_s=30.0, poll_s=0.05)
+    payload = pack_table(_rows(2, "s"))
+
+    received, _ = ray.get(solo.broadcast.remote(payload, 0), timeout=60)
+    assert unpack_buffer(received).equals(unpack_buffer(payload))
+    assert ray.get(solo.allreduce.remote(4.0), timeout=60)[0] == 4.0
+    assert ray.get(solo.reduce.remote(4.0, 0), timeout=60)[0] == 4.0
+    assert ray.get(solo.barrier.remote(), timeout=60)[0] is None
