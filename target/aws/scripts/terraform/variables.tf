@@ -153,7 +153,7 @@ variable "ecs_assign_public_ip" {
 variable "enable_ecr_vpc_endpoints" {
   description = "Create ECR (api, dkr) interface endpoints in the task subnets and an S3 gateway endpoint on the VPC main route table, so Fargate image pulls stay inside the VPC"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "fmi_direct_redis_port" {
