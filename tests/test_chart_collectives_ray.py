@@ -143,3 +143,18 @@ def test_generate_draws_latency_vs_n_at_each_requested_message_size(tmp_path):
     names = {os.path.basename(p) for p in paths}
     assert {"exp_b_ray_kv_pairs_allgather_latency_vs_n_4096B.png",
             "exp_b_ray_kv_pairs_allgather_latency_vs_n_1048576B.png"} <= names
+
+
+def test_a_recursive_doubling_directory_draws_as_its_own_cylon_series(captured, tmp_path):
+    for channel in ("fmi-direct-redis", "fmi-direct-redis-rd", "ray-gloo"):
+        for n in (8, 64):
+            _write(os.path.join(tmp_path, "data", channel, "float32", f"ws{n}",
+                                "exp_b_collectives_results.csv"),
+                   [_row("fmi-direct-redis" if channel.startswith("fmi") else channel, n, 1.0)])
+
+    rows = chart.load_rows(os.path.join(tmp_path, "data"))
+    chart.chart_latency_vs_n(rows, "allgather", 4096, "float32", str(tmp_path), "png", 72)
+
+    labels = [c.get_label() for c in captured[-1][1].axes[0].containers if isinstance(c, ErrorbarContainer)]
+    assert "Cylon, recursive doubling allgather" in labels
+    assert "Cylon (direct Redis communicator)" in labels

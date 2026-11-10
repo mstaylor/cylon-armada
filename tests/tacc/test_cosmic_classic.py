@@ -197,6 +197,49 @@ def test_summarize_command_exits_non_zero_on_a_missing_rank(tmp_path):
     assert "missing ranks [1]" in str(raised.value.code)
 
 
+def test_payload_records_the_inference_unit_and_defaults_to_one_call_per_rank(tmp_path, data_dir):
+    default = cosmic_classic.build_payload(data_dir, 3, 1, 512, "results")
+    per_partition = cosmic_classic.build_payload(data_dir, 3, 1, 512, "results",
+                                                 inference_unit=cosmic_classic.InferenceUnit.PARTITION)
+
+    assert default["inference_unit"] == "rank"
+    assert per_partition["inference_unit"] == "partition"
+
+
+def test_init_command_refuses_an_unknown_inference_unit(tmp_path, data_dir, capsys):
+    with pytest.raises(SystemExit):
+        cosmic_classic.main(["init", "--data-dir", data_dir, "--file-limit", "3", "--world-size", "1",
+                             "--batch-size", "512", "--run-dir", str(tmp_path), "--inference-unit", "batch"])
+
+    assert "invalid choice" in capsys.readouterr().err
+
+
+@needs_model
+def test_partition_unit_runs_inference_once_per_partition_and_writes_one_record_each(tmp_path, data_dir):
+    run_dir = str(tmp_path / "run")
+    cosmic_classic.main(["init", "--data-dir", data_dir, "--file-limit", "3", "--world-size", "1",
+                         "--batch-size", "512", "--run-dir", run_dir, "--partitions", "4",
+                         "--inference-unit", "partition"])
+
+    records = _worker(run_dir, data_dir, 0)
+
+    with open(os.path.join(run_dir, "results", "0.json")) as f:
+        assert json.load(f) == records
+    assert [r["data_path"] for r in records] == ["1.pt", "10.pt", "2.pt", "1.pt"]
+    assert [r["partition_index"] for r in records] == [0, 1, 2, 3]
+    assert all(r["num_samples"] == PARTITION_ROWS for r in records)
+    assert records[0]["model_load_s"] > 0.0
+    assert all(r["model_load_s"] == 0.0 for r in records[1:])
+    elapsed = [r["rank_elapsed_s"] for r in records]
+    assert elapsed == sorted(elapsed) and all(r["total_s"] >= r["inference_s"] for r in records)
+    assert all(r["publish_s"] is not None for r in records)
+
+    metrics = cosmic_classic.summarize(run_dir, 1)
+    with open(os.path.join(run_dir, "results", "combined_data.json")) as f:
+        assert len(json.load(f)) == 4
+    assert metrics["ranks_aggregated"] == 1
+
+
 @needs_model
 def test_a_rank_with_several_files_reads_them_all(tmp_path, data_dir):
     run_dir = _init(tmp_path, data_dir, 1)

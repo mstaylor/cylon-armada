@@ -6,7 +6,9 @@ calls differ: payload.json, the partitions and the per-rank results are files.
 
   init       write <run-dir>/payload.json, as initializer.lambda_handler does. --partitions
              past the file count reuses the files cyclically, as the paper's 1 TB runs did
-  worker     one rank's inference, as inference.py's __main__ does
+  worker     one rank's inference, as inference.py's __main__ does. With --inference-unit
+             partition the rank loads the model once and calls run_inference once per
+             partition, like a run of warm Lambda invocations, writing one record each
   summarize  concatenate the rank results, as summarizer.lambda_handler does
 """
 
@@ -15,6 +17,7 @@ import json
 import os
 import sys
 import time
+from enum import Enum
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_LAMBDA_SRC = os.path.normpath(
@@ -32,11 +35,17 @@ def _lambda_modules(lambda_src=None, code_dir=None):
     return initializer, inference
 
 
+class InferenceUnit(str, Enum):
+    RANK = "rank"
+    PARTITION = "partition"
+
+
 def partition_names(data_dir):
     return sorted(name for name in os.listdir(data_dir) if name.endswith(".pt"))
 
 
-def build_payload(data_dir, file_limit, world_size, batch_size, result_path, lambda_src=None, partitions=None):
+def build_payload(data_dir, file_limit, world_size, batch_size, result_path, lambda_src=None, partitions=None,
+                  inference_unit=InferenceUnit.RANK):
     initializer, _ = _lambda_modules(lambda_src)
     names = partition_names(data_dir)
     if not names:
@@ -51,6 +60,7 @@ def build_payload(data_dir, file_limit, world_size, batch_size, result_path, lam
         "world_size": world_size,
         "file_limit": len(names),
         "partitions": partitions,
+        "inference_unit": InferenceUnit(inference_unit).value,
         "batch_size": batch_size,
         "result_path": result_path,
         "data_map": {str(rank): path for rank, path in data_map.items()},
@@ -85,6 +95,10 @@ def run_worker(payload_path, data_dir, model_path, code_dir, rank, device, lambd
     batch_size = int(payload["batch_size"])
     result_path = payload["result_path"]
     data_path = payload["data_map"][str(rank)]
+    unit = InferenceUnit(payload.get("inference_unit", InferenceUnit.RANK.value))
+    if unit is InferenceUnit.PARTITION:
+        return _run_each_partition(inference, data_dir, data_path, model_path, device, batch_size, rank,
+                                   result_path, process_start_ts, payload_fetch_s)
 
     t_scatter = time.time()
     data = _read_partition(data_dir, data_path, inference)
@@ -108,6 +122,43 @@ def run_worker(payload_path, data_dir, model_path, code_dir, rank, device, lambd
     info["total_s"] = time.time() - process_start_ts
     _write_result(result_path, rank, info)
     return info
+
+
+def _run_each_partition(inference, data_dir, data_path, model_path, device, batch_size, rank, result_path,
+                        process_start_ts, payload_fetch_s):
+    from torch.utils.data import DataLoader
+
+    paths = data_path if isinstance(data_path, list) else [data_path]
+    t_model = time.time()
+    model = inference.load_model(model_path, device)
+    model_load_s = time.time() - t_model
+
+    records = []
+    for index, path in enumerate(paths):
+        t_partition = time.time()
+        data = _read_partition(data_dir, path, inference)
+        scatter_s = time.time() - t_partition
+        info = inference.run_inference(model, DataLoader(data, batch_size=batch_size), device, batch_size, rank,
+                                       result_path, path)
+        del data
+        first = index == 0
+        info.update({
+            "code_fetch_s": None, "cold_start": None, "init_s": None, "partition_index": index,
+            "payload_fetch_s": payload_fetch_s if first else 0.0, "scatter_s": scatter_s,
+            "model_load_s": model_load_s if first else 0.0, "comm_init_s": 0.0, "barrier_s": 0.0,
+            "publish_s": None,
+            "total_s": time.time() - t_partition + (model_load_s + payload_fetch_s if first else 0.0),
+            "rank_elapsed_s": time.time() - process_start_ts,
+        })
+        records.append(info)
+
+    t_publish = time.time()
+    _write_result(result_path, rank, records)
+    publish_s = time.time() - t_publish
+    for info in records:
+        info["publish_s"] = publish_s
+    _write_result(result_path, rank, records)
+    return records
 
 
 class IncompleteRun(Exception):
@@ -173,6 +224,8 @@ def parse_args(argv=None):
     init.add_argument("--batch-size", type=int, required=True)
     init.add_argument("--run-dir", required=True)
     init.add_argument("--partitions", type=int, default=None)
+    init.add_argument("--inference-unit", choices=[unit.value for unit in InferenceUnit],
+                      default=InferenceUnit.RANK.value)
 
     worker = sub.add_parser("worker")
     worker.add_argument("--run-dir", required=True)
@@ -193,7 +246,8 @@ def main(argv=None):
     if args.command == "init":
         os.makedirs(args.run_dir, exist_ok=True)
         payload = build_payload(args.data_dir, args.file_limit, args.world_size, args.batch_size,
-                                os.path.join(args.run_dir, "results"), args.lambda_src, args.partitions)
+                                os.path.join(args.run_dir, "results"), args.lambda_src, args.partitions,
+                                InferenceUnit(args.inference_unit))
         with open(os.path.join(args.run_dir, "payload.json"), "w") as f:
             json.dump(payload, f, indent=4)
         return payload

@@ -117,6 +117,14 @@ def test_data_size_sweep_converts_gigabytes_to_partitions_at_a_fixed_world_size(
     assert "gb1000" in _export(lines[1], "RUN_DIR")
 
 
+def test_sweep_passes_the_inference_unit_and_defaults_to_rank():
+    default = _dry_run(WORLD_SIZES="1", RUNS="1", WARMUP_RUNS="0")
+    per_partition = _dry_run(WORLD_SIZES="1", RUNS="1", WARMUP_RUNS="0", INFERENCE_UNIT="partition")
+
+    assert _export(default[0], "INFERENCE_UNIT") == "rank"
+    assert _export(per_partition[0], "INFERENCE_UNIT") == "partition"
+
+
 def test_data_size_sweep_requires_the_partition_size():
     result = subprocess.run(["bash", SWEEP, "--dry-run"],
                             env={"PATH": os.environ["PATH"], "ACCOUNT": "TG-TEST", "COSMIC_ROOT": "/x",

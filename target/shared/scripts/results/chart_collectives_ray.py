@@ -33,6 +33,9 @@ SERIES = (
     {"channel": "fmi-direct-redis", "metric": "latency_p50_ms",
      "label": "Cylon (direct Redis communicator)", "color": "#2ca02c", "linestyle": "-",
      "marker": "o"},
+    {"channel": "fmi-direct-redis-rd", "metric": "latency_p50_ms",
+     "label": "Cylon, recursive doubling allgather", "color": "#1f77b4", "linestyle": "-",
+     "marker": "s"},
     {"channel": "ray-gloo", "metric": "latency_p50_ms", "label": "Ray Gloo, from the driver",
      "color": "#9467bd", "linestyle": "-", "marker": "P"},
     {"channel": "ray-gloo", "metric": "latency_inner_p50_ms", "label": "Ray Gloo, inside the actor",
@@ -46,6 +49,9 @@ DEFAULT_SIZE_WORLD_SIZES = (8, 64)
 
 
 def load_rows(root):
+    """Rows from every `<root>/<series>/<payload>/ws<N>/`. The series directory
+    name becomes each row's channel, so one channel measured two ways can sit
+    side by side, e.g. `fmi-direct-redis-rd` for the recursive doubling allgather."""
     rows = []
     for ws_dir in sorted(glob.glob(os.path.join(root, "*", "*", "ws*"))):
         aggregate_collectives_runs(ws_dir)
@@ -53,8 +59,9 @@ def load_rows(root):
         if not os.path.exists(path):
             logger.warning("no results CSV in %s, skipping", ws_dir)
             continue
+        series = os.path.basename(os.path.dirname(os.path.dirname(ws_dir)))
         with open(path) as f:
-            rows.extend(csv.DictReader(f))
+            rows.extend(dict(row, channel=series) for row in csv.DictReader(f))
     return rows
 
 
