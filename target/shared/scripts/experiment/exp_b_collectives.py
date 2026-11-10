@@ -145,6 +145,7 @@ def measure_collective(
     world_size=1,
     rank=0,
     inner_seconds=None,
+    slow_rep_s=None,
 ):
     """Time one collective at one message size. Returns a metrics dict.
 
@@ -162,6 +163,10 @@ def measure_collective(
     `inner_seconds()`, when given, is read after each timed invoke and returns the
     seconds that invoke spent inside the transport, or None. Its p50/p99 become
     `latency_inner_p50_ms`/`latency_inner_p99_ms`, blank when absent.
+
+    Any warmup rep, timed rep, or pre-rep barrier taking longer than
+    `slow_rep_s` seconds is logged as a warning with rank, collective, size and
+    rep index, so a stalled rank can be located from its own log.
     """
     if payload_builder is None:
         payload_builder = build_cylon_payload
@@ -171,20 +176,31 @@ def measure_collective(
         return _unsupported_metrics(name, msg_size)
     payload, payload_bytes = built
 
+    def note_if_slow(what, index, seconds):
+        if slow_rep_s is not None and seconds > slow_rep_s:
+            logger.warning("slow %s %d: rank %d %s @ %dB took %.3fs (threshold %.3fs)",
+                           what, index, rank, name, msg_size, seconds, slow_rep_s)
+
     try:
-        for _ in range(warmup):
+        for index in range(warmup):
+            t0 = time.perf_counter()
             _invoke(comm, ctx, name, payload, root, reduce_op)
+            note_if_slow("warmup", index, time.perf_counter() - t0)
 
         lat_ms = []
         inner_ms = []
-        for _ in range(reps):
+        for index in range(reps):
             if name != "barrier":
                 # Enter the timed region together; for barrier itself the invoke IS
                 # the synchronization, so an extra barrier would double-count.
+                tb = time.perf_counter()
                 ctx.barrier()
+                note_if_slow("barrier before rep", index, time.perf_counter() - tb)
             t0 = time.perf_counter()
             _invoke(comm, ctx, name, payload, root, reduce_op)
-            lat_ms.append((time.perf_counter() - t0) * 1e3)
+            elapsed = time.perf_counter() - t0
+            note_if_slow("rep", index, elapsed)
+            lat_ms.append(elapsed * 1e3)
             if inner_seconds is not None:
                 inner = inner_seconds()
                 inner_ms.append(None if inner is None else inner * 1e3)
@@ -269,6 +285,7 @@ def run(config):
     reduce_op = config.get("reduce_op")
     payload_builder = config.get("payload_builder")
     inner_seconds = config.get("inner_seconds")
+    slow_rep_s = config.get("slow_rep_s", float(os.environ.get("EXPB_SLOW_REP_S", "5.0")))
 
     rows = []
     for name in collectives:
@@ -292,6 +309,7 @@ def run(config):
                 world_size=world_size,
                 rank=rank,
                 inner_seconds=inner_seconds,
+                slow_rep_s=slow_rep_s,
             )
             metrics.update(
                 {

@@ -222,3 +222,51 @@ def test_run_passes_the_configured_inner_timer_to_every_cell():
         "inner_seconds": lambda: 0.002,
     })
     assert [r["latency_inner_p50_ms"] for r in rows] == [2.0, 2.0]
+
+
+class SlowBarrierCtx(MockCtx):
+    def barrier(self):
+        super().barrier()
+        time.sleep(0.02)
+
+
+def test_a_rep_slower_than_the_threshold_is_logged_with_rank_collective_size_and_rep(caplog):
+    caplog.set_level("WARNING", logger="exp_b_collectives")
+    ebc.measure_collective(
+        MockComm(sleep_s=0.02), MockCtx(), "scatter", msg_size=4096, warmup=1, reps=2,
+        payload_builder=_dummy_builder, world_size=4, rank=2, slow_rep_s=0.01,
+    )
+    slow = [r.getMessage() for r in caplog.records if "slow" in r.getMessage()]
+    assert len(slow) == 3
+    assert all("rank 2" in m and "scatter" in m and "4096" in m for m in slow)
+    assert any("warmup 0" in m for m in slow) and any("rep 1" in m for m in slow)
+
+
+def test_a_slow_barrier_before_a_timed_rep_is_logged_separately(caplog):
+    caplog.set_level("WARNING", logger="exp_b_collectives")
+    ebc.measure_collective(
+        MockComm(sleep_s=0.0), SlowBarrierCtx(), "allgather", msg_size=64, warmup=0, reps=2,
+        payload_builder=_dummy_builder, world_size=4, rank=1, slow_rep_s=0.01,
+    )
+    slow = [r.getMessage() for r in caplog.records if "slow" in r.getMessage()]
+    assert len(slow) == 2
+    assert all("barrier before" in m and "allgather" in m for m in slow)
+
+
+def test_reps_under_the_threshold_log_nothing(caplog):
+    caplog.set_level("WARNING", logger="exp_b_collectives")
+    ebc.measure_collective(
+        MockComm(sleep_s=0.0), MockCtx(), "broadcast", msg_size=64, warmup=1, reps=3,
+        payload_builder=_dummy_builder, world_size=2, rank=0, slow_rep_s=5.0,
+    )
+    assert not [r for r in caplog.records if "slow" in r.getMessage()]
+
+
+def test_run_takes_the_slow_rep_threshold_from_the_environment(caplog, monkeypatch):
+    caplog.set_level("WARNING", logger="exp_b_collectives")
+    monkeypatch.setenv("EXPB_SLOW_REP_S", "0.005")
+    ebc.run({
+        "comm": MockComm(sleep_s=0.01), "ctx": MockCtx(), "collectives": ["allgather"],
+        "msg_sizes": [64], "warmup": 0, "reps": 1, "payload_builder": _dummy_builder,
+    })
+    assert [r for r in caplog.records if "slow" in r.getMessage()]

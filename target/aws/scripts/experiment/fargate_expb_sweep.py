@@ -106,7 +106,7 @@ def resolve_ray_group_id(ec2):
 
 
 def build_overrides(rank, world_size, runs, s3_prefix, session_id, channel, payload,
-                    scripts_prefix):
+                    scripts_prefix, allgather_algorithm=None):
     environment = [
         {"name": "RANK", "value": str(rank)},
         {"name": "WORLD_SIZE", "value": str(world_size)},
@@ -127,6 +127,8 @@ def build_overrides(rank, world_size, runs, s3_prefix, session_id, channel, payl
         ]
     if scripts_prefix:
         environment.append({"name": "S3_SCRIPTS_PREFIX", "value": scripts_prefix})
+    if allgather_algorithm:
+        environment.append({"name": "FMI_ALLGATHER_ALGORITHM", "value": allgather_algorithm})
     return {
         "containerOverrides": [
             {
@@ -138,9 +140,34 @@ def build_overrides(rank, world_size, runs, s3_prefix, session_id, channel, payl
     }
 
 
-def launch_world_size(ecs, world_size, args, security_groups):
+def _run_rank_task(ecs, args, vpc_configuration, overrides, rank):
+    resp = ecs.run_task(
+        cluster=CLUSTER,
+        taskDefinition=args.task_definition,
+        launchType="FARGATE",
+        networkConfiguration={"awsvpcConfiguration": vpc_configuration},
+        overrides=overrides,
+    )
+    if resp.get("failures"):
+        raise RuntimeError(f"rank {rank} run_task failed: {resp['failures']}")
+    return resp["tasks"][0]["taskArn"]
+
+
+def _describe_tasks(ecs, task_arns):
+    described = []
+    for start in range(0, len(task_arns), 100):
+        described += ecs.describe_tasks(cluster=CLUSTER, tasks=task_arns[start:start + 100])["tasks"]
+    return described
+
+
+def launch_world_size(ecs, world_size, args, security_groups, sleep=time.sleep, clock=time.monotonic):
     """Launch world_size concurrent tasks for one world size, wait for all to
-    stop, return per-rank exit codes."""
+    stop, return exit codes keyed by each rank's final task ARN.
+
+    A rank whose task ECS stops before its container runs (stopCode
+    TaskFailedToStart, e.g. an image pull timeout) is relaunched with the same
+    overrides, up to args.max_start_retries times. Tasks still running at
+    args.wait_timeout_s are stopped and reported with exit code None."""
     runs, dry_run = args.runs, args.dry_run
     s3_prefix = results_prefix_for(args.results_prefix, args.channel, args.payload, world_size)
     session_id = f"expb_ws{world_size}_{uuid.uuid4().hex[:12]}"
@@ -150,7 +177,8 @@ def launch_world_size(ecs, world_size, args, security_groups):
     if dry_run:
         for rank in range(world_size):
             overrides = build_overrides(rank, world_size, runs, s3_prefix, session_id,
-                                        args.channel, args.payload, args.scripts_prefix)
+                                        args.channel, args.payload, args.scripts_prefix,
+                                        args.allgather_algorithm)
             logger.info("[dry-run] rank=%d overrides=%s", rank, json.dumps(overrides))
         return {}
 
@@ -158,50 +186,71 @@ def launch_world_size(ecs, world_size, args, security_groups):
     if security_groups:
         vpc_configuration["securityGroups"] = list(security_groups)
 
-    task_arns = []
+    overrides_by_rank = {
+        rank: build_overrides(rank, world_size, runs, s3_prefix, session_id,
+                              args.channel, args.payload, args.scripts_prefix,
+                              args.allgather_algorithm)
+        for rank in range(world_size)
+    }
+
+    def launch(rank):
+        return _run_rank_task(ecs, args, vpc_configuration, overrides_by_rank[rank], rank)
+
+    arn_by_rank = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(16, world_size)) as pool:
-        futures = []
+        futures = {}
         for rank in range(world_size):
-            overrides = build_overrides(rank, world_size, runs, s3_prefix, session_id,
-                                        args.channel, args.payload, args.scripts_prefix)
+            futures[pool.submit(launch, rank)] = rank
+            sleep(0.1)
+        for future, rank in futures.items():
+            arn_by_rank[rank] = future.result()
+    rank_by_arn = {arn: rank for rank, arn in arn_by_rank.items()}
 
-            def _launch(overrides=overrides, rank=rank):
-                resp = ecs.run_task(
-                    cluster=CLUSTER,
-                    taskDefinition=args.task_definition,
-                    launchType="FARGATE",
-                    networkConfiguration={"awsvpcConfiguration": vpc_configuration},
-                    overrides=overrides,
-                )
-                if resp.get("failures"):
-                    raise RuntimeError(f"rank {rank} run_task failed: {resp['failures']}")
-                return resp["tasks"][0]["taskArn"]
+    logger.info("world_size=%d: %d tasks launched, waiting for completion", world_size, len(arn_by_rank))
 
-            futures.append(pool.submit(_launch))
-            time.sleep(0.1)  # avoid bursting the RunTask API
+    start_retries = {rank: 0 for rank in range(world_size)}
+    code_by_rank = {}
+    deadline = clock() + args.wait_timeout_s
+    while True:
+        pending = [arn_by_rank[rank] for rank in range(world_size) if rank not in code_by_rank]
+        for task in _describe_tasks(ecs, pending):
+            if task.get("lastStatus") != "STOPPED":
+                continue
+            rank = rank_by_arn[task["taskArn"]]
+            reason = task.get("stoppedReason", "")
+            if task.get("stopCode") == "TaskFailedToStart" and start_retries[rank] < args.max_start_retries:
+                start_retries[rank] += 1
+                logger.warning("world_size=%d: rank %d failed to start (%s); relaunch %d of %d",
+                               world_size, rank, reason, start_retries[rank], args.max_start_retries)
+                new_arn = launch(rank)
+                arn_by_rank[rank] = new_arn
+                rank_by_arn[new_arn] = rank
+                continue
+            containers = task.get("containers") or [{}]
+            code = containers[0].get("exitCode")
+            if code != 0:
+                logger.error("world_size=%d: rank %d stopped with exit=%s stopCode=%s reason=%s",
+                             world_size, rank, code, task.get("stopCode"), reason)
+            code_by_rank[rank] = code
+        if len(code_by_rank) == world_size:
+            break
+        if clock() >= deadline:
+            for rank in range(world_size):
+                if rank not in code_by_rank:
+                    ecs.stop_task(cluster=CLUSTER, task=arn_by_rank[rank],
+                                  reason=f"expb sweep wait timeout {args.wait_timeout_s}s")
+                    logger.error("world_size=%d: rank %d still running at the %.0fs wait timeout; stopped",
+                                 world_size, rank, args.wait_timeout_s)
+                    code_by_rank[rank] = None
+            break
+        sleep(args.poll_s)
 
-        for f in concurrent.futures.as_completed(futures):
-            task_arns.append(f.result())
-
-    logger.info("world_size=%d: %d tasks launched, waiting for completion", world_size, len(task_arns))
-
-    # ecs.get_waiter('tasks_stopped') caps at 100 tasks per call and polls
-    # every 6s up to 100 attempts (10 min) by default — fine up to ws=64.
-    waiter = ecs.get_waiter("tasks_stopped")
-    waiter.wait(cluster=CLUSTER, tasks=task_arns, WaiterConfig={"Delay": 6, "MaxAttempts": 100})
-
-    described = ecs.describe_tasks(cluster=CLUSTER, tasks=task_arns)["tasks"]
-    exit_codes = {}
-    for t in described:
-        containers = t.get("containers", [])
-        exit_code = containers[0].get("exitCode") if containers else None
-        exit_codes[t["taskArn"]] = exit_code
-
+    exit_codes = {arn_by_rank[rank]: code for rank, code in code_by_rank.items()}
     failed = {arn: code for arn, code in exit_codes.items() if code != 0}
     if failed:
-        logger.error("world_size=%d: %d/%d tasks failed: %s", world_size, len(failed), len(task_arns), failed)
+        logger.error("world_size=%d: %d/%d tasks failed: %s", world_size, len(failed), len(exit_codes), failed)
     else:
-        logger.info("world_size=%d: all %d tasks exited 0", world_size, len(task_arns))
+        logger.info("world_size=%d: all %d tasks exited 0", world_size, len(exit_codes))
     return exit_codes
 
 
@@ -215,6 +264,11 @@ def main():
     parser.add_argument("--task-definition", default=TASK_DEFINITION)
     parser.add_argument("--results-prefix", default=RESULTS_PREFIX)
     parser.add_argument("--scripts-prefix", default=None)
+    parser.add_argument("--max-start-retries", type=int, default=3)
+    parser.add_argument("--poll-s", type=float, default=6.0)
+    parser.add_argument("--wait-timeout-s", type=float, default=1800.0)
+    parser.add_argument("--allgather-algorithm", default=None,
+                        choices=["binomial_broadcast", "recursive_doubling"])
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

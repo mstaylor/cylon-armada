@@ -93,13 +93,14 @@ def _line_chart(rows, x_key, xlabel, title, name, output_dir, chart_format, char
     return _save(fig, output_dir, name, chart_format, chart_dpi)
 
 
-def chart_latency_vs_n(rows, collective, msg_size, payload, output_dir, chart_format, chart_dpi):
+def chart_latency_vs_n(rows, collective, msg_size, payload, output_dir, chart_format, chart_dpi,
+                       name_suffix=""):
     """P50 latency against N for one collective at one message size."""
     cell = [r for r in rows if r["collective"] == collective and r.get("payload") == payload
             and int(r["msg_size"]) == msg_size]
     return _line_chart(cell, "N", "World size N (Fargate tasks)",
                        f"Experiment B {collective} latency vs N ({payload}, {msg_size} B)",
-                       f"exp_b_ray_{payload}_{collective}_latency_vs_n", output_dir,
+                       f"exp_b_ray_{payload}_{collective}_latency_vs_n{name_suffix}", output_dir,
                        chart_format, chart_dpi)
 
 
@@ -121,7 +122,10 @@ def _representative_size(rows, collective, payload):
 
 
 def generate(root, output_dir, chart_format="png", chart_dpi=300,
-             size_world_sizes=DEFAULT_SIZE_WORLD_SIZES):
+             size_world_sizes=DEFAULT_SIZE_WORLD_SIZES, vs_n_sizes=()):
+    """Charts for every payload and collective. `vs_n_sizes` adds a latency
+    against N chart per message size for the size-swept collectives, named
+    with a `_<size>B` suffix."""
     rows = load_rows(root)
     paths = []
     for payload in sorted({r.get("payload", "float32") for r in rows}):
@@ -135,6 +139,10 @@ def generate(root, output_dir, chart_format="png", chart_dpi=300,
                 for world_size in size_world_sizes:
                     paths.append(chart_latency_vs_msg_size(rows, collective, world_size, payload,
                                                            output_dir, chart_format, chart_dpi))
+                for msg_size in vs_n_sizes:
+                    paths.append(chart_latency_vs_n(rows, collective, msg_size, payload, output_dir,
+                                                    chart_format, chart_dpi,
+                                                    name_suffix=f"_{msg_size}B"))
     return [p for p in paths if p]
 
 
@@ -146,9 +154,10 @@ def main():
     parser.add_argument("--format", default="png")
     parser.add_argument("--dpi", type=int, default=300)
     parser.add_argument("--world-sizes", type=int, nargs="+", default=list(DEFAULT_SIZE_WORLD_SIZES))
+    parser.add_argument("--vs-n-sizes", type=int, nargs="+", default=[])
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    generate(args.root, args.output, args.format, args.dpi, args.world_sizes)
+    generate(args.root, args.output, args.format, args.dpi, args.world_sizes, args.vs_n_sizes)
 
 
 if __name__ == "__main__":
