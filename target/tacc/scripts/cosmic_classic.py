@@ -8,7 +8,9 @@ calls differ: payload.json, the partitions and the per-rank results are files.
              past the file count reuses the files cyclically, as the paper's 1 TB runs did
   worker     one rank's inference, as inference.py's __main__ does. With --inference-unit
              partition the rank loads the model once and calls run_inference once per
-             partition, like a run of warm Lambda invocations, writing one record each
+             partition, like a run of warm Lambda invocations, writing one record each.
+             --device cuda waits for the GPU after each run_inference call and records
+             that wait as device_sync_s, since the Lambda timers stop before queued GPU work does
   summarize  concatenate the rank results, as summarizer.lambda_handler does
 """
 
@@ -38,6 +40,34 @@ def _lambda_modules(lambda_src=None, code_dir=None):
 class InferenceUnit(str, Enum):
     RANK = "rank"
     PARTITION = "partition"
+
+
+class Device(str, Enum):
+    CPU = "cpu"
+    CUDA = "cuda"
+
+
+class DeviceUnavailable(Exception):
+    def __init__(self, device, rank):
+        self.device = device
+        self.rank = rank
+        super().__init__(f"rank {rank}: device {device.value} requested but torch sees no CUDA device")
+
+
+def _require_device(device, rank):
+    import torch
+
+    if device is Device.CUDA and not torch.cuda.is_available():
+        raise DeviceUnavailable(device, rank)
+
+
+def _synchronize(device):
+    import torch
+
+    t_sync = time.time()
+    if device is Device.CUDA:
+        torch.cuda.synchronize()
+    return time.time() - t_sync
 
 
 def partition_names(data_dir):
@@ -86,6 +116,8 @@ def run_worker(payload_path, data_dir, model_path, code_dir, rank, device, lambd
 
     _, inference = _lambda_modules(lambda_src, code_dir)
     process_start_ts = time.time()
+    device = Device(device)
+    _require_device(device, rank)
 
     t_payload = time.time()
     with open(payload_path) as f:
@@ -106,12 +138,13 @@ def run_worker(payload_path, data_dir, model_path, code_dir, rank, device, lambd
     dataloader = DataLoader(data, batch_size=batch_size)
 
     t_model = time.time()
-    model = inference.load_model(model_path, device)
+    model = inference.load_model(model_path, device.value)
     model_load_s = time.time() - t_model
 
-    info = inference.run_inference(model, dataloader, device, batch_size, rank, result_path, data_path)
+    info = inference.run_inference(model, dataloader, device.value, batch_size, rank, result_path, data_path)
+    device_sync_s = _synchronize(device)
     info.update({
-        "code_fetch_s": None, "cold_start": None, "init_s": None,
+        "code_fetch_s": None, "cold_start": None, "init_s": None, "device_sync_s": device_sync_s,
         "payload_fetch_s": payload_fetch_s, "scatter_s": scatter_s, "model_load_s": model_load_s,
         "comm_init_s": 0.0, "barrier_s": 0.0, "publish_s": None, "total_s": None,
     })
@@ -130,7 +163,7 @@ def _run_each_partition(inference, data_dir, data_path, model_path, device, batc
 
     paths = data_path if isinstance(data_path, list) else [data_path]
     t_model = time.time()
-    model = inference.load_model(model_path, device)
+    model = inference.load_model(model_path, device.value)
     model_load_s = time.time() - t_model
 
     records = []
@@ -138,12 +171,14 @@ def _run_each_partition(inference, data_dir, data_path, model_path, device, batc
         t_partition = time.time()
         data = _read_partition(data_dir, path, inference)
         scatter_s = time.time() - t_partition
-        info = inference.run_inference(model, DataLoader(data, batch_size=batch_size), device, batch_size, rank,
-                                       result_path, path)
+        info = inference.run_inference(model, DataLoader(data, batch_size=batch_size), device.value, batch_size,
+                                       rank, result_path, path)
+        device_sync_s = _synchronize(device)
         del data
         first = index == 0
         info.update({
             "code_fetch_s": None, "cold_start": None, "init_s": None, "partition_index": index,
+            "device_sync_s": device_sync_s,
             "payload_fetch_s": payload_fetch_s if first else 0.0, "scatter_s": scatter_s,
             "model_load_s": model_load_s if first else 0.0, "comm_init_s": 0.0, "barrier_s": 0.0,
             "publish_s": None,
@@ -233,7 +268,7 @@ def parse_args(argv=None):
     worker.add_argument("--model-path", required=True)
     worker.add_argument("--code-dir", required=True)
     worker.add_argument("--rank", type=int, default=None)
-    worker.add_argument("--device", default="cpu")
+    worker.add_argument("--device", choices=[device.value for device in Device], default=Device.CPU.value)
 
     summary = sub.add_parser("summarize")
     summary.add_argument("--run-dir", required=True)

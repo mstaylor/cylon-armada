@@ -247,3 +247,39 @@ def test_a_rank_with_several_files_reads_them_all(tmp_path, data_dir):
     info = _worker(run_dir, data_dir, 0)
 
     assert info["num_samples"] == 3 * PARTITION_ROWS
+
+def test_worker_command_refuses_an_unknown_device(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        cosmic_classic.main(["worker", "--run-dir", str(tmp_path), "--data-dir", str(tmp_path),
+                             "--model-path", "m.pt", "--code-dir", str(tmp_path), "--rank", "0",
+                             "--device", "tpu"])
+
+    assert "invalid choice" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(torch.cuda.is_available(), reason="needs a host without CUDA")
+def test_a_gpu_worker_without_a_visible_gpu_fails_before_reading_data(tmp_path, data_dir):
+    run_dir = _init(tmp_path, data_dir, 3)
+
+    with pytest.raises(cosmic_classic.DeviceUnavailable, match="rank 2"):
+        cosmic_classic.run_worker(os.path.join(run_dir, "payload.json"), data_dir, _MODEL, _CODE_DIR, 2,
+                                  cosmic_classic.Device.CUDA)
+
+    assert not os.path.exists(os.path.join(run_dir, "results", "2.json"))
+
+
+@needs_model
+@pytest.mark.parametrize("unit", ["rank", "partition"])
+def test_every_record_names_its_device_and_counts_the_device_sync_in_its_total(tmp_path, data_dir, unit):
+    run_dir = str(tmp_path / "run")
+    cosmic_classic.main(["init", "--data-dir", data_dir, "--file-limit", "3", "--world-size", "1",
+                         "--batch-size", "512", "--run-dir", run_dir, "--partitions", "2",
+                         "--inference-unit", unit])
+
+    result = _worker(run_dir, data_dir, 0)
+
+    records = result if isinstance(result, list) else [result]
+    for record in records:
+        assert record["device"] == "cpu"
+        assert record["device_sync_s"] >= 0.0
+        assert record["total_s"] >= record["inference_s"] + record["device_sync_s"]

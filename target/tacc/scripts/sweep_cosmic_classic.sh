@@ -9,6 +9,9 @@
 # CORES_PER_NODE (144), FILE_LIMIT (41), BATCH_SIZE (512), PARTITION (gg), TIME_LIMIT (01:00:00),
 # RESULTS_ROOT ($COSMIC_ROOT/results/classic/<timestamp>), DATA_DIR, INFERENCE_UNIT (rank or partition).
 #
+# GPU runs: DEVICE=cuda PARTITION=gh CORES_PER_NODE=72 with a CUDA image as SIF_IMAGE. Their
+# results default to $COSMIC_ROOT/results/gpu/<timestamp>, apart from the CPU results.
+#
 # Data size sweep: set DATA_SIZES_GB (e.g. "12.6 100 256 512 768 1000") and PARTITION_MB. Each size
 # runs ceil(GB * 1024 / PARTITION_MB) partitions, reusing the FILE_LIMIT files cyclically.
 set -euo pipefail
@@ -37,7 +40,13 @@ BATCH_SIZE=${BATCH_SIZE:-512}
 PARTITION=${PARTITION:-gg}
 TIME_LIMIT=${TIME_LIMIT:-01:00:00}
 INFERENCE_UNIT=${INFERENCE_UNIT:-rank}
-RESULTS_ROOT=${RESULTS_ROOT:-$COSMIC_ROOT/results/classic/$(date +%Y%m%d-%H%M%S)}
+DEVICE=${DEVICE:-cpu}
+case "$DEVICE" in
+  cpu) results_group=classic ;;
+  cuda) results_group=gpu ;;
+  *) echo "DEVICE must be cpu or cuda, got $DEVICE" >&2; exit 1 ;;
+esac
+RESULTS_ROOT=${RESULTS_ROOT:-$COSMIC_ROOT/results/$results_group/$(date +%Y%m%d-%H%M%S)}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WORKERS_PER_NODE=$(( CORES_PER_NODE / CPUS_PER_WORKER ))
 
@@ -49,12 +58,12 @@ for n in "${SIZES[@]}"; do
     if [[ -n "$gb" ]]; then
       partitions=$(awk -v gb="$gb" -v mb="$PARTITION_MB" 'BEGIN { p = gb * 1024 / mb; c = int(p); if (c < p) c++; print c }')
       cell="ws$n/gb$gb"
-      tag="ws$n-gb$gb"
+      tag="$DEVICE-ws$n-gb$gb"
       data_gb=$gb
     else
       partitions=$FILE_LIMIT
       cell="ws$n"
-      tag="ws$n"
+      tag="$DEVICE-ws$n"
       data_gb=null
     fi
     labels=()
@@ -62,7 +71,7 @@ for n in "${SIZES[@]}"; do
     for ((i = 1; i <= RUNS; i++)); do labels+=("run$i"); done
     for label in "${labels[@]}"; do
       run_dir="$RESULTS_ROOT/$cell/$label"
-      exports="ALL,WORLD_SIZE=$n,FILE_LIMIT=$FILE_LIMIT,PARTITIONS=$partitions,INFERENCE_UNIT=$INFERENCE_UNIT,DATA_GB=$data_gb,BATCH_SIZE=$BATCH_SIZE,CPUS_PER_WORKER=$CPUS_PER_WORKER,RUN_DIR=$run_dir,SIF_IMAGE=$SIF_IMAGE,COSMIC_ROOT=$COSMIC_ROOT"
+      exports="ALL,WORLD_SIZE=$n,FILE_LIMIT=$FILE_LIMIT,PARTITIONS=$partitions,INFERENCE_UNIT=$INFERENCE_UNIT,DEVICE=$DEVICE,DATA_GB=$data_gb,BATCH_SIZE=$BATCH_SIZE,CPUS_PER_WORKER=$CPUS_PER_WORKER,RUN_DIR=$run_dir,SIF_IMAGE=$SIF_IMAGE,COSMIC_ROOT=$COSMIC_ROOT"
       if [[ -n "${DATA_DIR:-}" ]]; then
         exports+=",DATA_DIR=$DATA_DIR"
       fi

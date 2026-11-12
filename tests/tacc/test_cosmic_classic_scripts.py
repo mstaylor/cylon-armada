@@ -3,6 +3,7 @@
 Run: pytest tests/tacc/test_cosmic_classic_scripts.py -v
 """
 
+import json
 import os
 import re
 import subprocess
@@ -142,3 +143,63 @@ def test_sweep_refuses_to_run_without_an_account():
 
     assert result.returncode != 0
     assert "ACCOUNT" in result.stderr
+
+def test_sweep_defaults_to_cpu_and_keeps_gpu_results_apart_from_cpu_results():
+    cpu = _dry_run(WORLD_SIZES="1", RUNS="1", WARMUP_RUNS="0")
+    gpu = _dry_run(WORLD_SIZES="1", RUNS="1", WARMUP_RUNS="0", DEVICE="cuda", PARTITION="gh", CORES_PER_NODE="72")
+
+    assert _export(cpu[0], "DEVICE") == "cpu"
+    assert _export(gpu[0], "DEVICE") == "cuda"
+    assert "/results/classic/" in _export(cpu[0], "RUN_DIR")
+    assert "/results/gpu/" in _export(gpu[0], "RUN_DIR")
+    assert _option(gpu[0], "partition") == "gh"
+    assert "cuda" in _option(gpu[0], "job-name")
+
+
+def test_sweep_refuses_an_unknown_device():
+    result = subprocess.run(["bash", SWEEP, "--dry-run"],
+                            env={"PATH": os.environ["PATH"], "ACCOUNT": "TG-TEST", "COSMIC_ROOT": "/x",
+                                 "SIF_IMAGE": "/x.sif", "DEVICE": "tpu"},
+                            capture_output=True, text=True)
+
+    assert result.returncode != 0
+    assert "DEVICE" in result.stderr
+
+
+def _run_job_with_stubs(tmp_path, **env):
+    calls = tmp_path / "calls.txt"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name in ("module", "srun", "apptainer"):
+        stub = bin_dir / name
+        stub.write_text(f"#!/bin/bash\necho \"{name} $*\" >> {calls}\n")
+        stub.chmod(0o755)
+    run_dir = tmp_path / "runs" / "run1"
+    base = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "WORLD_SIZE": "2", "FILE_LIMIT": "130",
+            "BATCH_SIZE": "512", "CPUS_PER_WORKER": "6", "RUN_DIR": str(run_dir), "SIF_IMAGE": "/x.sif",
+            "COSMIC_ROOT": str(tmp_path)}
+    subprocess.run(["bash", os.path.join(_SCRIPTS, "cosmic_classic.slurm")], env={**base, **env},
+                   capture_output=True, text=True, check=True)
+    with open(run_dir / "timing.json") as f:
+        timing = json.load(f)
+    return calls.read_text().splitlines(), timing
+
+
+@pytest.mark.parametrize("device, gpu_flag", [("cpu", False), ("cuda", True)])
+def test_job_gives_only_the_workers_the_gpu_and_records_the_device(tmp_path, device, gpu_flag):
+    calls, timing = _run_job_with_stubs(tmp_path, DEVICE=device)
+
+    workers = [line for line in calls if line.startswith("srun")]
+    host_side = [line for line in calls if line.startswith("apptainer")]
+    assert len(workers) == 1 and len(host_side) == 2
+    assert (" --nv " in workers[0]) is gpu_flag
+    assert f"--device {device}" in workers[0]
+    assert all(" --nv " not in line for line in host_side)
+    assert timing["device"] == device
+
+
+def test_job_defaults_to_cpu(tmp_path):
+    calls, timing = _run_job_with_stubs(tmp_path)
+
+    assert timing["device"] == "cpu"
+    assert "--device cpu" in [line for line in calls if line.startswith("srun")][0]
